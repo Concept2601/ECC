@@ -2,7 +2,7 @@ import { ChevronDown, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { confirmAction, Field, NumInput, PageHeader, Tabs, Toggle } from '../components/ui';
 import { useMoney } from '../hooks';
-import { ACCESSORY_CATEGORIES, ACCESSORY_LABELS, type Catalog, type TransportOption } from '../lib/types';
+import { ACCESSORY_CATEGORIES, ACCESSORY_LABELS, APPLIANCE_CATEGORIES, APPLIANCE_LABELS, type Catalog, type TransportOption } from '../lib/types';
 import { uid } from '../lib/util';
 import { useStore } from '../store';
 
@@ -77,7 +77,7 @@ function EditableList<T extends { id: string; name: string }>({
   );
 }
 
-type Tab = 'boards' | 'edging' | 'glass' | 'aluminium' | 'countertops' | 'accessories' | 'transport';
+type Tab = 'boards' | 'edging' | 'glass' | 'aluminium' | 'countertops' | 'accessories' | 'appliances' | 'transport';
 
 export default function Library() {
   const { catalog, updateCatalog, resetCatalog, settings, updateSettings } = useStore();
@@ -115,6 +115,7 @@ export default function Library() {
             { value: 'aluminium', label: 'Aluminium' },
             { value: 'countertops', label: 'Countertops' },
             { value: 'accessories', label: 'Accessories' },
+            { value: 'appliances', label: 'Appliances' },
             { value: 'transport', label: 'Transport' },
           ]}
         />
@@ -123,7 +124,7 @@ export default function Library() {
           <EditableList
             {...listProps('boards')}
             swatch={(b) => b.color}
-            summary={(b) => `${b.category} · ${b.sheetLength}×${b.sheetWidth}×${b.thickness}mm · ${fmt(b.pricePerSheet)}/sheet${b.grain ? ' · grain' : ''}`}
+            summary={(b) => `${b.category} · ${b.sheetLength}×${b.sheetWidth}×${b.thickness}mm · ${b.finish} · ${fmt(b.pricePerSheet)}/sheet${b.grain ? ' · grain' : ''}`}
             fields={[
               { key: 'name', label: 'Name', type: 'text' },
               { key: 'category', label: 'Category', type: 'text', half: true },
@@ -133,9 +134,10 @@ export default function Library() {
               { key: 'thickness', label: 'Thickness', type: 'number', suffix: 'mm' },
               { key: 'color', label: 'Colour (render)', type: 'color' },
               { key: 'texture', label: 'Render finish', type: 'select', options: [{ value: 'plain', label: 'Plain / solid colour' }, { value: 'wood', label: 'Wood grain' }] },
+              { key: 'finish', label: 'Surface finish (render)', type: 'select', options: [{ value: 'matte', label: 'Matte' }, { value: 'satin', label: 'Satin' }, { value: 'gloss', label: 'High gloss' }, { value: 'textured', label: 'Textured' }] },
               { key: 'grain', label: 'Grain direction (no rotation when cutting)', type: 'bool' },
             ]}
-            onAdd={() => updateCatalog((c) => c.boards.push({ id: uid('b-'), name: 'New board', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 50, color: '#d9c3a0', grain: false, texture: 'plain' }))}
+            onAdd={() => updateCatalog((c) => c.boards.push({ id: uid('b-'), name: 'New board', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 50, color: '#d9c3a0', grain: false, texture: 'plain', finish: 'matte' }))}
           />
         )}
         {tab === 'edging' && (
@@ -184,14 +186,15 @@ export default function Library() {
           <EditableList
             {...listProps('countertops')}
             swatch={(c) => c.color}
-            summary={(c) => `${c.thickness}mm · ${fmt(c.pricePerSqm)}/m²`}
+            summary={(c) => `${c.thickness}mm · ${fmt(c.pricePerSqm)}/m² · ${c.finish}`}
             fields={[
               { key: 'name', label: 'Name', type: 'text' },
               { key: 'pricePerSqm', label: 'Price per m²', type: 'number' },
               { key: 'thickness', label: 'Thickness', type: 'number', suffix: 'mm' },
               { key: 'color', label: 'Colour', type: 'color' },
+              { key: 'finish', label: 'Surface finish (render)', type: 'select', options: [{ value: 'matte', label: 'Matte' }, { value: 'satin', label: 'Satin' }, { value: 'gloss', label: 'High gloss' }, { value: 'textured', label: 'Textured' }] },
             ]}
-            onAdd={() => updateCatalog((c) => c.countertops.push({ id: uid('c-'), name: 'New top', thickness: 30, pricePerSqm: 100, color: '#cccccc' }))}
+            onAdd={() => updateCatalog((c) => c.countertops.push({ id: uid('c-'), name: 'New top', thickness: 30, pricePerSqm: 100, color: '#cccccc', finish: 'satin' }))}
           />
         )}
         {tab === 'accessories' && (
@@ -222,11 +225,32 @@ export default function Library() {
                 { key: 'unit', label: 'Sold as', type: 'select', options: [{ value: 'pc', label: 'Piece' }, { value: 'pair', label: 'Pair' }, { value: 'set', label: 'Set' }, { value: 'm', label: 'Metre' }] },
                 { key: 'packQty', label: 'Pieces per pack', type: 'number' },
                 { key: 'lengthMm', label: 'Length (runners)', type: 'number', suffix: 'mm' },
-                { key: 'family', label: 'Family (runners auto-size within a family)', type: 'text' },
+                { key: 'family', label: 'Family (runners auto-size, hinges auto-fit within a family)', type: 'text' },
+                { key: 'fit', label: 'Hinge overlay', type: 'select', options: [{ value: '', label: '—' }, { value: 'overlay', label: 'Full overlay' }, { value: 'half', label: 'Half overlay' }, { value: 'inset', label: 'Inset' }] },
+                { key: 'style', label: 'Handle style (render)', type: 'select', options: [{ value: '', label: '—' }, ...['bar', 'tbar', 'knob', 'roman', 'notchRound', 'notchOval', 'notchTrapezium', 'finger', 'appliance', 'profile', 'push'].map((v) => ({ value: v, label: v }))] },
               ]}
               onAdd={() => updateCatalog((c) => c.accessories.push({ id: uid('x-'), category: cat === 'all' ? 'other' : (cat as never), name: 'New accessory', size: '', unit: 'pc', packQty: 1, price: 1 }))}
             />
           </>
+        )}
+        {tab === 'appliances' && (
+          <EditableList
+            {...listProps('appliances')}
+            swatch={(a) => a.color}
+            summary={(a) => `${APPLIANCE_LABELS[a.category]} · ${a.variant} · ${a.width}×${a.height}×${a.depth}mm · ${fmt(a.price)}`}
+            fields={[
+              { key: 'name', label: 'Name', type: 'text' },
+              { key: 'category', label: 'Type', type: 'select', options: APPLIANCE_CATEGORIES.map((c) => ({ value: c, label: APPLIANCE_LABELS[c] })) },
+              { key: 'variant', label: 'Variant (gas, electric, side-by-side…)', type: 'text', half: true },
+              { key: 'price', label: 'Price', type: 'number' },
+              { key: 'placement', label: 'Fitted', type: 'select', options: [{ value: 'top', label: 'Into the worktop' }, { value: 'inbuilt', label: 'Inside a cabinet' }, { value: 'freestanding', label: 'Free-standing' }] },
+              { key: 'width', label: 'Width', type: 'number', suffix: 'mm' },
+              { key: 'height', label: 'Height', type: 'number', suffix: 'mm' },
+              { key: 'depth', label: 'Depth', type: 'number', suffix: 'mm' },
+              { key: 'color', label: 'Colour', type: 'color' },
+            ]}
+            onAdd={() => updateCatalog((c) => c.appliances.push({ id: uid('ap-'), category: 'other', name: 'New appliance', variant: '', width: 600, height: 600, depth: 550, price: 300, color: '#d4d4d8', placement: 'inbuilt' }))}
+          />
         )}
         {tab === 'transport' && (
           <EditableList<TransportOption>

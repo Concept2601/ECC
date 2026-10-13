@@ -1,28 +1,72 @@
-import type { Catalog, Settings } from './types';
+import type { Accessory, Appliance, Catalog, Settings } from './types';
 
-// Starter price library. Every value is editable in the app (Library screen).
+const acc = (a: Omit<Accessory, 'packQty' | 'unit'> & Partial<Pick<Accessory, 'packQty' | 'unit'>>): Accessory => ({ unit: 'pc', packQty: 1, ...a });
+
+const runnerFamily = (prefix: string, family: string, name: string, prices: Record<number, number>, unit: Accessory['unit'] = 'pair'): Accessory[] =>
+  Object.entries(prices).map(([len, price]) => acc({ id: `${prefix}${len}`, category: 'runner', family, name, size: `${len}mm`, lengthMm: Number(len), unit, price }));
+
+const hingeFamily = (prefix: string, family: string, name: string, prices: Partial<Record<'overlay' | 'half' | 'inset', number>>): Accessory[] =>
+  (Object.entries(prices) as ['overlay' | 'half' | 'inset', number][]).map(([fit, price]) =>
+    acc({ id: `${prefix}-${fit}`, category: 'hinge', family, fit, name, size: fit === 'overlay' ? '35mm full overlay' : fit === 'half' ? '35mm half overlay' : '35mm inset', price }),
+  );
+
+export const defaultAppliances = (): Appliance[] => [
+  { id: 'ap-hob-gas4', category: 'hob', name: 'Gas hob 4 burner', variant: 'Gas', width: 600, height: 50, depth: 520, price: 180, color: '#1d1d1f', placement: 'top' },
+  { id: 'ap-hob-gas5', category: 'hob', name: 'Gas hob 5 burner', variant: 'Gas', width: 900, height: 50, depth: 520, price: 260, color: '#1d1d1f', placement: 'top' },
+  { id: 'ap-hob-elec4', category: 'hob', name: 'Electric ceramic hob 4 zone', variant: 'Electric', width: 600, height: 50, depth: 520, price: 220, color: '#0d0d0f', placement: 'top' },
+  { id: 'ap-hob-ind4', category: 'hob', name: 'Induction hob 4 zone', variant: 'Induction', width: 600, height: 50, depth: 520, price: 380, color: '#0d0d0f', placement: 'top' },
+  { id: 'ap-hob-combo', category: 'hob', name: 'Gas + electric combo hob', variant: 'Gas / electric', width: 600, height: 50, depth: 520, price: 240, color: '#1d1d1f', placement: 'top' },
+  { id: 'ap-sink-single', category: 'sink', name: 'Stainless sink single bowl + drainer', variant: 'Single bowl', width: 860, height: 200, depth: 500, price: 95, color: '#c9cdd2', placement: 'top' },
+  { id: 'ap-sink-double', category: 'sink', name: 'Stainless sink double bowl', variant: 'Double bowl', width: 1160, height: 200, depth: 500, price: 150, color: '#c9cdd2', placement: 'top' },
+  { id: 'ap-sink-undermount', category: 'sink', name: 'Undermount sink', variant: 'Undermount', width: 600, height: 200, depth: 450, price: 160, color: '#b5b9be', placement: 'top' },
+  { id: 'ap-oven-elec', category: 'oven', name: 'Built-in electric oven', variant: 'Electric', width: 595, height: 595, depth: 550, price: 420, color: '#18181b', placement: 'inbuilt' },
+  { id: 'ap-oven-gas', category: 'oven', name: 'Built-in gas oven', variant: 'Gas', width: 595, height: 595, depth: 550, price: 450, color: '#18181b', placement: 'inbuilt' },
+  { id: 'ap-mw-built', category: 'microwave', name: 'Built-in microwave', variant: 'Built-in', width: 595, height: 390, depth: 400, price: 260, color: '#18181b', placement: 'inbuilt' },
+  { id: 'ap-mw-counter', category: 'microwave', name: 'Countertop microwave', variant: 'Countertop', width: 480, height: 280, depth: 360, price: 110, color: '#2a2a2e', placement: 'freestanding' },
+  { id: 'ap-dw-int', category: 'dishwasher', name: 'Integrated dishwasher 60cm', variant: 'Integrated', width: 598, height: 815, depth: 550, price: 480, color: '#d4d4d8', placement: 'inbuilt' },
+  { id: 'ap-dw-free', category: 'dishwasher', name: 'Freestanding dishwasher 60cm', variant: 'Freestanding', width: 600, height: 850, depth: 600, price: 420, color: '#e4e4e7', placement: 'freestanding' },
+  { id: 'ap-fr-single', category: 'fridge', name: 'Single door fridge', variant: 'Single door', width: 600, height: 1450, depth: 650, price: 380, color: '#d9dde1', placement: 'freestanding' },
+  { id: 'ap-fr-topfreezer', category: 'fridge', name: 'Fridge, top freezer', variant: 'Double door', width: 700, height: 1750, depth: 680, price: 560, color: '#d9dde1', placement: 'freestanding' },
+  { id: 'ap-fr-sbs', category: 'fridge', name: 'Side-by-side fridge', variant: 'Side by side', width: 910, height: 1780, depth: 720, price: 1150, color: '#c8ccd0', placement: 'freestanding' },
+  { id: 'ap-fr-french', category: 'fridge', name: 'French door fridge', variant: 'French door', width: 910, height: 1800, depth: 730, price: 1450, color: '#c8ccd0', placement: 'freestanding' },
+  { id: 'ap-fr-int', category: 'fridge', name: 'Integrated fridge-freezer', variant: 'Integrated', width: 560, height: 1770, depth: 550, price: 820, color: '#e4e4e7', placement: 'inbuilt' },
+  { id: 'ap-fr-under', category: 'fridge', name: 'Under-counter fridge', variant: 'Under counter', width: 600, height: 820, depth: 580, price: 340, color: '#d9dde1', placement: 'inbuilt' },
+  { id: 'ap-wine', category: 'wineCooler', name: 'Wine cooler 30 bottle', variant: 'Under counter', width: 300, height: 820, depth: 570, price: 420, color: '#18181b', placement: 'inbuilt' },
+  { id: 'ap-hood-chimney', category: 'hood', name: 'Chimney extractor hood', variant: 'Chimney', width: 600, height: 700, depth: 480, price: 240, color: '#b5b9be', placement: 'freestanding' },
+  { id: 'ap-hood-built', category: 'hood', name: 'Built-in (integrated) hood', variant: 'Built-in', width: 560, height: 180, depth: 280, price: 170, color: '#b5b9be', placement: 'inbuilt' },
+  { id: 'ap-washer', category: 'washer', name: 'Front-load washing machine', variant: 'Front load', width: 600, height: 850, depth: 600, price: 520, color: '#f4f4f5', placement: 'inbuilt' },
+  { id: 'ap-cooker-gas', category: 'cooker', name: 'Freestanding gas stove 4 burner', variant: 'Gas', width: 600, height: 900, depth: 600, price: 380, color: '#d4d4d8', placement: 'freestanding' },
+  { id: 'ap-cooker-elec', category: 'cooker', name: 'Freestanding electric stove', variant: 'Electric', width: 600, height: 900, depth: 600, price: 360, color: '#e4e4e7', placement: 'freestanding' },
+];
+
+
 export const defaultCatalog = (): Catalog => ({
   boards: [
-    { id: 'b-mel16-white', name: 'Melamine chipboard white 16mm', category: 'Melamine', thickness: 16, sheetLength: 2750, sheetWidth: 1830, pricePerSheet: 42, color: '#f2f0ea', grain: false, texture: 'plain' },
-    { id: 'b-mel16-oak', name: 'Melamine chipboard oak 16mm', category: 'Melamine', thickness: 16, sheetLength: 2750, sheetWidth: 1830, pricePerSheet: 48, color: '#b88a5a', grain: true, texture: 'wood' },
-    { id: 'b-mdf18', name: 'MDF raw 18mm', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 45, color: '#c9a97c', grain: false, texture: 'plain' },
-    { id: 'b-mdf18-walnut', name: 'MDF walnut veneer 18mm', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 78, color: '#6b4429', grain: true, texture: 'wood' },
-    { id: 'b-mdf18-gloss', name: 'MDF high gloss grey 18mm', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 95, color: '#5d6066', grain: false, texture: 'plain' },
-    { id: 'b-hmr18', name: 'HMR moisture resistant 18mm', category: 'HMR', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 60, color: '#9fae8c', grain: false, texture: 'plain' },
-    { id: 'b-ply18', name: 'Plywood 18mm', category: 'Plywood', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 55, color: '#d8b98a', grain: true, texture: 'wood' },
-    { id: 'b-pine32', name: 'Pine laminated board 32mm', category: 'Solid wood', thickness: 32, sheetLength: 2400, sheetWidth: 600, pricePerSheet: 65, color: '#dcb57c', grain: true, texture: 'wood' },
-    { id: 'b-hb3', name: 'Hardboard white 3mm (backs)', category: 'Hardboard', thickness: 3, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 12, color: '#efece4', grain: false, texture: 'plain' },
+    { id: 'b-mel16-white', name: 'Melamine chipboard white 16mm', category: 'Melamine', thickness: 16, sheetLength: 2750, sheetWidth: 1830, pricePerSheet: 42, color: '#f2f0ea', grain: false, texture: 'plain', finish: 'matte' },
+    { id: 'b-mel16-oak', name: 'Melamine chipboard oak 16mm', category: 'Melamine', thickness: 16, sheetLength: 2750, sheetWidth: 1830, pricePerSheet: 48, color: '#b88a5a', grain: true, texture: 'wood', finish: 'textured' },
+    { id: 'b-mel16-black', name: 'Melamine chipboard black 16mm', category: 'Melamine', thickness: 16, sheetLength: 2750, sheetWidth: 1830, pricePerSheet: 50, color: '#26262a', grain: false, texture: 'plain', finish: 'matte' },
+    { id: 'b-mdf18', name: 'MDF raw 18mm (paint grade)', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 45, color: '#c9a97c', grain: false, texture: 'plain', finish: 'matte' },
+    { id: 'b-mdf18-walnut', name: 'MDF walnut veneer 18mm', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 78, color: '#6b4429', grain: true, texture: 'wood', finish: 'satin' },
+    { id: 'b-mdf18-gloss', name: 'MDF high gloss grey 18mm', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 95, color: '#5d6066', grain: false, texture: 'plain', finish: 'gloss' },
+    { id: 'b-mdf18-gloss-white', name: 'MDF high gloss white 18mm', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 95, color: '#f7f7f5', grain: false, texture: 'plain', finish: 'gloss' },
+    { id: 'b-mdf18-matte-green', name: 'MDF super matte sage 18mm', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 92, color: '#7d8c74', grain: false, texture: 'plain', finish: 'matte' },
+    { id: 'b-hmr18', name: 'HMR moisture resistant 18mm', category: 'HMR', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 60, color: '#9fae8c', grain: false, texture: 'plain', finish: 'matte' },
+    { id: 'b-ply18', name: 'Plywood 18mm', category: 'Plywood', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 55, color: '#d8b98a', grain: true, texture: 'wood', finish: 'satin' },
+    { id: 'b-pine32', name: 'Pine laminated board 32mm', category: 'Solid wood', thickness: 32, sheetLength: 2400, sheetWidth: 600, pricePerSheet: 65, color: '#dcb57c', grain: true, texture: 'wood', finish: 'satin' },
+    { id: 'b-hb3', name: 'Hardboard white 3mm (backs)', category: 'Hardboard', thickness: 3, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 12, color: '#efece4', grain: false, texture: 'plain', finish: 'matte' },
   ],
   edging: [
     { id: 'e-white', name: 'PVC edging white 22mm', pricePerMeter: 0.6, color: '#f2f0ea' },
     { id: 'e-oak', name: 'PVC edging oak 22mm', pricePerMeter: 0.75, color: '#b88a5a' },
     { id: 'e-walnut', name: 'PVC edging walnut 22mm', pricePerMeter: 0.85, color: '#6b4429' },
     { id: 'e-grey', name: 'ABS edging grey 2mm', pricePerMeter: 1.2, color: '#5d6066' },
+    { id: 'e-black', name: 'PVC edging black 22mm', pricePerMeter: 0.7, color: '#26262a' },
   ],
   glass: [
     { id: 'g-clear4', name: 'Clear glass 4mm', thickness: 4, pricePerSqm: 25, color: '#cfe8ef', opacity: 0.3 },
     { id: 'g-frost6', name: 'Frosted glass 6mm', thickness: 6, pricePerSqm: 38, color: '#e6f0f2', opacity: 0.7 },
     { id: 'g-tint6', name: 'Bronze tinted glass 6mm', thickness: 6, pricePerSqm: 42, color: '#7a5a3a', opacity: 0.5 },
+    { id: 'g-toughened8', name: 'Toughened clear glass 8mm (frameless)', thickness: 8, pricePerSqm: 65, color: '#cfe8ef', opacity: 0.3 },
     { id: 'g-mirror4', name: 'Mirror 4mm', thickness: 4, pricePerSqm: 32, color: '#d9e2e6', opacity: 0.95 },
   ],
   aluminium: [
@@ -31,64 +75,92 @@ export const defaultCatalog = (): Catalog => ({
     { id: 'a-frame-gold', name: 'Door frame profile champagne', stockLength: 6000, pricePerLength: 36, color: '#c8a96a' },
   ],
   countertops: [
-    { id: 'c-postform', name: 'Postform laminate top 38mm', thickness: 38, pricePerSqm: 45, color: '#d9d4c7' },
-    { id: 'c-granite', name: 'Granite (black galaxy) 30mm', thickness: 30, pricePerSqm: 120, color: '#26262a' },
-    { id: 'c-quartz', name: 'Quartz white 20mm', thickness: 20, pricePerSqm: 180, color: '#f4f4f2' },
-    { id: 'c-wood', name: 'Solid hardwood top 40mm', thickness: 40, pricePerSqm: 140, color: '#a8743f' },
+    { id: 'c-postform', name: 'Postform laminate top 38mm', thickness: 38, pricePerSqm: 45, color: '#d9d4c7', finish: 'matte' },
+    { id: 'c-granite', name: 'Granite (black galaxy) 30mm', thickness: 30, pricePerSqm: 120, color: '#26262a', finish: 'gloss' },
+    { id: 'c-quartz', name: 'Quartz white 20mm', thickness: 20, pricePerSqm: 180, color: '#f4f4f2', finish: 'gloss' },
+    { id: 'c-wood', name: 'Solid hardwood top 40mm', thickness: 40, pricePerSqm: 140, color: '#a8743f', finish: 'satin' },
   ],
+  appliances: defaultAppliances(),
   accessories: [
-    { id: 'h-softclose', category: 'hinge', name: 'Soft-close clip-on hinge', size: '35mm full overlay', unit: 'pc', packQty: 1, price: 2.5 },
-    { id: 'h-standard', category: 'hinge', name: 'Standard concealed hinge', size: '35mm full overlay', unit: 'pc', packQty: 1, price: 0.9 },
-    { id: 'h-halfov', category: 'hinge', name: 'Soft-close hinge', size: '35mm half overlay', unit: 'pc', packQty: 1, price: 2.6 },
-    { id: 'h-glass', category: 'hinge', name: 'Hinge for aluminium frame door', size: '26mm', unit: 'pc', packQty: 1, price: 4 },
-    { id: 'h-165', category: 'hinge', name: 'Wide angle corner hinge', size: '165°', unit: 'pc', packQty: 1, price: 6 },
-
-    { id: 'r-bb350', category: 'runner', family: 'Ball bearing full extension', name: 'Ball bearing runner', size: '350mm', lengthMm: 350, unit: 'pair', packQty: 1, price: 6 },
-    { id: 'r-bb400', category: 'runner', family: 'Ball bearing full extension', name: 'Ball bearing runner', size: '400mm', lengthMm: 400, unit: 'pair', packQty: 1, price: 6.5 },
-    { id: 'r-bb450', category: 'runner', family: 'Ball bearing full extension', name: 'Ball bearing runner', size: '450mm', lengthMm: 450, unit: 'pair', packQty: 1, price: 7 },
-    { id: 'r-bb500', category: 'runner', family: 'Ball bearing full extension', name: 'Ball bearing runner', size: '500mm', lengthMm: 500, unit: 'pair', packQty: 1, price: 8 },
-    { id: 'r-bb550', category: 'runner', family: 'Ball bearing full extension', name: 'Ball bearing runner', size: '550mm', lengthMm: 550, unit: 'pair', packQty: 1, price: 9 },
-    { id: 'r-um400', category: 'runner', family: 'Soft-close undermount', name: 'Soft-close undermount runner', size: '400mm', lengthMm: 400, unit: 'pair', packQty: 1, price: 20 },
-    { id: 'r-um450', category: 'runner', family: 'Soft-close undermount', name: 'Soft-close undermount runner', size: '450mm', lengthMm: 450, unit: 'pair', packQty: 1, price: 22 },
-    { id: 'r-um500', category: 'runner', family: 'Soft-close undermount', name: 'Soft-close undermount runner', size: '500mm', lengthMm: 500, unit: 'pair', packQty: 1, price: 24 },
-    { id: 'r-roller350', category: 'runner', family: 'Epoxy roller runner', name: 'Epoxy roller runner', size: '350mm', lengthMm: 350, unit: 'pair', packQty: 1, price: 2.5 },
-    { id: 'r-roller450', category: 'runner', family: 'Epoxy roller runner', name: 'Epoxy roller runner', size: '450mm', lengthMm: 450, unit: 'pair', packQty: 1, price: 3 },
-
-    { id: 'ro-std', category: 'roller', name: 'Sliding door roller set (top + bottom)', size: 'up to 40kg', unit: 'set', packQty: 1, price: 15 },
-    { id: 'ro-heavy', category: 'roller', name: 'Heavy duty sliding roller set', size: 'up to 80kg', unit: 'set', packQty: 1, price: 28 },
-    { id: 'ro-softclose', category: 'roller', name: 'Soft-close sliding roller set', size: 'up to 60kg', unit: 'set', packQty: 1, price: 35 },
-
-    { id: 't-std', category: 'track', name: 'Sliding track top + bottom', size: 'double track', unit: 'm', packQty: 1, price: 14 },
-    { id: 't-heavy', category: 'track', name: 'Heavy duty sliding track set', size: 'double track', unit: 'm', packQty: 1, price: 22 },
-
-    { id: 'hd-bar128', category: 'handle', name: 'Bar handle stainless', size: '128mm', unit: 'pc', packQty: 1, price: 2 },
-    { id: 'hd-bar192', category: 'handle', name: 'Bar handle stainless', size: '192mm', unit: 'pc', packQty: 1, price: 2.8 },
-    { id: 'hd-bar320', category: 'handle', name: 'Bar handle matt black', size: '320mm', unit: 'pc', packQty: 1, price: 5 },
-    { id: 'hd-knob', category: 'handle', name: 'Round knob', size: '30mm', unit: 'pc', packQty: 1, price: 1 },
-    { id: 'hd-gola', category: 'handle', name: 'Gola / J-profile handle', size: 'per metre', unit: 'm', packQty: 1, price: 6 },
-    { id: 'hd-push', category: 'handle', name: 'Push-to-open latch', size: 'handleless', unit: 'pc', packQty: 1, price: 3 },
-
-    { id: 's-4x16', category: 'screw', name: 'Chipboard screws 4x16', size: 'box of 200', unit: 'pc', packQty: 200, price: 3 },
-    { id: 's-4x35', category: 'screw', name: 'Chipboard screws 4x35', size: 'box of 200', unit: 'pc', packQty: 200, price: 4 },
-    { id: 's-confirmat', category: 'screw', name: 'Confirmat screws 7x50', size: 'box of 100', unit: 'pc', packQty: 100, price: 6 },
-
-    { id: 'cn-cam', category: 'connector', name: 'Cam lock & dowel set', size: '15mm', unit: 'set', packQty: 1, price: 0.25 },
-    { id: 'cn-dowel', category: 'connector', name: 'Wooden dowels 8x30', size: 'bag of 100', unit: 'pc', packQty: 100, price: 2 },
-
-    { id: 'sp-std', category: 'shelfPin', name: 'Shelf support pins', size: '5mm', unit: 'pc', packQty: 1, price: 0.05 },
-
-    { id: 'l-adj100', category: 'leg', name: 'Adjustable plinth leg', size: '100-150mm', unit: 'pc', packQty: 1, price: 1.5 },
-    { id: 'l-chrome150', category: 'leg', name: 'Chrome furniture leg', size: '150mm', unit: 'pc', packQty: 1, price: 4 },
-    { id: 'l-hairpin', category: 'leg', name: 'Hairpin leg black', size: '200mm', unit: 'pc', packQty: 1, price: 6 },
-
-    { id: 'rl-oval', category: 'rail', name: 'Oval wardrobe rail chrome', size: '25mm', unit: 'm', packQty: 1, price: 5 },
-    { id: 'rl-pullout', category: 'rail', name: 'Pull-down wardrobe lift', size: '830-1150mm', unit: 'pc', packQty: 1, price: 45 },
-
-    { id: 'st-flap', category: 'stay', name: 'Lift-up flap stay', size: 'soft close', unit: 'pc', packQty: 1, price: 8 },
-    { id: 'st-gas', category: 'stay', name: 'Gas strut', size: '80N', unit: 'pc', packQty: 1, price: 4 },
-
-    { id: 'lk-cam', category: 'lock', name: 'Cupboard cam lock', size: '20mm', unit: 'pc', packQty: 1, price: 3 },
-    { id: 'lt-led', category: 'lighting', name: 'LED strip warm white', size: 'per metre', unit: 'm', packQty: 1, price: 6 },
+    // hinges
+    ...hingeFamily('h-soft', 'Soft-close', 'Soft-close clip-on hinge', { overlay: 2.5, half: 2.6, inset: 2.8 }),
+    ...hingeFamily('h-ord', 'Ordinary', 'Ordinary concealed hinge', { overlay: 0.9, half: 0.9, inset: 1 }),
+    ...hingeFamily('h-kit', 'Kitchen hinge', 'Kitchen hinge 110° clip-on', { overlay: 1.6, half: 1.7, inset: 1.8 }),
+    acc({ id: 'h-corner', category: 'hinge', family: 'Corner', fit: 'overlay', name: 'Corner hinge 165°', size: 'wide angle', price: 6 }),
+    acc({ id: 'h-bic', category: 'hinge', family: 'BIC', fit: 'overlay', name: 'BIC hinge (blind inset corner)', size: '35mm', price: 4.5 }),
+    acc({ id: 'h-reliant', category: 'hinge', family: 'Reliant corner', fit: 'overlay', name: 'Reliant corner hinge', size: 'bi-fold corner', price: 7 }),
+    acc({ id: 'h-glass', category: 'hinge', family: 'Glass', fit: 'overlay', name: 'Hinge for aluminium frame door', size: '26mm', price: 4 }),
+    acc({ id: 'h-glass-clamp', category: 'hinge', family: 'Glass', fit: 'overlay', name: 'Frameless glass clamp hinge', size: 'for 4-8mm glass', price: 7.5 }),
+    // runners
+    ...runnerFamily('r-bb', 'Ordinary ball bearing', 'Ordinary ball bearing runner', { 350: 4.5, 400: 5, 450: 5.5, 500: 6.5, 550: 7 }),
+    ...runnerFamily('r-sc', 'Soft-close full extension', 'Soft-close ball bearing runner', { 350: 8, 400: 8.5, 450: 9, 500: 10, 550: 11 }),
+    ...runnerFamily('r-pto', 'Push-to-open', 'Push-to-open runner', { 350: 10, 400: 10.5, 450: 11, 500: 12 }),
+    ...runnerFamily('r-tri', 'Trimax (tandem box)', 'Trimax double-wall drawer system', { 400: 26, 450: 28, 500: 30 }, 'set'),
+    ...runnerFamily('r-um', 'Soft-close undermount', 'Soft-close undermount runner', { 400: 20, 450: 22, 500: 24 }),
+    ...runnerFamily('r-roller', 'Epoxy roller', 'Epoxy roller runner', { 350: 2.5, 450: 3 }),
+    // handles
+    acc({ id: 'hd-bar128', category: 'handle', style: 'bar', name: 'Bar handle stainless', size: '128mm', price: 2 }),
+    acc({ id: 'hd-bar192', category: 'handle', style: 'bar', name: 'Bar handle stainless', size: '192mm', price: 2.8 }),
+    acc({ id: 'hd-bar320', category: 'handle', style: 'bar', name: 'Bar handle matt black', size: '320mm', price: 5 }),
+    acc({ id: 'hd-tbar', category: 'handle', style: 'tbar', name: 'T-bar handle', size: '160mm', price: 2.5 }),
+    acc({ id: 'hd-knob', category: 'handle', style: 'knob', name: 'Round knob', size: '30mm', price: 1 }),
+    acc({ id: 'hd-roman', category: 'handle', style: 'roman', name: 'Roman (classic bow) handle antique brass', size: '96mm', price: 3.5 }),
+    acc({ id: 'hd-notch-round', category: 'handle', style: 'notchRound', name: 'Notched handle – round', size: 'machined cut-out', price: 1.5 }),
+    acc({ id: 'hd-notch-oval', category: 'handle', style: 'notchOval', name: 'Notched handle – oval', size: 'machined cut-out', price: 1.5 }),
+    acc({ id: 'hd-notch-trap', category: 'handle', style: 'notchTrapezium', name: 'Notched handle – trapezium', size: 'machined cut-out', price: 1.5 }),
+    acc({ id: 'hd-finger', category: 'handle', style: 'finger', name: 'Finger pull profile', size: 'per metre', unit: 'm', price: 5 }),
+    acc({ id: 'hd-gola', category: 'handle', style: 'profile', name: 'Gola / J-profile handle', size: 'per metre', unit: 'm', price: 6 }),
+    acc({ id: 'hd-appliance', category: 'handle', style: 'appliance', name: 'Appliance pull handle', size: '450mm', price: 9 }),
+    acc({ id: 'hd-push', category: 'handle', style: 'push', name: 'Push-to-open latch', size: 'handleless', price: 3 }),
+    acc({ id: 'hd-push-mag', category: 'handle', style: 'push', name: 'Magnetic push-to-open system', size: 'handleless', price: 4.5 }),
+    // sliding
+    acc({ id: 'ro-std', category: 'roller', name: 'Sliding door roller set (top + bottom)', size: 'up to 40kg', unit: 'set', price: 15 }),
+    acc({ id: 'ro-heavy', category: 'roller', name: 'Heavy duty sliding roller set', size: 'up to 80kg', unit: 'set', price: 28 }),
+    acc({ id: 'ro-softclose', category: 'roller', name: 'Soft-close sliding roller set', size: 'up to 60kg', unit: 'set', price: 35 }),
+    acc({ id: 'ro-mini', category: 'roller', name: 'Cabinet sliding door roller kit', size: 'small doors', unit: 'set', price: 6 }),
+    acc({ id: 't-std', category: 'track', name: 'Sliding track top + bottom', size: 'double track', unit: 'm', price: 14 }),
+    acc({ id: 't-heavy', category: 'track', name: 'Heavy duty sliding track set', size: 'double track', unit: 'm', price: 22 }),
+    // pull-outs & organisers
+    acc({ id: 'in-spice', category: 'insert', name: 'Spice rack pull-out', size: '150mm', minWidth: 140, price: 38 }),
+    acc({ id: 'in-bin', category: 'insert', name: 'Trash bin pull-out (2 bins)', size: '400mm', minWidth: 380, price: 55 }),
+    acc({ id: 'in-veg', category: 'insert', name: 'Vegetable basket rack', size: '3 tier', minWidth: 300, price: 42 }),
+    acc({ id: 'in-pantry', category: 'insert', name: 'Pantry pull-out (tall larder)', size: '5 tier', minWidth: 300, price: 210 }),
+    acc({ id: 'in-carousel', category: 'insert', name: 'Corner carousel / lazy susan', size: '3/4 round', minWidth: 750, price: 85 }),
+    acc({ id: 'in-magic', category: 'insert', name: 'Magic corner pull-out', size: 'blind corner', minWidth: 450, price: 160 }),
+    acc({ id: 'in-cutlery', category: 'insert', name: 'Cutlery tray insert', size: 'cut to fit', minWidth: 300, price: 12 }),
+    acc({ id: 'in-bottle', category: 'insert', name: 'Bottle pull-out', size: '200mm', minWidth: 190, price: 34 }),
+    // lighting
+    acc({ id: 'lt-strip', category: 'lighting', lightKind: 'strip', name: 'LED strip', size: 'single colour, per metre', unit: 'm', price: 6 }),
+    acc({ id: 'lt-strip-rgb', category: 'lighting', lightKind: 'strip', name: 'LED strip RGB', size: 'colour changing, per metre', unit: 'm', price: 9 }),
+    acc({ id: 'lt-profile', category: 'lighting', lightKind: 'profile', name: 'Aluminium LED profile + diffuser', size: 'per metre', unit: 'm', price: 7 }),
+    acc({ id: 'lt-spot', category: 'lighting', lightKind: 'spot', name: 'LED puck spotlight', size: '2W', price: 8 }),
+    acc({ id: 'lt-bar', category: 'lighting', lightKind: 'bar', name: 'Under-cabinet LED light bar', size: 'per metre', unit: 'm', price: 18 }),
+    acc({ id: 'lt-driver', category: 'lighting', lightKind: 'driver', name: 'LED driver / transformer 12V', size: '60W', price: 14 }),
+    acc({ id: 'lt-sensor-door', category: 'lighting', lightKind: 'sensor', name: 'Door sensor switch', size: 'auto on/off', price: 7 }),
+    acc({ id: 'lt-sensor-wave', category: 'lighting', lightKind: 'sensor', name: 'Hand-wave sensor switch', size: 'IR', price: 9 }),
+    acc({ id: 'lt-sensor-touch', category: 'lighting', lightKind: 'sensor', name: 'Touch dimmer switch', size: 'dimmable', price: 10 }),
+    acc({ id: 'lt-remote', category: 'lighting', lightKind: 'sensor', name: 'RGB remote controller', size: 'wireless', price: 12 }),
+    // fixings & fittings
+    acc({ id: 's-4x16', category: 'screw', name: 'Chipboard screws 4x16', size: 'box of 200', packQty: 200, price: 3 }),
+    acc({ id: 's-4x35', category: 'screw', name: 'Chipboard screws 4x35', size: 'box of 200', packQty: 200, price: 4 }),
+    acc({ id: 's-confirmat', category: 'screw', name: 'Confirmat screws 7x50', size: 'box of 100', packQty: 100, price: 6 }),
+    acc({ id: 'cn-cam', category: 'connector', name: 'Cam lock & dowel set', size: '15mm', unit: 'set', price: 0.25 }),
+    acc({ id: 'cn-dowel', category: 'connector', name: 'Wooden dowels 8x30', size: 'bag of 100', packQty: 100, price: 2 }),
+    acc({ id: 'sp-std', category: 'shelfPin', name: 'Shelf support pins', size: '5mm', price: 0.05 }),
+    acc({ id: 'l-adj100', category: 'leg', name: 'Adjustable plinth leg', size: '100-150mm', price: 1.5 }),
+    acc({ id: 'l-chrome150', category: 'leg', name: 'Chrome furniture leg', size: '150mm', price: 4 }),
+    acc({ id: 'l-hairpin', category: 'leg', name: 'Hairpin leg black', size: '200mm', price: 6 }),
+    acc({ id: 'rl-oval', category: 'rail', name: 'Oval wardrobe rail chrome', size: '25mm', unit: 'm', price: 5 }),
+    acc({ id: 'rl-pullout', category: 'rail', name: 'Pull-down wardrobe lift', size: '830-1150mm', price: 45 }),
+    acc({ id: 'st-flap', category: 'stay', name: 'Lift-up flap stay', size: 'soft close', price: 8 }),
+    acc({ id: 'st-gas', category: 'stay', name: 'Gas strut', size: '80N', price: 4 }),
+    acc({ id: 'st-drop', category: 'stay', name: 'Drop-down flap stay', size: 'friction', price: 5 }),
+    acc({ id: 'lk-cam', category: 'lock', name: 'Cupboard cam lock', size: '20mm', price: 3 }),
+    acc({ id: 'fx-hanger', category: 'fixing', name: 'Wall cabinet hanger bracket', size: 'adjustable, pair', unit: 'pair', price: 3.5 }),
+    acc({ id: 'fx-rail', category: 'fixing', name: 'Wall hanging rail', size: 'per metre', unit: 'm', price: 4 }),
+    acc({ id: 'fx-bracket', category: 'fixing', name: 'Wall fixing bracket (built-in)', size: 'L-bracket', price: 0.6 }),
+    acc({ id: 'sv-cutout', category: 'service', name: 'Countertop cut-out (sink / hob)', size: 'per cut-out', price: 25 }),
+    acc({ id: 'sv-notch', category: 'service', name: 'Handle notch machining', size: 'per door', price: 2 }),
   ],
 });
 

@@ -5,11 +5,11 @@ import { buildUnit } from '../generate';
 
 const item: ReadingItem = {
   name: 'Bedroom wardrobe', productType: 'sliding_wardrobe', quantity: 1, width: 2700, height: 2400, depth: 650,
-  base: 'plinth', baseHeight: 80, countertop: false, countertopOverhang: 0, slidingDoors: true, slidingPanels: 3, slidingStyle: 'mirror',
+  base: 'plinth', baseHeight: 80, mount: 'floor', topAppliances: [], countertop: false, countertopOverhang: 0, slidingDoors: true, slidingPanels: 3, slidingStyle: 'mirror',
   carcassFinish: 'white melamine', frontFinish: 'oak', notes: '', confidence: 'medium',
   bays: [
-    { widthRatio: 900, sections: [{ heightRatio: 1, front: 'drawer', doorCount: 1, drawerCount: 3, shelves: 0, hangingRail: false }, { heightRatio: 3, front: 'open', doorCount: 1, drawerCount: 1, shelves: 0, hangingRail: true }] },
-    { widthRatio: 900, sections: [{ heightRatio: 1, front: 'open', doorCount: 1, drawerCount: 1, shelves: 5, hangingRail: false }] },
+    { widthRatio: 900, sections: [{ heightRatio: 1, front: 'drawer', doorCount: 1, drawerCount: 3, opening: 'left', appliance: 'none', shelves: 0, hangingRail: false }, { heightRatio: 3, front: 'open', doorCount: 1, drawerCount: 1, opening: 'left', appliance: 'none', shelves: 0, hangingRail: true }] },
+    { widthRatio: 900, sections: [{ heightRatio: 1, front: 'open', doorCount: 1, drawerCount: 1, opening: 'left', appliance: 'none', shelves: 5, hangingRail: false }] },
   ],
 };
 

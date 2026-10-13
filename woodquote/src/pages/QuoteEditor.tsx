@@ -1,19 +1,22 @@
-import { AlertTriangle, Copy, FileDown, Hammer, Minus, MoreVertical, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { AlertTriangle, Camera, Copy, FileDown, Hammer, ImagePlus, LayoutPanelTop, Minus, MoreVertical, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import AddUnitModal from '../components/AddUnitModal';
 import { BarPlanCard, BoardPlanCard } from '../components/CutPlanView';
 import { Card, confirmAction, Field, Modal, NumInput, PageHeader, Row, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import UnitThumb from '../components/UnitThumb';
+import { imageFileToJpeg } from '../lib/images';
 import { STATUS_STYLE, useMoney, useQuoteCalc } from '../hooks';
-import { describeUnit } from '../lib/describe';
-import type { CostGroup } from '../lib/pricing';
+import { cloneRun, createRun, RUN_SHAPE_LABELS, syncRun } from '../lib/runs';
+import type { RunShape } from '../lib/types';
+import { renderRunImage, renderUnitImage } from '../render/scene';
+import { COST_GROUPS } from '../lib/pricing';
 import type { Quote, QuoteStatus } from '../lib/types';
 import { deepClone, uid } from '../lib/util';
 import { quotePdf, saveOrShare, workshopPdf } from '../pdf/pdf';
 import { useStore } from '../store';
 
-type Tab = 'units' | 'client' | 'pricing' | 'cut' | 'materials';
+type Tab = 'units' | 'client' | 'pricing' | 'cut' | 'materials' | 'attachments';
 
 export default function QuoteEditor() {
   const { id = '' } = useParams();
@@ -24,6 +27,8 @@ export default function QuoteEditor() {
   const fmt = useMoney();
   const [tab, setTab] = useState<Tab>('units');
   const [adding, setAdding] = useState(false);
+  const [addingRun, setAddingRun] = useState(false);
+  const attachRef = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState('');
 
@@ -39,6 +44,26 @@ export default function QuoteEditor() {
     } finally {
       setBusy('');
     }
+  };
+
+  const captureViews = async () => {
+    setBusy('capture');
+    await new Promise((r) => setTimeout(r, 30));
+    const shots: { name: string; dataUrl: string }[] = [];
+    for (const it of calc.items) {
+      const views = it.kind === 'run' ? (['3d', 'front'] as const) : (['3d', 'front', 'left'] as const);
+      for (const v of views) {
+        const img = it.kind === 'run' && it.run && it.runBuild ? renderRunImage(it.run, it.runBuild, catalog, 1400, 800, 'image/jpeg', v) : it.unit && it.build ? renderUnitImage(it.unit, it.build, catalog, 1100, 850, 'image/jpeg', v) : null;
+        if (img) shots.push({ name: `${it.name} – ${v === '3d' ? '3D view' : `${v} view`}`, dataUrl: img });
+      }
+      const hasLights = it.entries.some((e) => e.build.lights.length > 0);
+      if (hasLights) {
+        const img = it.kind === 'run' && it.run && it.runBuild ? renderRunImage(it.run, it.runBuild, catalog, 1400, 800, 'image/jpeg', '3d', true) : it.unit && it.build ? renderUnitImage(it.unit, it.build, catalog, 1100, 850, 'image/jpeg', '3d', true) : null;
+        if (img) shots.push({ name: `${it.name} – lighting`, dataUrl: img });
+      }
+    }
+    up((q) => q.attachments.push(...shots.map((x) => ({ id: uid('at'), name: x.name, dataUrl: x.dataUrl, caption: x.name, includeInPdf: true }))));
+    setBusy('');
   };
 
   return (
@@ -64,11 +89,12 @@ export default function QuoteEditor() {
           value={tab}
           onChange={setTab}
           tabs={[
-            { value: 'units', label: `Units (${quote.units.length})` },
+            { value: 'units', label: `Items (${calc.items.length})` },
             { value: 'client', label: 'Client & details' },
             { value: 'pricing', label: 'Pricing' },
             { value: 'cut', label: 'Cut plan' },
             { value: 'materials', label: 'Materials list' },
+            { value: 'attachments', label: `Attachments${quote.attachments.length ? ` (${quote.attachments.length})` : ''}` },
           ]}
         />
 
@@ -85,25 +111,32 @@ export default function QuoteEditor() {
 
         {tab === 'units' && (
           <div className="space-y-3">
-            {quote.units.map((u, i) => {
-              const up2 = calc.units[i];
+            {calc.items.map((it) => {
+              const link = it.kind === 'run' ? `/quotes/${quote.id}/runs/${it.id}` : `/quotes/${quote.id}/units/${it.id}`;
+              const isRun = it.kind === 'run';
+              const setQty = (d: number) =>
+                up((q) => {
+                  const target = isRun ? q.runs.find((r) => r.id === it.id) : q.units.find((u) => u.id === it.id);
+                  if (target) target.qty = Math.max(1, target.qty + d);
+                });
               return (
-                <div key={u.id} className="card flex flex-col gap-3 p-3 sm:flex-row">
-                  <Link to={`/quotes/${quote.id}/units/${u.id}`} className="shrink-0">
-                    <UnitThumb unit={u} build={up2.build} catalog={catalog} className="h-40 w-full sm:h-32 sm:w-40" />
+                <div key={it.id} className="card flex flex-col gap-3 p-3 sm:flex-row">
+                  <Link to={link} className="shrink-0">
+                    <UnitThumb unit={it.unit} build={it.build} run={it.run} runBuild={it.runBuild} catalog={catalog} className={`h-40 w-full ${isRun ? 'sm:h-32 sm:w-56' : 'sm:h-32 sm:w-40'}`} />
                   </Link>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <Link to={`/quotes/${quote.id}/units/${u.id}`} className="font-bold hover:text-brand-700">
-                        {u.name}
+                      <Link to={link} className="font-bold hover:text-brand-700">
+                        {isRun && <span className="chip mr-1 bg-violet-100 text-violet-800">Kitchen</span>}
+                        {it.name}
                       </Link>
                       <div className="text-right">
-                        <div className="font-bold tabular-nums">{fmt(up2.sell)}</div>
-                        {u.qty > 1 && <div className="text-xs text-stone-500">{fmt(up2.sellEach)} each</div>}
+                        <div className="font-bold tabular-nums">{fmt(it.sell)}</div>
+                        {it.qty > 1 && <div className="text-xs text-stone-500">{fmt(it.sellEach)} each</div>}
                       </div>
                     </div>
                     <ul className="mt-1 space-y-0.5 text-xs text-stone-600">
-                      {describeUnit(u, catalog).slice(0, 4).map((l) => (
+                      {it.lines.slice(0, 4).map((l) => (
                         <li key={l} className="truncate">
                           {l}
                         </li>
@@ -111,21 +144,39 @@ export default function QuoteEditor() {
                     </ul>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <div className="flex items-center rounded-xl border border-stone-300">
-                        <button className="px-2 py-1.5" aria-label="Less" onClick={() => up((q) => (q.units[i].qty = Math.max(1, q.units[i].qty - 1)))}>
+                        <button className="px-2 py-1.5" aria-label="Less" onClick={() => setQty(-1)}>
                           <Minus size={14} />
                         </button>
-                        <span className="w-8 text-center text-sm font-semibold">{u.qty}</span>
-                        <button className="px-2 py-1.5" aria-label="More" onClick={() => up((q) => (q.units[i].qty += 1))}>
+                        <span className="w-8 text-center text-sm font-semibold">{it.qty}</span>
+                        <button className="px-2 py-1.5" aria-label="More" onClick={() => setQty(1)}>
                           <Plus size={14} />
                         </button>
                       </div>
-                      <Link className="btn-secondary px-3 py-1.5" to={`/quotes/${quote.id}/units/${u.id}`}>
+                      <Link className="btn-secondary px-3 py-1.5" to={link}>
                         <Pencil size={14} /> Design
                       </Link>
-                      <button className="btn-ghost px-2 py-1.5" aria-label="Duplicate" onClick={() => up((q) => q.units.splice(i + 1, 0, { ...deepClone(u), id: uid('u'), name: `${u.name} (copy)` }))}>
+                      <button
+                        className="btn-ghost px-2 py-1.5"
+                        aria-label="Duplicate"
+                        onClick={() =>
+                          up((q) => {
+                            if (isRun) {
+                              const i = q.runs.findIndex((r) => r.id === it.id);
+                              q.runs.splice(i + 1, 0, { ...cloneRun(q.runs[i]), name: `${q.runs[i].name} (copy)` });
+                            } else {
+                              const i = q.units.findIndex((u) => u.id === it.id);
+                              q.units.splice(i + 1, 0, { ...deepClone(q.units[i]), id: uid('u'), name: `${q.units[i].name} (copy)` });
+                            }
+                          })
+                        }
+                      >
                         <Copy size={16} />
                       </button>
-                      <button className="btn-ghost px-2 py-1.5 text-red-600" aria-label="Delete" onClick={() => confirmAction(`Remove ${u.name}?`) && up((q) => q.units.splice(i, 1))}>
+                      <button
+                        className="btn-ghost px-2 py-1.5 text-red-600"
+                        aria-label="Delete"
+                        onClick={() => confirmAction(`Remove ${it.name}?`) && up((q) => (isRun ? (q.runs = q.runs.filter((r) => r.id !== it.id)) : (q.units = q.units.filter((u) => u.id !== it.id))))}
+                      >
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -133,9 +184,59 @@ export default function QuoteEditor() {
                 </div>
               );
             })}
-            <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-brand-700 hover:border-brand-400" onClick={() => setAdding(true)}>
-              <Plus size={18} /> Add unit (TV stand, kitchen, wardrobe…)
-            </button>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-brand-700 hover:border-brand-400" onClick={() => setAdding(true)}>
+                <Plus size={18} /> Add unit (TV stand, wardrobe, island…)
+              </button>
+              <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-violet-700 hover:border-violet-400" onClick={() => setAddingRun(true)}>
+                <LayoutPanelTop size={18} /> Add whole kitchen (straight / L / U)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'attachments' && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-primary" onClick={() => attachRef.current?.click()}>
+                <ImagePlus size={16} /> Attach design / photo
+              </button>
+              <button className="btn-secondary" disabled={!calc.items.length || !!busy} onClick={captureViews}>
+                <Camera size={16} /> {busy === 'capture' ? 'Rendering…' : 'Capture render views'}
+              </button>
+              <input
+                ref={attachRef}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={async (e) => {
+                  const files = [...(e.target.files ?? [])];
+                  e.target.value = '';
+                  for (const f of files) {
+                    const dataUrl = await imageFileToJpeg(f);
+                    up((q) => q.attachments.push({ id: uid('at'), name: f.name, dataUrl, caption: f.name.replace(/\.[^.]+$/, ''), includeInPdf: true }));
+                  }
+                }}
+              />
+            </div>
+            {!quote.attachments.length && <p className="rounded-xl bg-white p-4 text-sm text-stone-500">Attach sketches, mood boards, site photos or design drawings. They are added to the quotation PDF on their own pages. “Capture render views” adds 3D, front and side renders of every item.</p>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {quote.attachments.map((a, i) => (
+                <div key={a.id} className="card overflow-hidden">
+                  <img src={a.dataUrl} alt={a.caption} className="h-48 w-full bg-stone-50 object-contain" />
+                  <div className="space-y-2 p-3">
+                    <input className="input" value={a.caption} placeholder="Caption" onChange={(e) => up((q) => (q.attachments[i].caption = e.target.value))} />
+                    <div className="flex items-center justify-between">
+                      <Toggle label="Include in PDF" checked={a.includeInPdf} onChange={(v) => up((q) => (q.attachments[i].includeInPdf = v))} />
+                      <button className="btn-ghost px-2 text-red-600" aria-label="Remove attachment" onClick={() => up((q) => q.attachments.splice(i, 1))}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -220,10 +321,12 @@ export default function QuoteEditor() {
                 </Field>
                 <Toggle label={`Include installation (${settings.pricing.installationPercent}% of materials)`} checked={quote.installation} onChange={(v) => up((q) => (q.installation = v))} />
                 <Toggle label={`Charge ${settings.pricing.taxLabel} (${settings.pricing.taxRate}%)`} checked={quote.applyTax} onChange={(v) => up((q) => (q.applyTax = v))} />
+                <Toggle label="Appliances supplied by us (include prices)" checked={quote.includeAppliances} onChange={(v) => up((q) => (q.includeAppliances = v))} />
               </div>
             </Card>
             <Card title="Summary">
-              <Row label="Materials & hardware (cost)" value={fmt(calc.materialsCost)} />
+              <Row label="Materials & hardware (cost)" value={fmt(calc.materialsCost - calc.appliancesCost)} />
+              {calc.appliancesCost > 0 && <Row label="Appliances (cost)" value={fmt(calc.appliancesCost)} />}
               <Row label={`Labour (${settings.pricing.labourMode === 'percent' ? `${settings.pricing.labourPercent}%` : 'per unit'})`} value={fmt(calc.labour)} />
               {calc.installation > 0 && <Row label="Installation" value={fmt(calc.installation)} />}
               <Row label={`Markup (${quote.markupPercent}%)`} value={fmt(calc.markup)} />
@@ -293,7 +396,7 @@ export default function QuoteEditor() {
 
         {tab === 'materials' && (
           <div className="space-y-3">
-            {(['Boards', 'Edge banding', 'Glass', 'Aluminium', 'Countertops', 'Hardware'] as CostGroup[]).map((g) => {
+            {COST_GROUPS.map((g) => {
               const lines = calc.costLines.filter((l) => l.group === g);
               if (!lines.length) return null;
               return (
@@ -329,7 +432,7 @@ export default function QuoteEditor() {
           <span className={`chip ${STATUS_STYLE[quote.status]}`}>{quote.status}</span>
           <button
             className="btn-secondary"
-            disabled={!quote.units.length}
+            disabled={!calc.items.length}
             onClick={() => {
               const iid = createInvoiceFromQuote(quote.id);
               if (iid) nav(`/invoices/${iid}`);
@@ -342,15 +445,40 @@ export default function QuoteEditor() {
       <div className="h-16" />
 
       <AddUnitModal open={adding} onClose={() => setAdding(false)} onAdd={(u) => up((q) => q.units.push(u))} />
+      <Modal open={addingRun} onClose={() => setAddingRun(false)} title="Add a whole kitchen">
+        <div className="grid gap-2">
+          {(Object.keys(RUN_SHAPE_LABELS) as RunShape[]).map((shape) => (
+            <button
+              key={shape}
+              className="card flex items-center gap-3 p-3 text-left hover:border-violet-400"
+              onClick={() => {
+                const r = createRun(shape);
+                syncRun(r, catalog);
+                up((q) => q.runs.push(r));
+                setAddingRun(false);
+                nav(`/quotes/${quote.id}/runs/${r.id}`);
+              }}
+            >
+              <svg viewBox="0 0 60 40" className="h-12 w-16 shrink-0 text-violet-700" fill="none" stroke="currentColor" strokeWidth={5} strokeLinecap="round">
+                <path d={shape === 'straight' ? 'M6 8h48' : shape === 'L' ? 'M6 8h48v26' : 'M6 34V8h48v26'} />
+              </svg>
+              <div>
+                <div className="font-bold">{RUN_SHAPE_LABELS[shape]}</div>
+                <div className="text-xs text-stone-500">Linked base, wall and tall cabinets with sink, hob, oven, fridge and continuous worktop — priced as one item.</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </Modal>
       <Modal open={menu} onClose={() => setMenu(false)} title="Quotation actions">
         <div className="grid gap-2">
           <button className="btn-secondary justify-start" onClick={() => { setMenu(false); exportPdf('quote'); }}>
             <FileDown size={16} /> Quotation PDF (share / save)
           </button>
-          <button className="btn-secondary justify-start" disabled={!quote.units.length} onClick={() => { setMenu(false); exportPdf('workshop'); }}>
+          <button className="btn-secondary justify-start" disabled={!calc.items.length} onClick={() => { setMenu(false); exportPdf('workshop'); }}>
             <Hammer size={16} /> Workshop cut list & materials PDF
           </button>
-          <button className="btn-secondary justify-start" disabled={!quote.units.length} onClick={() => { const iid = createInvoiceFromQuote(quote.id); if (iid) nav(`/invoices/${iid}`); }}>
+          <button className="btn-secondary justify-start" disabled={!calc.items.length} onClick={() => { const iid = createInvoiceFromQuote(quote.id); if (iid) nav(`/invoices/${iid}`); }}>
             <Receipt size={16} /> Create invoice from this quotation
           </button>
           <button className="btn-secondary justify-start" onClick={() => { const nid = duplicateQuote(quote.id); setMenu(false); if (nid) nav(`/quotes/${nid}`); }}>

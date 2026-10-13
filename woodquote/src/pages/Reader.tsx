@@ -69,7 +69,7 @@ export default function Reader() {
     if (!units.length) return null;
     const q: Quote = {
       id: 'est', number: '', title: '', date: todayISO(), status: 'draft', client: { name: '', phone: '', email: '', address: '' },
-      units: units.filter((_, i) => picked[i]), extras: [], transportId: null, transportCustom: 0, installation: false,
+      units: units.filter((_, i) => picked[i]), runs: [], attachments: [], includeAppliances: true, extras: [], transportId: null, transportCustom: 0, installation: false,
       markupPercent: settings.pricing.markupPercent, discountType: 'percent', discountValue: 0, applyTax: settings.pricing.taxRate > 0,
       notes: '', sourceImage: null, createdAt: 0, updatedAt: 0,
     };

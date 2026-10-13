@@ -1,12 +1,15 @@
-// Quotation maths: builds every unit, optimises sheets across the whole job,
-// prices materials/hardware, then allocates costs back to each unit so unit
-// prices always add up to the quote total.
+// Quotation maths: builds every unit and kitchen run, optimises sheets across
+// the whole job, prices materials / hardware / appliances, then allocates costs
+// back to each quoted item so item prices always add up to the quote total.
+import { describeUnit } from './describe';
 import { buildUnit } from './generate';
 import { packBars, packSheets, priceBoardPlan, type BarPlan, type BoardPlan, type Piece } from './optimizer';
-import type { Accessory, Catalog, Invoice, Quote, Settings, Unit, UnitBuild } from './types';
+import { buildRun, describeRun, type RunBuild } from './runs';
+import type { Accessory, Catalog, Invoice, Quote, Run, Settings, Unit, UnitBuild } from './types';
 import { round2, sum } from './util';
 
-export type CostGroup = 'Boards' | 'Edge banding' | 'Glass' | 'Aluminium' | 'Countertops' | 'Hardware';
+export type CostGroup = 'Boards' | 'Edge banding' | 'Glass' | 'Aluminium' | 'Countertops' | 'Hardware' | 'Appliances';
+export const COST_GROUPS: CostGroup[] = ['Boards', 'Edge banding', 'Glass', 'Aluminium', 'Countertops', 'Hardware', 'Appliances'];
 
 export interface CostLine {
   key: string;
@@ -19,10 +22,30 @@ export interface CostLine {
   note?: string;
 }
 
-export interface UnitPrice {
-  unit: Unit;
+/** One buildable piece of the job: a unit, a module of a run, or a run's worktop. */
+export interface Entry {
+  key: string;
+  itemId: string;
+  name: string;
+  qty: number; // total pieces built (unit qty × run qty)
   build: UnitBuild;
-  materials: number; // allocated material + hardware cost for all qty
+  unit: Unit | null;
+  labourOverride: number | null;
+}
+
+export interface ItemPrice {
+  kind: 'unit' | 'run';
+  id: string;
+  name: string;
+  qty: number;
+  unit?: Unit;
+  run?: Run;
+  build?: UnitBuild; // single units
+  runBuild?: RunBuild; // kitchen runs
+  entries: Entry[];
+  lines: string[]; // description
+  materials: number; // allocated materials & hardware for all qty
+  appliances: number;
   labour: number;
   installation: number;
   cost: number;
@@ -31,11 +54,13 @@ export interface UnitPrice {
 }
 
 export interface QuoteCalc {
-  units: UnitPrice[];
+  items: ItemPrice[];
+  entries: Entry[];
   boardPlans: BoardPlan[];
   barPlans: BarPlan[];
   costLines: CostLine[];
-  materialsCost: number;
+  materialsCost: number; // incl. appliances
+  appliancesCost: number;
   labour: number;
   installation: number;
   markup: number;
@@ -50,36 +75,55 @@ export interface QuoteCalc {
   warnings: string[];
 }
 
-export const accessoryPacks = (a: Accessory, qty: number): number =>
-  a.unit === 'm' ? qty : Math.ceil(qty / Math.max(1, a.packQty));
+export const accessoryPacks = (a: Accessory, qty: number): number => (a.unit === 'm' ? qty : Math.ceil(qty / Math.max(1, a.packQty)));
+
+export function quoteItems(q: Quote, cat: Catalog, settings: Settings): { items: Omit<ItemPrice, 'materials' | 'appliances' | 'labour' | 'installation' | 'cost' | 'sell' | 'sellEach'>[]; entries: Entry[] } {
+  const pr = settings.pricing;
+  const items: ReturnType<typeof quoteItems>['items'] = [];
+  const entries: Entry[] = [];
+  for (const u of q.units) {
+    const build = buildUnit(u, cat, pr);
+    const e: Entry = { key: u.id, itemId: u.id, name: u.name, qty: u.qty, build, unit: u, labourOverride: u.labourOverride };
+    entries.push(e);
+    items.push({ kind: 'unit', id: u.id, name: u.name, qty: u.qty, unit: u, build, entries: [e], lines: describeUnit(u, cat) });
+  }
+  for (const r of q.runs ?? []) {
+    const rb = buildRun(r, cat, pr);
+    const es: Entry[] = rb.pieces.map((p) => ({ key: `${r.id}:${p.unit.id}`, itemId: r.id, name: `${r.name} – ${p.unit.name}`, qty: r.qty, build: p.build, unit: p.unit, labourOverride: p.unit.labourOverride }));
+    es.push({ key: `${r.id}:extra`, itemId: r.id, name: `${r.name} – worktop & appliances`, qty: r.qty, build: rb.extra, unit: null, labourOverride: null });
+    entries.push(...es);
+    items.push({ kind: 'run', id: r.id, name: r.name, qty: r.qty, run: r, runBuild: rb, entries: es, lines: describeRun(r, cat) });
+  }
+  return { items, entries };
+}
 
 export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): QuoteCalc {
   const pr = settings.pricing;
-  const builds = q.units.map((u) => ({ unit: u, build: buildUnit(u, cat, pr) }));
+  const { items: rawItems, entries } = quoteItems(q, cat, settings);
   const warnings: string[] = [];
-  builds.forEach(({ unit, build }) => build.warnings.forEach((w) => warnings.push(`${unit.name}: ${w}`)));
+  entries.forEach((e) => e.build.warnings.forEach((w) => warnings.push(`${e.name}: ${w}`)));
 
-  // usage[resourceKey][unitIndex] = raw quantity; charged[resourceKey] = cost
+  // usage[resourceKey][entryIndex] = raw quantity; charged[resourceKey] = cost
   const usage = new Map<string, number[]>();
   const charged = new Map<string, number>();
-  const use = (key: string, ui: number, qty: number) => {
-    const arr = usage.get(key) ?? new Array(q.units.length).fill(0);
-    arr[ui] += qty;
+  const use = (key: string, ei: number, qty: number) => {
+    const arr = usage.get(key) ?? new Array(entries.length).fill(0);
+    arr[ei] += qty;
     usage.set(key, arr);
   };
   const costLines: CostLine[] = [];
 
   /* ---------------------------------------------------------- boards */
   const piecesByBoard = new Map<string, Piece[]>();
-  builds.forEach(({ unit, build }, ui) => {
-    for (const p of build.parts) {
+  entries.forEach((e, ei) => {
+    for (const p of e.build.parts) {
       if (p.kind !== 'board' || !p.materialId) continue;
       const mat = cat.boards.find((b) => b.id === p.materialId);
       if (!mat) continue;
-      const n = p.qty * unit.qty;
-      use(`board:${mat.id}`, ui, p.length * p.width * n);
+      const n = p.qty * e.qty;
+      use(`board:${mat.id}`, ei, p.length * p.width * n);
       const list = piecesByBoard.get(mat.id) ?? [];
-      for (let k = 0; k < n; k++) list.push({ id: `${unit.id}:${p.key}:${k}`, label: `${unit.name} – ${p.name}`, length: p.length, width: p.width, canRotate: !mat.grain });
+      for (let k = 0; k < n; k++) list.push({ id: `${e.key}:${p.key}:${k}`, label: `${e.name} – ${p.name}`, length: p.length, width: p.width, canRotate: !mat.grain });
       piecesByBoard.set(mat.id, list);
     }
   });
@@ -90,37 +134,29 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
     boardPlans.push(plan);
     if (plan.oversize.length) warnings.push(`${plan.oversize.length} part(s) are larger than a ${mat.name} sheet — they need joining or a bigger board.`);
     charged.set(`board:${id}`, plan.chargedCost);
-    costLines.push({
-      key: `board:${id}`,
-      group: 'Boards',
-      description: mat.name,
-      qty: plan.sheets.length,
-      unit: 'sheet',
-      unitPrice: mat.pricePerSheet,
-      total: plan.chargedCost,
-      note: `${Math.round(plan.utilisation * 100)}% used${pr.boardCharging === 'usedArea' && plan.offcutValue > 0 ? `, reusable offcuts credited` : ''}`,
-    });
+    costLines.push({ key: `board:${id}`, group: 'Boards', description: mat.name, qty: plan.sheets.length, unit: 'sheet', unitPrice: mat.pricePerSheet, total: plan.chargedCost, note: `${Math.round(plan.utilisation * 100)}% used${pr.boardCharging === 'usedArea' && plan.offcutValue > 0 ? ', reusable offcuts credited' : ''}` });
   }
 
-  /* ----------------------------------------------- edging/glass/counters */
-  builds.forEach(({ unit, build }, ui) => {
-    for (const p of build.parts) {
-      const n = p.qty * unit.qty;
-      if (p.edgingId && p.edgeLength > 0) use(`edge:${p.edgingId}`, ui, p.edgeLength * n);
-      if (p.kind === 'glass' && p.materialId) use(`glass:${p.materialId}`, ui, (p.length * p.width * n) / 1e6);
-      if (p.kind === 'counter' && p.materialId) use(`counter:${p.materialId}`, ui, (p.length * p.width * n) / 1e6);
+  /* ----------------------------------- edging/glass/counters/hardware */
+  entries.forEach((e, ei) => {
+    for (const p of e.build.parts) {
+      const n = p.qty * e.qty;
+      if (p.edgingId && p.edgeLength > 0) use(`edge:${p.edgingId}`, ei, p.edgeLength * n);
+      if (p.kind === 'glass' && p.materialId) use(`glass:${p.materialId}`, ei, (p.length * p.width * n) / 1e6);
+      if (p.kind === 'counter' && p.materialId) use(`counter:${p.materialId}`, ei, (p.length * p.width * n) / 1e6);
     }
-    for (const a of build.aluminium) use(`alu:${a.profileId}`, ui, sum(a.pieces) * unit.qty);
-    for (const h of build.hardware) use(`hw:${h.accessoryId}`, ui, h.qty * unit.qty);
+    for (const a of e.build.aluminium) use(`alu:${a.profileId}`, ei, sum(a.pieces) * e.qty);
+    for (const h of e.build.hardware) use(`hw:${h.accessoryId}`, ei, h.qty * e.qty);
+    for (const a of e.build.applianceList) use(`appl:${a.applianceId}`, ei, a.qty * e.qty);
   });
 
-  for (const e of cat.edging) {
-    const m = sum(usage.get(`edge:${e.id}`) ?? []);
+  for (const ed of cat.edging) {
+    const m = sum(usage.get(`edge:${ed.id}`) ?? []);
     if (!m) continue;
     const metres = Math.ceil(m * (1 + pr.edgingWastePercent / 100));
-    const total = metres * e.pricePerMeter;
-    charged.set(`edge:${e.id}`, total);
-    costLines.push({ key: `edge:${e.id}`, group: 'Edge banding', description: e.name, qty: metres, unit: 'm', unitPrice: e.pricePerMeter, total, note: `incl. ${pr.edgingWastePercent}% waste` });
+    const total = metres * ed.pricePerMeter;
+    charged.set(`edge:${ed.id}`, total);
+    costLines.push({ key: `edge:${ed.id}`, group: 'Edge banding', description: ed.name, qty: metres, unit: 'm', unitPrice: ed.pricePerMeter, total, note: `incl. ${pr.edgingWastePercent}% waste` });
   }
   for (const g of cat.glass) {
     const a = sum(usage.get(`glass:${g.id}`) ?? []);
@@ -137,12 +173,11 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
     costLines.push({ key: `counter:${c.id}`, group: 'Countertops', description: c.name, qty: round2(a), unit: 'm²', unitPrice: c.pricePerSqm, total });
   }
 
-  /* ------------------------------------------------------------ aluminium */
   const barPlans: BarPlan[] = [];
   for (const prof of cat.aluminium) {
     const pieces: number[] = [];
-    builds.forEach(({ unit, build }) => {
-      for (const a of build.aluminium) if (a.profileId === prof.id) for (let k = 0; k < unit.qty; k++) pieces.push(...a.pieces);
+    entries.forEach((e) => {
+      for (const a of e.build.aluminium) if (a.profileId === prof.id) for (let k = 0; k < e.qty; k++) pieces.push(...a.pieces);
     });
     if (!pieces.length) continue;
     const plan = packBars(prof, pieces, pr.kerf);
@@ -151,7 +186,6 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
     costLines.push({ key: `alu:${prof.id}`, group: 'Aluminium', description: prof.name, qty: plan.bars.length, unit: `× ${prof.stockLength / 1000}m`, unitPrice: prof.pricePerLength, total: plan.cost, note: `${round2(plan.totalLength / 1000)}m cut, ${round2(plan.offcut / 1000)}m offcut` });
   }
 
-  /* ------------------------------------------------------------- hardware */
   for (const a of cat.accessories) {
     const qty = sum(usage.get(`hw:${a.id}`) ?? []);
     if (!qty) continue;
@@ -162,33 +196,46 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
     costLines.push({ key: `hw:${a.id}`, group: 'Hardware', description: `${a.name} ${a.size}`.trim(), qty: a.unit === 'm' ? round2(packs) : packs, unit: unitLabel, unitPrice: a.price, total, note: a.packQty > 1 && a.unit !== 'm' ? `${Math.ceil(qty)} pcs needed` : undefined });
   }
 
-  /* --------------------------------------------------- allocate to units */
-  const materialsPerUnit = new Array(q.units.length).fill(0);
+  for (const ap of cat.appliances) {
+    const qty = sum(usage.get(`appl:${ap.id}`) ?? []);
+    if (!qty) continue;
+    const total = q.includeAppliances ? qty * ap.price : 0;
+    charged.set(`appl:${ap.id}`, total);
+    costLines.push({ key: `appl:${ap.id}`, group: 'Appliances', description: `${ap.name} (${ap.width}×${ap.height})`, qty, unit: 'pc', unitPrice: q.includeAppliances ? ap.price : 0, total, note: q.includeAppliances ? undefined : 'supplied by client' });
+  }
+
+  /* --------------------------------------------------- allocate to entries */
+  const matPerEntry = new Array(entries.length).fill(0);
+  const applPerEntry = new Array(entries.length).fill(0);
   for (const [key, arr] of usage) {
     const total = charged.get(key) ?? 0;
     const s = sum(arr);
     if (!s) continue;
-    arr.forEach((v, i) => (materialsPerUnit[i] += (total * v) / s));
+    const target = key.startsWith('appl:') ? applPerEntry : matPerEntry;
+    arr.forEach((v, i) => (target[i] += (total * v) / s));
   }
   const markupF = 1 + q.markupPercent / 100;
-  const units: UnitPrice[] = builds.map(({ unit, build }, i) => {
-    const materials = materialsPerUnit[i];
-    const labour =
-      unit.labourOverride != null
-        ? unit.labourOverride * unit.qty
-        : pr.labourMode === 'percent'
-          ? (materials * pr.labourPercent) / 100
-          : pr.labourPerUnit * unit.qty;
-    const installation = q.installation ? (materials * pr.installationPercent) / 100 : 0;
-    const cost = materials + labour + installation;
+  const entryLabour = entries.map((e, i) =>
+    e.labourOverride != null ? e.labourOverride * e.qty : pr.labourMode === 'percent' ? (matPerEntry[i] * pr.labourPercent) / 100 : e.unit ? pr.labourPerUnit * e.qty : 0,
+  );
+  const entryInstall = entries.map((_, i) => (q.installation ? (matPerEntry[i] * pr.installationPercent) / 100 : 0));
+
+  const items: ItemPrice[] = rawItems.map((it) => {
+    const idx = it.entries.map((e) => entries.indexOf(e));
+    const materials = sum(idx.map((i) => matPerEntry[i]));
+    const appliances = sum(idx.map((i) => applPerEntry[i]));
+    const labour = sum(idx.map((i) => entryLabour[i]));
+    const installation = sum(idx.map((i) => entryInstall[i]));
+    const cost = materials + appliances + labour + installation;
     const sell = round2(cost * markupF);
-    return { unit, build, materials, labour, installation, cost, sell, sellEach: round2(sell / Math.max(1, unit.qty)) };
+    return { ...it, materials, appliances, labour, installation, cost, sell, sellEach: round2(sell / Math.max(1, it.qty)) };
   });
 
-  const materialsCost = sum(units.map((u) => u.materials));
-  const labour = sum(units.map((u) => u.labour));
-  const installation = sum(units.map((u) => u.installation));
-  const unitsSell = sum(units.map((u) => u.sell));
+  const appliancesCost = sum(items.map((u) => u.appliances));
+  const materialsCost = sum(items.map((u) => u.materials)) + appliancesCost;
+  const labour = sum(items.map((u) => u.labour));
+  const installation = sum(items.map((u) => u.installation));
+  const unitsSell = sum(items.map((u) => u.sell));
   const markup = unitsSell - (materialsCost + labour + installation);
   const transportOpt = pr.transportOptions.find((t) => t.id === q.transportId);
   const transport = (transportOpt?.price ?? 0) + (q.transportCustom || 0);
@@ -197,25 +244,7 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
   const discount = round2(q.discountType === 'percent' ? (subtotal * q.discountValue) / 100 : Math.min(q.discountValue, subtotal));
   const taxable = subtotal - discount;
   const tax = q.applyTax ? round2((taxable * pr.taxRate) / 100) : 0;
-  return {
-    units,
-    boardPlans,
-    barPlans,
-    costLines,
-    materialsCost,
-    labour,
-    installation,
-    markup,
-    unitsSell,
-    transport,
-    extras,
-    subtotal,
-    discount,
-    taxable,
-    tax,
-    total: round2(taxable + tax),
-    warnings: [...new Set(warnings)],
-  };
+  return { items, entries, boardPlans, barPlans, costLines, materialsCost, appliancesCost, labour, installation, markup, unitsSell, transport, extras, subtotal, discount, taxable, tax, total: round2(taxable + tax), warnings: [...new Set(warnings)] };
 }
 
 /* --------------------------------------------------------------- invoices */

@@ -1,4 +1,4 @@
-import type { Bay, FrontKind, ProductType, Section, Unit } from './types';
+import type { Bay, FinishPanel, Section, Sides, Unit, ProductType } from './types';
 import { uid } from './util';
 
 export const PRODUCT_LABELS: Record<ProductType, string> = {
@@ -15,78 +15,85 @@ export const PRODUCT_LABELS: Record<ProductType, string> = {
   custom: 'Custom Unit',
 };
 
-export const PRODUCT_ORDER: ProductType[] = [
-  'tv_stand',
-  'kitchen_base',
-  'kitchen_wall',
-  'kitchen_tall',
-  'island',
-  'built_in',
-  'wardrobe',
-  'sliding_wardrobe',
-  'bookshelf',
-  'vanity',
-  'custom',
-];
+export const PRODUCT_ORDER: ProductType[] = ['tv_stand', 'kitchen_base', 'kitchen_wall', 'kitchen_tall', 'island', 'built_in', 'wardrobe', 'sliding_wardrobe', 'bookshelf', 'vanity', 'custom'];
 
-type SecSpec = Partial<Omit<Section, 'id'>> & { front?: FrontKind };
-
-export const sec = (spec: SecSpec = {}): Section => ({
+export const sec = (spec: Partial<Omit<Section, 'id'>> = {}): Section => ({
   id: uid('s'),
-  size: spec.size ?? 1,
-  front: spec.front ?? 'open',
-  doorCount: spec.doorCount ?? 1,
-  drawerCount: spec.drawerCount ?? 1,
-  shelves: spec.shelves ?? 0,
-  hangingRail: spec.hangingRail ?? false,
+  size: 1,
+  front: 'open',
+  doorMaterial: 'wood',
+  fit: 'overlay',
+  opening: 'left',
+  slide: 'left',
+  drawerCount: 1,
+  shelves: 0,
+  hangingRail: false,
+  applianceId: null,
+  insertId: null,
+  ...spec,
 });
 
 export const bay = (size: number, sections: Section[]): Bay => ({ id: uid('b'), size, sections });
 
-const base = (type: ProductType, over: Partial<Unit>): Unit => ({
-  id: uid('u'),
-  name: PRODUCT_LABELS[type],
-  type,
-  qty: 1,
-  width: 600,
-  height: 720,
-  depth: 560,
-  base: 'none',
-  baseHeight: 0,
-  carcassMaterialId: 'b-mel16-white',
-  frontMaterialId: 'b-mdf18-gloss',
-  backMaterialId: 'b-hb3',
-  edgingId: 'e-white',
-  frontEdgingId: 'e-grey',
-  countertopId: null,
-  countertopOverhang: 20,
-  glassId: 'g-clear4',
-  aluminiumId: 'a-frame-silver',
-  hingeId: 'h-softclose',
-  runnerId: 'r-bb450',
-  handleId: 'hd-bar128',
-  legId: 'l-adj100',
-  rollerId: 'ro-std',
-  trackId: 't-std',
-  screwId: 's-4x35',
-  connectorId: 'cn-cam',
-  shelfPinId: 'sp-std',
-  railId: 'rl-oval',
-  stayId: 'st-flap',
-  sliding: { enabled: false, panels: 2, style: 'board' },
-  bays: [bay(1, [sec({ front: 'door' })])],
-  extraParts: [],
-  extraHardware: [],
-  hardwareOverrides: {},
-  notes: '',
-  labourOverride: null,
-  ...over,
-});
+const sides = <T,>(front: T, back: T, left: T, right: T): Sides<T> => ({ front, back, left, right });
+const panel = (materialId = 'b-mdf18-walnut'): FinishPanel => ({ enabled: false, materialId, style: 'flat', toFloor: false });
+
+export function baseUnit(type: ProductType, over: Partial<Unit> = {}): Unit {
+  return {
+    id: uid('u'),
+    name: PRODUCT_LABELS[type],
+    type,
+    qty: 1,
+    width: 600,
+    height: 720,
+    depth: 560,
+    installType: 'standalone',
+    mount: 'floor',
+    mountHeight: 1400,
+    base: 'none',
+    baseHeight: 0,
+    plinthSides: sides(true, false, false, false),
+    plinthRecess: 50,
+    carcassMaterialId: 'b-mel16-white',
+    frontMaterialId: 'b-mdf18-gloss',
+    backMaterialId: 'b-hb3',
+    edgingId: 'e-white',
+    frontEdgingId: 'e-grey',
+    countertopId: null,
+    topBoardId: null,
+    overhang: sides(20, 0, 0, 0),
+    finishPanels: { left: panel(), right: panel(), back: panel() },
+    glassId: 'g-clear4',
+    aluminiumId: 'a-frame-silver',
+    hingeId: 'h-soft-overlay',
+    glassHingeId: 'h-glass',
+    runnerId: 'r-sc450',
+    handleId: 'hd-bar128',
+    legId: 'l-adj100',
+    rollerId: 'ro-std',
+    trackId: 't-std',
+    screwId: 's-4x35',
+    connectorId: 'cn-cam',
+    shelfPinId: 'sp-std',
+    railId: 'rl-oval',
+    stayId: 'st-flap',
+    sliding: { enabled: false, panels: 2, style: 'board' },
+    bays: [bay(1, [sec({ front: 'door' })])],
+    lights: [],
+    topAppliances: [],
+    extraParts: [],
+    extraHardware: [],
+    hardwareOverrides: {},
+    notes: '',
+    labourOverride: null,
+    ...over,
+  };
+}
 
 export function createUnit(type: ProductType): Unit {
   switch (type) {
     case 'tv_stand':
-      return base(type, {
+      return baseUnit(type, {
         width: 1800,
         height: 500,
         depth: 420,
@@ -94,104 +101,121 @@ export function createUnit(type: ProductType): Unit {
         baseHeight: 120,
         carcassMaterialId: 'b-mdf18-walnut',
         frontMaterialId: 'b-mdf18-walnut',
+        topBoardId: 'b-pine32',
+        overhang: sides(20, 0, 30, 30),
         edgingId: 'e-walnut',
         frontEdgingId: 'e-walnut',
         legId: 'l-hairpin',
         handleId: 'hd-push',
         bays: [
           bay(1, [sec({ front: 'drawer', drawerCount: 2 })]),
-          bay(1.2, [sec({ front: 'open', shelves: 1 })]),
-          bay(1, [sec({ front: 'door' })]),
+          bay(1.2, [sec({ front: 'sliding', doorMaterial: 'glass', slide: 'bypass', shelves: 1 })]),
+          bay(1, [sec({ front: 'door', opening: 'down' })]),
         ],
       });
     case 'kitchen_base':
-      return base(type, {
+      return baseUnit(type, {
         width: 800,
         height: 900,
         depth: 560,
+        installType: 'builtIn',
         base: 'plinth',
         baseHeight: 120,
         countertopId: 'c-granite',
         carcassMaterialId: 'b-hmr18',
-        bays: [bay(1, [sec({ front: 'door', doorCount: 2, shelves: 1, size: 3 }), sec({ front: 'drawer', size: 1 })])],
+        bays: [bay(1, [sec({ front: 'door', opening: 'pair', shelves: 1, size: 3 }), sec({ front: 'drawer', size: 1 })])],
       });
     case 'kitchen_wall':
-      return base(type, {
+      return baseUnit(type, {
         width: 800,
         height: 720,
         depth: 320,
-        backMaterialId: 'b-hb3',
-        bays: [bay(1, [sec({ front: 'door', doorCount: 2, shelves: 2 })])],
+        installType: 'builtIn',
+        mount: 'wall',
+        mountHeight: 1450,
+        overhang: sides(0, 0, 0, 0),
+        bays: [bay(1, [sec({ front: 'door', opening: 'pair', shelves: 2 })])],
       });
     case 'kitchen_tall':
-      return base(type, {
+      return baseUnit(type, {
         width: 600,
         height: 2200,
         depth: 560,
+        installType: 'builtIn',
         base: 'plinth',
         baseHeight: 120,
         carcassMaterialId: 'b-hmr18',
-        bays: [bay(1, [sec({ front: 'drawer', drawerCount: 2, size: 1 }), sec({ front: 'door', shelves: 3, size: 2.6 }), sec({ front: 'door', shelves: 1, size: 1 })])],
+        bays: [bay(1, [sec({ front: 'drawer', drawerCount: 2, size: 1 }), sec({ front: 'appliance', applianceId: 'ap-oven-elec', size: 1.15 }), sec({ front: 'appliance', applianceId: 'ap-mw-built', size: 0.8 }), sec({ front: 'door', opening: 'up', size: 1 })])],
       });
     case 'island':
-      return base(type, {
+      return baseUnit(type, {
         width: 2000,
         height: 900,
         depth: 900,
         base: 'plinth',
         baseHeight: 120,
+        plinthSides: sides(true, true, true, true),
         countertopId: 'c-quartz',
-        countertopOverhang: 300,
+        overhang: sides(20, 300, 20, 20),
         carcassMaterialId: 'b-hmr18',
+        finishPanels: { left: { ...panel('b-mdf18-gloss'), enabled: true }, right: { ...panel('b-mdf18-gloss'), enabled: true }, back: { ...panel('b-mdf18-gloss'), enabled: true, style: 'fluted' } },
+        topAppliances: [{ id: uid('ta'), applianceId: 'ap-hob-ind4', bay: 1 }],
         bays: [
           bay(1, [sec({ front: 'drawer', drawerCount: 3 })]),
-          bay(1.4, [sec({ front: 'door', doorCount: 2, shelves: 1 })]),
-          bay(1, [sec({ front: 'drawer', drawerCount: 3 })]),
+          bay(1.4, [sec({ front: 'appliance', applianceId: 'ap-oven-elec', size: 2 }), sec({ front: 'drawer', size: 0.6 })]),
+          bay(1, [sec({ front: 'door', opening: 'right', insertId: 'in-bin' })]),
         ],
       });
     case 'built_in':
-      return base(type, {
+      return baseUnit(type, {
         width: 1200,
         height: 2400,
         depth: 600,
+        installType: 'builtIn',
         base: 'plinth',
         baseHeight: 100,
         carcassMaterialId: 'b-mel16-white',
         frontMaterialId: 'b-mel16-oak',
         frontEdgingId: 'e-oak',
+        overhang: sides(0, 0, 0, 0),
         bays: [
-          bay(1, [sec({ front: 'door', shelves: 4, size: 4 }), sec({ front: 'door', size: 1 })]),
-          bay(1, [sec({ front: 'door', shelves: 4, size: 4 }), sec({ front: 'door', size: 1 })]),
+          bay(1, [sec({ front: 'door', opening: 'left', shelves: 4, size: 4 }), sec({ front: 'door', opening: 'up', size: 1 })]),
+          bay(1, [sec({ front: 'door', opening: 'right', shelves: 4, size: 4 }), sec({ front: 'door', opening: 'up', size: 1 })]),
         ],
       });
     case 'wardrobe':
-      return base(type, {
+      return baseUnit(type, {
         width: 1800,
         height: 2400,
         depth: 600,
+        installType: 'builtIn',
         base: 'plinth',
         baseHeight: 100,
         carcassMaterialId: 'b-mel16-white',
         frontMaterialId: 'b-mel16-oak',
         frontEdgingId: 'e-oak',
         handleId: 'hd-bar320',
+        overhang: sides(0, 0, 0, 0),
+        lights: [{ id: uid('lt'), accessoryId: 'lt-profile', location: 'insideTop', temperature: 4000, color: '#ffffff', bays: [], sensorId: 'lt-sensor-door' }],
         bays: [
-          bay(1, [sec({ front: 'door', hangingRail: true, size: 4 }), sec({ front: 'door', size: 1 })]),
-          bay(1, [sec({ front: 'drawer', drawerCount: 3, size: 1.4 }), sec({ front: 'door', shelves: 3, size: 2.6 }), sec({ front: 'door', size: 1 })]),
-          bay(1, [sec({ front: 'door', hangingRail: true, shelves: 1, size: 4 }), sec({ front: 'door', size: 1 })]),
+          bay(1, [sec({ front: 'door', opening: 'left', hangingRail: true, size: 4 }), sec({ front: 'door', opening: 'left', size: 1 })]),
+          bay(1, [sec({ front: 'drawer', drawerCount: 3, size: 1.4 }), sec({ front: 'door', doorMaterial: 'glass', opening: 'right', shelves: 3, size: 2.6 }), sec({ front: 'door', opening: 'right', size: 1 })]),
+          bay(1, [sec({ front: 'door', opening: 'right', hangingRail: true, shelves: 1, size: 4 }), sec({ front: 'door', opening: 'right', size: 1 })]),
         ],
       });
     case 'sliding_wardrobe':
-      return base(type, {
+      return baseUnit(type, {
         width: 2400,
         height: 2400,
         depth: 650,
+        installType: 'builtIn',
         base: 'plinth',
         baseHeight: 80,
         carcassMaterialId: 'b-mel16-white',
         frontMaterialId: 'b-mel16-oak',
         frontEdgingId: 'e-oak',
         handleId: null,
+        overhang: sides(0, 0, 0, 0),
         sliding: { enabled: true, panels: 2, style: 'board' },
         bays: [
           bay(1, [sec({ hangingRail: true, size: 4 }), sec({ size: 1 })]),
@@ -200,7 +224,7 @@ export function createUnit(type: ProductType): Unit {
         ],
       });
     case 'bookshelf':
-      return base(type, {
+      return baseUnit(type, {
         width: 1200,
         height: 2000,
         depth: 350,
@@ -209,30 +233,73 @@ export function createUnit(type: ProductType): Unit {
         carcassMaterialId: 'b-ply18',
         frontMaterialId: 'b-ply18',
         edgingId: 'e-oak',
+        overhang: sides(0, 0, 0, 0),
+        lights: [{ id: uid('lt'), accessoryId: 'lt-strip', location: 'shelves', temperature: 3000, color: '#ffffff', bays: [], sensorId: 'lt-sensor-touch' }],
         bays: [
-          bay(1, [sec({ front: 'door', doorCount: 1, size: 1.2 }), sec({ shelves: 3, size: 3 })]),
-          bay(1, [sec({ front: 'door', doorCount: 1, size: 1.2 }), sec({ front: 'glassDoor', shelves: 3, size: 3 })]),
+          bay(1, [sec({ front: 'door', opening: 'left', size: 1.2 }), sec({ shelves: 3, size: 3 })]),
+          bay(1, [sec({ front: 'door', opening: 'right', size: 1.2 }), sec({ front: 'door', doorMaterial: 'glass', opening: 'right', shelves: 3, size: 3 })]),
         ],
       });
     case 'vanity':
-      return base(type, {
+      return baseUnit(type, {
         width: 900,
         height: 850,
         depth: 480,
-        base: 'legs',
-        baseHeight: 150,
+        installType: 'builtIn',
+        mount: 'wall',
+        mountHeight: 150,
         countertopId: 'c-quartz',
         carcassMaterialId: 'b-hmr18',
-        legId: 'l-chrome150',
+        topAppliances: [{ id: uid('ta'), applianceId: 'ap-sink-undermount', bay: 0 }],
         bays: [bay(1, [sec({ front: 'drawer', drawerCount: 2 })])],
       });
     case 'custom':
     default:
-      return base('custom', {
+      return baseUnit('custom', {
         width: 1000,
         height: 1000,
         depth: 450,
-        bays: [bay(1, [sec({ front: 'door', doorCount: 2, shelves: 1 })])],
+        bays: [bay(1, [sec({ front: 'door', opening: 'pair', shelves: 1 })])],
       });
   }
+}
+
+/* ------------------------------------------------------------- migration */
+
+const HINGE_RENAMES: Record<string, string> = { 'h-softclose': 'h-soft-overlay', 'h-standard': 'h-ord-overlay', 'h-halfov': 'h-soft-half' };
+
+/** Bring a unit saved by an older version of the app up to the current shape. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizeUnit(raw: any): Unit {
+  const d = baseUnit(raw?.type ?? 'custom');
+  const u = { ...d, ...raw } as Unit & { countertopOverhang?: number };
+  if (raw && raw.overhang === undefined) {
+    const o = typeof raw.countertopOverhang === 'number' ? raw.countertopOverhang : 20;
+    u.overhang = raw.type === 'island' ? sides(20, o, 0, 0) : sides(o, 0, 0, 0);
+  }
+  delete u.countertopOverhang;
+  u.plinthSides = { ...d.plinthSides, ...(raw?.plinthSides ?? {}) };
+  u.finishPanels = { left: { ...d.finishPanels.left, ...(raw?.finishPanels?.left ?? {}) }, right: { ...d.finishPanels.right, ...(raw?.finishPanels?.right ?? {}) }, back: { ...d.finishPanels.back, ...(raw?.finishPanels?.back ?? {}) } };
+  if (!raw?.mount) u.mount = raw?.type === 'kitchen_wall' ? 'wall' : 'floor';
+  if (!raw?.installType) u.installType = ['kitchen_base', 'kitchen_wall', 'kitchen_tall', 'built_in', 'wardrobe', 'sliding_wardrobe'].includes(u.type) ? 'builtIn' : 'standalone';
+  if (u.hingeId && HINGE_RENAMES[u.hingeId]) u.hingeId = HINGE_RENAMES[u.hingeId];
+  u.lights = raw?.lights ?? [];
+  u.topAppliances = raw?.topAppliances ?? [];
+  u.bays = (raw?.bays ?? d.bays).map((b: Bay) => ({
+    ...b,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    sections: b.sections.map((s: any) => {
+      if (s.doorMaterial) return { ...sec(), ...s } as Section;
+      const old = s.front as string;
+      const front = old === 'glassDoor' || old === 'flap' ? 'door' : (old as Section['front']);
+      const { doorCount, ...rest } = s;
+      return sec({
+        ...rest,
+        front,
+        doorMaterial: old === 'glassDoor' ? 'glass' : 'wood',
+        opening: old === 'flap' ? 'up' : doorCount === 2 ? 'pair' : 'left',
+      } as Partial<Section>);
+    }),
+  }));
+  return u;
 }

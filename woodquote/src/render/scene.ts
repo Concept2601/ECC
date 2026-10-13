@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import type { Box3 as PartBox, Catalog, Unit, UnitBuild } from '../lib/types';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { elevation, unitExtents } from '../lib/generate';
+import { activeLegs, legLength, legTransform, type RunBuild } from '../lib/runs';
+import type { Appliance, Box3 as PartBox, BoardMaterial, Catalog, HandleStyle, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
 
 /* ---------------------------------------------------- procedural textures */
 
@@ -22,7 +25,7 @@ function woodTexture(color: string, vertical: boolean): THREE.CanvasTexture {
   g.fillStyle = color;
   g.fillRect(0, 0, 256, 512);
   let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   for (let i = 0; i < 70; i++) {
     const x = rnd() * 256;
     g.strokeStyle = shade(color, (rnd() - 0.5) * 0.12);
@@ -45,71 +48,277 @@ function woodTexture(color: string, vertical: boolean): THREE.CanvasTexture {
   return t;
 }
 
-/* ----------------------------------------------------------- scene graph */
+/* ------------------------------------------------------------ materials */
 
-export interface SceneOptions {
-  showFronts: boolean;
+const FINISH: Record<SurfaceFinish, { roughness: number; clearcoat: number; env: number }> = {
+  matte: { roughness: 0.92, clearcoat: 0, env: 0.25 },
+  textured: { roughness: 0.75, clearcoat: 0, env: 0.35 },
+  satin: { roughness: 0.42, clearcoat: 0.25, env: 0.7 },
+  gloss: { roughness: 0.06, clearcoat: 1, env: 1.25 },
+};
+
+function surfaceMaterial(color: string, finish: SurfaceFinish, map: THREE.Texture | null = null): THREE.MeshPhysicalMaterial {
+  const f = FINISH[finish] ?? FINISH.matte;
+  return new THREE.MeshPhysicalMaterial({ color: map ? '#ffffff' : color, map, roughness: f.roughness, metalness: 0.02, clearcoat: f.clearcoat, clearcoatRoughness: 0.04, envMapIntensity: f.env });
 }
 
-const metal = new THREE.MeshStandardMaterial({ color: '#c8ccd0', metalness: 0.85, roughness: 0.3 });
+const metal = new THREE.MeshStandardMaterial({ color: '#c8ccd0', metalness: 0.9, roughness: 0.25 });
+const darkMetal = new THREE.MeshStandardMaterial({ color: '#222326', metalness: 0.6, roughness: 0.35 });
+const brass = new THREE.MeshStandardMaterial({ color: '#b08d57', metalness: 0.85, roughness: 0.3 });
+const blackGlass = new THREE.MeshPhysicalMaterial({ color: '#0b0b0d', roughness: 0.05, clearcoat: 1, metalness: 0.1 });
+const notchMat = new THREE.MeshStandardMaterial({ color: '#1a1a1a', roughness: 0.9 });
+
+function boxGeo(b: PartBox) {
+  return new THREE.BoxGeometry(Math.max(b.w, 0.5), Math.max(b.h, 0.5), Math.max(b.d, 0.5));
+}
 
 function boxMesh(b: PartBox, mat: THREE.Material, edges = true): THREE.Object3D {
-  const geo = new THREE.BoxGeometry(Math.max(b.w, 0.5), Math.max(b.h, 0.5), Math.max(b.d, 0.5));
+  const geo = boxGeo(b);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(b.x + b.w / 2, b.y + b.h / 2, b.z + b.d / 2);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
+  if (b.meta?.ref) mesh.userData.ref = b.meta.ref;
   if (!edges) return mesh;
   const group = new THREE.Group();
   group.add(mesh);
-  const line = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#000000', transparent: true, opacity: 0.18 }));
+  const line = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#000000', transparent: true, opacity: 0.16 }));
   line.position.copy(mesh.position);
   group.add(line);
+  if (b.meta?.ref) group.userData.ref = b.meta.ref;
   return group;
+}
+
+/* --------------------------------------------------------------- handles */
+
+function handleObject(style: HandleStyle, size: string, door: PartBox, placement: 'left' | 'right' | 'top' | 'bottom' | 'topCenter', unitIsTall: boolean): THREE.Object3D | null {
+  const g = new THREE.Group();
+  const z = door.z + door.d;
+  const len = Math.min(450, Number.parseInt(size) || 128);
+  const vertical = placement === 'left' || placement === 'right';
+  const cx = placement === 'left' ? door.x + 40 : placement === 'right' ? door.x + door.w - 40 : door.x + door.w / 2;
+  let cy = placement === 'top' || placement === 'topCenter' ? door.y + door.h - 45 : placement === 'bottom' ? door.y + 45 : door.y + door.h / 2;
+  if (vertical && unitIsTall && door.h > 1200 && door.y < 1000 && door.y + door.h > 1300) cy = 1000;
+  else if (vertical && door.y > 1400) cy = door.y + Math.min(door.h / 2, 90);
+  const mat = style === 'roman' ? brass : /black/.test(size) ? darkMetal : metal;
+  const bar = (l: number, thick: number, standoff: number) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(vertical ? thick : l, vertical ? l : thick, thick), mat);
+    b.position.set(cx, cy, z + standoff + thick / 2);
+    g.add(b);
+    for (const k of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(thick * 0.35, thick * 0.35, standoff, 10), mat);
+      post.rotation.x = Math.PI / 2;
+      post.position.set(cx + (vertical ? 0 : (k * l) / 2.6), cy + (vertical ? (k * l) / 2.6 : 0), z + standoff / 2);
+      g.add(post);
+    }
+  };
+  switch (style) {
+    case 'push':
+      return null;
+    case 'knob': {
+      const k = new THREE.Mesh(new THREE.CylinderGeometry(15, 13, 26, 20), mat);
+      k.rotation.x = Math.PI / 2;
+      k.position.set(cx, cy, z + 13);
+      g.add(k);
+      break;
+    }
+    case 'bar':
+      bar(Math.min(len, (vertical ? door.h : door.w) * 0.6), 12, 28);
+      break;
+    case 'tbar':
+      bar(Math.min(len, (vertical ? door.h : door.w) * 0.6), 10, 22);
+      break;
+    case 'roman':
+      bar(Math.min(len, (vertical ? door.h : door.w) * 0.5), 9, 22);
+      break;
+    case 'appliance':
+      bar(Math.min(450, (vertical ? door.h : door.w) * 0.75), 22, 45);
+      break;
+    case 'finger':
+    case 'profile': {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(door.w, style === 'profile' ? 22 : 14, 8), style === 'profile' ? darkMetal : notchMat);
+      strip.position.set(door.x + door.w / 2, door.y + door.h - (style === 'profile' ? 11 : 7), z + 2);
+      g.add(strip);
+      break;
+    }
+    case 'notchRound':
+    case 'notchOval':
+    case 'notchTrapezium': {
+      const shape = new THREE.Shape();
+      if (style === 'notchTrapezium') {
+        shape.moveTo(-45, 0);
+        shape.lineTo(45, 0);
+        shape.lineTo(28, -30);
+        shape.lineTo(-28, -30);
+        shape.closePath();
+      } else {
+        shape.absellipse(0, 0, style === 'notchOval' ? 55 : 32, style === 'notchOval' ? 22 : 32, Math.PI, 2 * Math.PI, false, 0);
+        shape.closePath();
+      }
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), notchMat);
+      // cut into the edge furthest from the hinge (top edge for drawers & flaps)
+      if (vertical) {
+        m.rotation.z = placement === 'right' ? Math.PI / 2 : -Math.PI / 2;
+        m.position.set(placement === 'right' ? door.x + door.w : door.x, cy, z + 0.6);
+      } else if (placement === 'bottom') {
+        m.rotation.z = Math.PI;
+        m.position.set(cx, door.y, z + 0.6);
+      } else m.position.set(cx, door.y + door.h, z + 0.6);
+      g.add(m);
+      break;
+    }
+  }
+  return g;
+}
+
+/* ------------------------------------------------------------ appliances */
+
+export function applianceObject(a: Appliance, b: PartBox): THREE.Object3D {
+  const g = new THREE.Group();
+  const add = (box: PartBox, mat: THREE.Material) => g.add(boxMesh(box, mat, false));
+  const body = surfaceMaterial(a.color, 'gloss');
+  body.metalness = /c[0-9a-f]{5}|b5b9be|d9dde1|c8ccd0/i.test(a.color) ? 0.65 : 0.1;
+  const cyl = (x: number, y: number, z: number, r: number, h: number, mat: THREE.Material) => {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 24), mat);
+    c.position.set(x, y, z);
+    g.add(c);
+  };
+  const front = b.z + b.d;
+  switch (a.category) {
+    case 'hob': {
+      add({ x: b.x, y: b.y, z: b.z, w: b.w, h: 6, d: b.d }, a.variant === 'Gas' ? darkMetal : blackGlass);
+      const cols = b.w > 700 ? 3 : 2;
+      for (let i = 0; i < cols; i++)
+        for (let j = 0; j < 2; j++) {
+          const x = b.x + (b.w * (i + 0.5)) / cols;
+          const z = b.z + (b.d * (j + 0.5)) / 2;
+          const r = 55 + ((i + j) % 2) * 20;
+          if (/gas/i.test(a.variant)) {
+            cyl(x, b.y + 12, z, r * 0.55, 12, darkMetal);
+            cyl(x, b.y + 20, z, r * 0.8, 4, metal);
+          } else cyl(x, b.y + 6.5, z, r, 1, new THREE.MeshStandardMaterial({ color: /induction/i.test(a.variant) ? '#3a3a40' : '#5a1f18', roughness: 0.4 }));
+        }
+      break;
+    }
+    case 'sink': {
+      add({ x: b.x, y: b.y, z: b.z, w: b.w, h: 3, d: b.d }, metal);
+      const bowls = /double/i.test(a.variant) ? 2 : 1;
+      const bw = /drainer/i.test(a.name) ? b.w * 0.5 : b.w * 0.9;
+      for (let i = 0; i < bowls; i++) add({ x: b.x + 25 + (i * bw) / bowls, y: b.y + 3, z: b.z + 30, w: bw / bowls - 20, h: 1, d: b.d - 60 }, darkMetal);
+      cyl(b.x + b.w * 0.5, b.y + 130, b.z + 25, 14, 260, metal);
+      const spout = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 180, 12), metal);
+      spout.rotation.x = Math.PI / 2;
+      spout.position.set(b.x + b.w * 0.5, b.y + 255, b.z + 110);
+      g.add(spout);
+      break;
+    }
+    case 'oven':
+    case 'microwave':
+    case 'wineCooler': {
+      add(b, blackGlass);
+      const win = a.category === 'microwave' ? { x: b.x + 20, y: b.y + 30, w: b.w * 0.62, h: b.h - 60 } : { x: b.x + 40, y: b.y + 40, w: b.w - 80, h: b.h * 0.6 };
+      add({ ...win, z: front, d: 2 }, new THREE.MeshStandardMaterial({ color: a.category === 'wineCooler' ? '#3a2a2a' : '#2c2f33', roughness: 0.1, metalness: 0.3 }));
+      if (a.category !== 'microwave') add({ x: b.x + b.w * 0.15, y: b.y + b.h - 50, z: front + 10, w: b.w * 0.7, h: 14, d: 14 }, metal);
+      break;
+    }
+    case 'dishwasher':
+    case 'washer':
+    case 'cooker': {
+      add(b, body);
+      add({ x: b.x, y: b.y + b.h - 70, z: front, w: b.w, h: 70, d: 2 }, blackGlass);
+      if (a.category === 'washer') {
+        const door = new THREE.Mesh(new THREE.CylinderGeometry(b.w * 0.3, b.w * 0.3, 20, 32), new THREE.MeshPhysicalMaterial({ color: '#30353b', roughness: 0.05, metalness: 0.4 }));
+        door.rotation.x = Math.PI / 2;
+        door.position.set(b.x + b.w / 2, b.y + b.h * 0.45, front + 10);
+        g.add(door);
+      }
+      if (a.category === 'cooker') {
+        add({ x: b.x, y: b.y + b.h, z: b.z, w: b.w, h: 6, d: b.d }, darkMetal);
+        for (let i = 0; i < 4; i++) cyl(b.x + b.w * (0.3 + 0.4 * (i % 2)), b.y + b.h + 12, b.z + b.d * (0.3 + 0.4 * Math.floor(i / 2)), 40, 10, darkMetal);
+        add({ x: b.x + 50, y: b.y + 120, z: front, w: b.w - 100, h: b.h * 0.45, d: 2 }, blackGlass);
+      }
+      break;
+    }
+    case 'fridge': {
+      add(b, body);
+      const line = (box: PartBox) => add(box, darkMetal);
+      const split = /side by side|french/i.test(a.variant);
+      if (split) line({ x: b.x + b.w / 2 - 2, y: /french/i.test(a.variant) ? b.y + b.h * 0.32 : b.y, z: front, w: 4, h: b.h * (/french/i.test(a.variant) ? 0.68 : 1), d: 2 });
+      if (/double|top/i.test(a.variant + a.name)) line({ x: b.x, y: b.y + b.h * 0.7, z: front, w: b.w, h: 4, d: 2 });
+      if (/french/i.test(a.variant)) line({ x: b.x, y: b.y + b.h * 0.32, z: front, w: b.w, h: 4, d: 2 });
+      const hx = split ? [b.x + b.w / 2 - 30, b.x + b.w / 2 + 22] : [b.x + 40];
+      for (const x of hx) add({ x, y: b.y + b.h * 0.4, z: front + 10, w: 10, h: b.h * 0.35, d: 18 }, metal);
+      break;
+    }
+    case 'hood': {
+      if (/chimney/i.test(a.variant)) {
+        add({ x: b.x, y: b.y, z: b.z, w: b.w, h: 90, d: b.d }, metal);
+        add({ x: b.x + b.w * 0.3, y: b.y + 90, z: b.z, w: b.w * 0.4, h: b.h - 90, d: b.d * 0.5 }, metal);
+      } else add({ x: b.x, y: b.y, z: b.z, w: b.w, h: 40, d: b.d }, metal);
+      break;
+    }
+    default:
+      add(b, body);
+  }
+  return g;
+}
+
+/* ----------------------------------------------------------- scene graph */
+
+export interface SceneOptions {
+  showFronts: boolean;
+  openDoors?: boolean;
+  lightsOn?: boolean;
+  highlight?: SectionRef | null;
+  room?: boolean;
 }
 
 export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt: SceneOptions): THREE.Group {
   const root = new THREE.Group();
+  root.userData.unitId = unit.id;
   const matCache = new Map<string, THREE.Material>();
-
-  const boardMat = (id: string | null, b: PartBox): THREE.Material => {
-    const board = cat.boards.find((x) => x.id === id);
-    const color = board?.color ?? '#cccccc';
+  const boardMat = (board: BoardMaterial | undefined, b: PartBox): THREE.Material => {
     const vertical = b.h >= b.w;
-    const key = `${id}|${vertical}`;
+    const key = `${board?.id}|${vertical}`;
     let m = matCache.get(key);
     if (!m) {
-      m = new THREE.MeshStandardMaterial({
-        color: board?.texture === 'wood' ? '#ffffff' : color,
-        map: board?.texture === 'wood' ? woodTexture(color, vertical) : null,
-        roughness: /gloss/i.test(board?.name ?? '') ? 0.25 : 0.7,
-        metalness: 0.02,
-      });
+      m = surfaceMaterial(board?.color ?? '#cccccc', board?.finish ?? 'matte', board?.texture === 'wood' ? woodTexture(board.color, vertical) : null);
       matCache.set(key, m);
     }
     return m;
   };
+  const isTall = unit.height > 1300;
+  const handle = cat.accessories.find((a) => a.id === unit.handleId);
+  const doorGroups = new Map<string, { group: THREE.Group; boxes: PartBox[]; drawer: boolean }>();
+  const target = (b: PartBox): THREE.Object3D => {
+    const id = b.meta?.door;
+    if (!id) return root;
+    let dg = doorGroups.get(id);
+    if (!dg) {
+      dg = { group: new THREE.Group(), boxes: [], drawer: !!b.meta?.drawer };
+      doorGroups.set(id, dg);
+      root.add(dg.group);
+    }
+    dg.boxes.push(b);
+    return dg.group;
+  };
 
   for (const p of build.parts) {
-    const isFront = p.role === 'door' || p.role === 'drawerFront';
-    if (!opt.showFronts && (isFront || p.kind === 'glass')) continue;
+    const isFront = p.role === 'door' || p.role === 'drawerFront' || (p.kind === 'glass' && !!p.boxes[0]?.meta?.door);
+    if (!opt.showFronts && isFront) continue;
     for (const b of p.boxes) {
       let mat: THREE.Material;
       if (p.kind === 'glass') {
         const g = cat.glass.find((x) => x.id === p.materialId);
         const mirror = /mirror/i.test(g?.name ?? '');
-        mat = new THREE.MeshPhysicalMaterial({
-          color: g?.color ?? '#cfe8ef',
-          transparent: true,
-          opacity: g?.opacity ?? 0.3,
-          roughness: mirror ? 0.05 : /frost/i.test(g?.name ?? '') ? 0.6 : 0.1,
-          metalness: mirror ? 0.9 : 0,
-        });
+        mat = new THREE.MeshPhysicalMaterial({ color: g?.color ?? '#cfe8ef', transparent: true, opacity: g?.opacity ?? 0.3, roughness: mirror ? 0.02 : /frost/i.test(g?.name ?? '') ? 0.6 : 0.05, metalness: mirror ? 0.95 : 0, envMapIntensity: 1.4 });
       } else if (p.kind === 'counter') {
         const c = cat.countertops.find((x) => x.id === p.materialId);
-        mat = new THREE.MeshStandardMaterial({ color: c?.color ?? '#999', roughness: 0.3, metalness: 0.05 });
-      } else mat = boardMat(p.materialId, b);
-      root.add(boxMesh(b, mat, p.kind !== 'glass'));
+        mat = surfaceMaterial(c?.color ?? '#999', c?.finish ?? 'satin');
+      } else mat = boardMat(cat.boards.find((x) => x.id === p.materialId), b);
+      const obj = boxMesh(b, mat, p.kind !== 'glass');
+      target(b).add(obj);
+      if (b.meta?.style && b.meta.style !== 'flat' && p.role === 'finish') root.add(panelDecoration(b, mat, unit));
     }
   }
 
@@ -117,69 +326,266 @@ export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt:
     for (const a of build.aluminium) {
       const prof = cat.aluminium.find((x) => x.id === a.profileId);
       const m = new THREE.MeshStandardMaterial({ color: prof?.color ?? '#c0c4c8', metalness: 0.8, roughness: 0.35 });
-      for (const b of a.boxes) root.add(boxMesh(b, m, false));
-    }
-    // handles
-    const handle = cat.accessories.find((a) => a.id === unit.handleId);
-    if (handle && handle.unit !== 'm' && !/push/i.test(handle.name)) {
-      const len = Math.min(320, Number.parseInt(handle.size) || 128);
-      const isKnob = /knob/i.test(handle.name);
-      const hm = /black/i.test(handle.name) ? new THREE.MeshStandardMaterial({ color: '#222', metalness: 0.6, roughness: 0.4 }) : metal;
-      for (const p of build.parts) {
-        if (p.role !== 'door' && p.role !== 'drawerFront') continue;
-        for (const b of p.boxes) {
-          const z = b.z + b.d;
-          let hb: PartBox;
-          if (isKnob) hb = { x: b.x + b.w / 2 - 15, y: b.y + b.h / 2 - 15, z, w: 30, h: 30, d: 25 };
-          else if (p.role === 'drawerFront' || p.name === 'Flap door') hb = { x: b.x + b.w / 2 - len / 2, y: b.y + b.h - Math.min(60, b.h / 3), z, w: len, h: 12, d: 25 };
-          else {
-            const right = b.x + b.w / 2 < unit.width / 2;
-            const hx = right ? b.x + b.w - 50 : b.x + 38;
-            const l = Math.min(len, b.h * 0.6);
-            // tall doors: handle at ~1000mm from the floor; high doors: near the bottom edge
-            const hy = b.y < 1000 && b.y + b.h > 1300 ? 1000 - l / 2 : b.y > 1400 ? b.y + 50 : b.y + b.h / 2 - l / 2;
-            hb = { x: hx, y: hy, z, w: 12, h: l, d: 25 };
-          }
-          root.add(boxMesh(hb, hm, false));
-        }
-      }
+      for (const b of a.boxes) target(b).add(boxMesh(b, m, false));
     }
   }
+
+  // handles + opening motion per door
+  for (const [, dg] of doorGroups) {
+    const bb = dg.boxes.reduce(
+      (acc, b) => ({ x0: Math.min(acc.x0, b.x), y0: Math.min(acc.y0, b.y), z0: Math.min(acc.z0, b.z), x1: Math.max(acc.x1, b.x + b.w), y1: Math.max(acc.y1, b.y + b.h), z1: Math.max(acc.z1, b.z + b.d) }),
+      { x0: Infinity, y0: Infinity, z0: Infinity, x1: -Infinity, y1: -Infinity, z1: -Infinity },
+    );
+    const front = dg.boxes.find((b) => b.meta?.handle) ?? null;
+    const meta = dg.boxes.find((b) => b.meta?.hinge || b.meta?.slide || b.meta?.drawer)?.meta ?? {};
+    if (opt.showFronts && front && handle) {
+      const placement = meta.drawer ? 'topCenter' : meta.hinge === 'left' ? 'right' : meta.hinge === 'right' ? 'left' : meta.hinge === 'top' ? 'bottom' : meta.hinge === 'bottom' ? 'top' : meta.slide === 'left' ? 'left' : 'right';
+      const fb = { x: bb.x0, y: bb.y0, z: front.z, w: bb.x1 - bb.x0, h: bb.y1 - bb.y0, d: front.d };
+      const h = handleObject(handle.style ?? 'bar', `${handle.size} ${handle.name.toLowerCase()}`, fb, placement, isTall);
+      if (h) dg.group.add(h);
+    }
+    if (!opt.openDoors) continue;
+    const pivot = new THREE.Group();
+    const inner = dg.group;
+    root.remove(inner);
+    pivot.add(inner);
+    root.add(pivot);
+    if (meta.drawer) pivot.position.z = (bb.z1 - bb.z0) * 0.55;
+    else if (meta.slide) pivot.position.x = (meta.slide === 'left' ? -1 : 1) * (bb.x1 - bb.x0) * 0.6;
+    else if (meta.hinge === 'left' || meta.hinge === 'right') {
+      const px = meta.hinge === 'left' ? bb.x0 : bb.x1;
+      inner.position.set(-px, 0, -bb.z0);
+      pivot.position.set(px, 0, bb.z0);
+      pivot.rotation.y = (meta.hinge === 'left' ? -1 : 1) * 1.3;
+    } else if (meta.hinge === 'top' || meta.hinge === 'bottom') {
+      const py = meta.hinge === 'top' ? bb.y1 : bb.y0;
+      inner.position.set(0, -py, -bb.z0);
+      pivot.position.set(0, py, bb.z0);
+      pivot.rotation.x = (meta.hinge === 'top' ? -1 : 1) * 1.25;
+    }
+  }
+
   for (const r of build.rails) root.add(boxMesh(r.box, metal, false));
+  for (const ins of build.inserts) {
+    const geo = boxGeo(ins.box);
+    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#8d949b' }));
+    lines.position.set(ins.box.x + ins.box.w / 2, ins.box.y + ins.box.h / 2, ins.box.z + ins.box.d / 2);
+    root.add(lines);
+    const tiers = Math.max(1, Math.floor(ins.box.h / 300));
+    for (let k = 0; k < tiers; k++) root.add(boxMesh({ x: ins.box.x, y: ins.box.y + (ins.box.h * k) / tiers + 5, z: ins.box.z, w: ins.box.w, h: 4, d: ins.box.d, meta: ins.box.meta }, metal, false));
+  }
+  for (const ap of build.appliances) {
+    const a = cat.appliances.find((x) => x.id === ap.applianceId);
+    if (!a) continue;
+    const o = applianceObject(a, ap.box);
+    if (ap.ref) o.traverse((c) => (c.userData.ref = ap.ref));
+    root.add(o);
+  }
+
+  // LED lights: glowing strips, plus real light sources when lights are on
+  let lightBudget = 10;
+  for (const l of build.lights) {
+    const strip = new THREE.Mesh(boxGeo(l.box), new THREE.MeshBasicMaterial({ color: opt.lightsOn ? l.color : shade(l.color, -0.25) }));
+    strip.position.set(l.box.x + l.box.w / 2, l.box.y + l.box.h / 2, l.box.z + l.box.d / 2);
+    root.add(strip);
+    if (opt.lightsOn && lightBudget > 0) {
+      const n = Math.min(lightBudget, Math.max(1, Math.round(l.box.w / 700)));
+      for (let k = 0; k < n; k++) {
+        const pl = new THREE.PointLight(l.color, 1.6, 900, 0);
+        const off = l.dir === 'down' ? -120 : l.dir === 'up' ? 160 : 0;
+        pl.position.set(l.box.x + (l.box.w * (k + 0.5)) / n, l.box.y + off, l.box.z + (l.dir === 'front' ? 120 : 0));
+        root.add(pl);
+        lightBudget--;
+      }
+      // soft glow halo
+      const halo = new THREE.Mesh(new THREE.PlaneGeometry(l.box.w, 160), new THREE.MeshBasicMaterial({ color: l.color, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
+      if (l.dir === 'front') halo.position.set(l.box.x + l.box.w / 2, l.box.y - 60, l.box.z + 2);
+      else {
+        halo.rotation.x = Math.PI / 2;
+        halo.position.set(l.box.x + l.box.w / 2, l.box.y + (l.dir === 'up' ? 20 : -2), l.box.z);
+      }
+      root.add(halo);
+    }
+  }
 
   // legs
-  if (unit.base === 'legs' && unit.baseHeight > 0) {
+  if (unit.mount === 'floor' && unit.base === 'legs' && unit.baseHeight > 0) {
     const leg = cat.accessories.find((a) => a.id === unit.legId);
-    const lm = /chrome/i.test(leg?.name ?? '') ? metal : new THREE.MeshStandardMaterial({ color: '#2a2a2a', metalness: 0.5, roughness: 0.5 });
+    const lm = /chrome/i.test(leg?.name ?? '') ? metal : darkMetal;
     const xs = [40, unit.width - 40];
     const extra = Math.floor(Math.max(0, unit.width - 1) / 1000);
     for (let i = 1; i <= extra; i++) xs.push((unit.width * i) / (extra + 1));
-    const dc = unit.depth - 60;
     for (const x of xs)
-      for (const z of [60, dc]) {
-        const geo = new THREE.CylinderGeometry(14, 10, unit.baseHeight, 16);
-        const m = new THREE.Mesh(geo, lm);
+      for (const z of [60, unit.depth - 60]) {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(14, 10, unit.baseHeight, 16), lm);
         m.position.set(x, unit.baseHeight / 2, z);
         m.castShadow = true;
         root.add(m);
       }
   }
 
+  if (opt.highlight) {
+    const e = elevation(unit, cat);
+    const bay = e.bays[opt.highlight.bay];
+    const s = bay?.sections[opt.highlight.section];
+    if (bay && s) {
+      const yo = unit.mount === 'wall' ? unit.mountHeight : 0;
+      const hb: PartBox = { x: bay.x, y: s.y + yo, z: 0, w: bay.w, h: s.h, d: unit.depth + 4 };
+      const hm = new THREE.Mesh(boxGeo(hb), new THREE.MeshBasicMaterial({ color: '#f97316', transparent: true, opacity: 0.16, depthWrite: false }));
+      hm.position.set(hb.x + hb.w / 2, hb.y + hb.h / 2, hb.z + hb.d / 2);
+      root.add(hm);
+      const ln = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(hb)), new THREE.LineBasicMaterial({ color: '#ea580c' }));
+      ln.position.copy(hm.position);
+      root.add(ln);
+    }
+  }
   return root;
 }
 
+/** Shaker frames, flutes and slats on exposed finish panels. */
+function panelDecoration(b: PartBox, mat: THREE.Material, unit: Unit): THREE.Object3D {
+  const g = new THREE.Group();
+  const side = b.x < 0 ? 'left' : b.x >= unit.width ? 'right' : 'back';
+  const style = b.meta?.style;
+  // work in panel space: u along the face, v up
+  const faceLen = side === 'back' ? b.w : b.d;
+  const place = (u0: number, v0: number, ul: number, vl: number, proud: number, m: THREE.Material) => {
+    let box: PartBox;
+    if (side === 'back') box = { x: b.x + u0, y: b.y + v0, z: b.z - proud, w: ul, h: vl, d: proud };
+    else if (side === 'left') box = { x: b.x - proud, y: b.y + v0, z: b.z + faceLen - u0 - ul, w: proud, h: vl, d: ul };
+    else box = { x: b.x + b.w, y: b.y + v0, z: b.z + u0, w: proud, h: vl, d: ul };
+    g.add(boxMesh(box, m, false));
+  };
+  const dark = new THREE.MeshStandardMaterial({ color: '#000000', transparent: true, opacity: 0.35 });
+  if (style === 'shaker') {
+    const f = 70;
+    place(0, 0, f, b.h, 6, mat);
+    place(faceLen - f, 0, f, b.h, 6, mat);
+    place(f, 0, faceLen - 2 * f, f, 6, mat);
+    place(f, b.h - f, faceLen - 2 * f, f, 6, mat);
+  } else if (style === 'fluted') {
+    for (let u = 25; u < faceLen - 10; u += 30) place(u, 20, 4, b.h - 40, 0.8, dark);
+  } else if (style === 'slatted') {
+    place(0, 0, faceLen, b.h, 1, dark);
+    for (let u = 7; u + 40 <= faceLen; u += 55) place(u, 0, 40, b.h, 16, mat);
+  }
+  return g;
+}
+
+/* ------------------------------------------------------------ kitchens */
+
+export function buildRunObject(run: Run, rb: RunBuild, cat: Catalog, opt: SceneOptions & { selectedUnitId?: string | null }): THREE.Group {
+  const root = new THREE.Group();
+  for (const p of rb.pieces) {
+    const o = buildUnitObject(p.unit, p.build, cat, { ...opt, highlight: opt.selectedUnitId === p.unit.id ? opt.highlight : null });
+    o.userData.unitId = p.unit.id;
+    o.traverse((c) => (c.userData.unitId = p.unit.id));
+    const tr = legTransform(run, p.place);
+    o.position.set(tr.x, 0, tr.z);
+    o.rotation.y = tr.rotY;
+    root.add(o);
+    if (opt.selectedUnitId === p.unit.id && !opt.highlight) {
+      const yo = p.unit.mount === 'wall' ? p.unit.mountHeight : 0;
+      const hb: PartBox = { x: 0, y: yo, z: 0, w: p.unit.width, h: p.unit.height, d: p.unit.depth + 4 };
+      const ln = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(hb)), new THREE.LineBasicMaterial({ color: '#ea580c' }));
+      ln.position.set(hb.x + hb.w / 2, hb.y + hb.h / 2, hb.z + hb.d / 2);
+      o.add(ln);
+    }
+  }
+  const counter = cat.countertops.find((c) => c.id === run.countertopId);
+  for (const ep of rb.extraPlacements) {
+    const g = new THREE.Group();
+    if (ep.kind === 'counter') g.add(boxMesh(ep.box, surfaceMaterial(counter?.color ?? '#999', counter?.finish ?? 'satin')));
+    else {
+      const a = cat.appliances.find((x) => x.id === ep.applianceId);
+      if (a) g.add(applianceObject(a, ep.box));
+    }
+    const tr = legTransform(run, ep.place);
+    g.position.set(tr.x, 0, tr.z);
+    g.rotation.y = tr.rotY;
+    root.add(g);
+  }
+  if (opt.room !== false) addRoom(root, run);
+  return root;
+}
+
+function addRoom(root: THREE.Group, run: Run) {
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#e7e3dc', roughness: 0.95 }); // one-sided: invisible from outside the room
+  const H = 2700;
+  const LA = legLength(run.legs[0]);
+  const n = activeLegs(run);
+  const depth = run.baseDepth + Math.max(n > 1 ? legLength(run.legs[1]) : 0, n > 2 ? legLength(run.legs[2]) : 0, 600) + 400;
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(LA + 400, H), wallMat);
+  back.position.set(LA / 2, H / 2, -2);
+  back.receiveShadow = true;
+  root.add(back);
+  if (n > 1) {
+    const r = new THREE.Mesh(new THREE.PlaneGeometry(depth, H), wallMat);
+    r.rotation.y = -Math.PI / 2;
+    r.position.set(LA + 2, H / 2, depth / 2);
+    root.add(r);
+  }
+  if (n > 2) {
+    const l = new THREE.Mesh(new THREE.PlaneGeometry(depth, H), wallMat);
+    l.rotation.y = Math.PI / 2;
+    l.position.set(-2, H / 2, depth / 2);
+    root.add(l);
+  }
+}
+
+function addUnitRoom(root: THREE.Group, ext: ReturnType<typeof unitExtents>) {
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#e7e3dc', roughness: 0.95 }); // one-sided: invisible from outside the room
+  const w = ext.x1 - ext.x0 + 800;
+  const h = Math.max(2600, ext.y1 + 300);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
+  back.position.set((ext.x0 + ext.x1) / 2, h / 2, ext.z0 - 2);
+  back.receiveShadow = true;
+  root.add(back);
+}
+
 /* ------------------------------------------------------------ stage setup */
+
+export interface Bounds {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  z0: number;
+  z1: number;
+}
+
+export type ViewName = '3d' | 'front' | 'left' | 'right' | 'back' | 'top';
+
+const VIEW_DIRS: Record<ViewName, [number, number, number]> = {
+  '3d': [0.55, 0.38, 1],
+  front: [0, 0.08, 1],
+  left: [-1, 0.1, 0.02],
+  right: [1, 0.1, 0.02],
+  back: [0, 0.12, -1],
+  top: [0, 1, 0.02],
+};
+
+const envCache = new WeakMap<THREE.WebGLRenderer, THREE.Texture>();
 
 export function createStage(renderer: THREE.WebGLRenderer) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.0;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#eef0f3');
-  const hemi = new THREE.HemisphereLight('#ffffff', '#b9b3a8', 1.6);
+  let env = envCache.get(renderer);
+  if (!env) {
+    const pm = new THREE.PMREMGenerator(renderer);
+    env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+    pm.dispose();
+    envCache.set(renderer, env);
+  }
+  scene.environment = env;
+  scene.environmentIntensity = 0.55;
+  const hemi = new THREE.HemisphereLight('#ffffff', '#b9b3a8', 1.1);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight('#ffffff', 2.2);
   sun.castShadow = true;
@@ -196,19 +602,25 @@ export function createStage(renderer: THREE.WebGLRenderer) {
   const camera = new THREE.PerspectiveCamera(35, 1, 10, 100000);
 
   let content: THREE.Object3D | null = null;
-  const setContent = (obj: THREE.Object3D, size: { w: number; h: number; d: number }) => {
+  let center = new THREE.Vector3();
+  let radius = 1000;
+  const setContent = (obj: THREE.Object3D, b: Bounds) => {
     if (content) {
       scene.remove(content);
       content.traverse((o) => {
         if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) o.geometry.dispose();
       });
     }
-    obj.position.set(-size.w / 2, 0, -size.d / 2);
+    const cx = (b.x0 + b.x1) / 2;
+    const cz = (b.z0 + b.z1) / 2;
+    obj.position.set(-cx, 0, -cz);
     scene.add(obj);
     content = obj;
-    const r = Math.max(size.w, size.h, size.d);
+    center = new THREE.Vector3(0, (b.y0 + b.y1) / 2, 0);
+    radius = Math.sqrt((b.x1 - b.x0) ** 2 + (b.y1 - b.y0) ** 2 + (b.z1 - b.z0) ** 2) / 2;
+    const r = Math.max(b.x1 - b.x0, b.y1, b.z1 - b.z0);
     sun.position.set(r * 1.2, r * 2.2, r * 1.6);
-    sun.target.position.set(0, size.h / 2, 0);
+    sun.target.position.set(0, b.y1 / 2, 0);
     fill.position.set(-r * 1.5, r, r);
     const cam = sun.shadow.camera as THREE.OrthographicCamera;
     cam.left = cam.bottom = -r * 1.5;
@@ -218,40 +630,72 @@ export function createStage(renderer: THREE.WebGLRenderer) {
     cam.updateProjectionMatrix();
   };
 
-  const frame = (size: { w: number; h: number; d: number }, aspect: number) => {
-    const r = Math.sqrt(size.w ** 2 + size.h ** 2 + size.d ** 2) / 2;
+  const frame = (aspect: number, view: ViewName = '3d', dirOverride?: [number, number, number]) => {
     const fov = (camera.fov * Math.PI) / 180;
-    const dist = (r / Math.sin(fov / 2)) * (aspect < 1 ? 1.15 / Math.max(aspect, 0.5) : 1.05);
-    const dir = new THREE.Vector3(0.55, 0.35, 1).normalize();
-    camera.position.copy(dir.multiplyScalar(dist)).add(new THREE.Vector3(0, size.h / 2, 0));
-    camera.lookAt(0, size.h / 2, 0);
+    const dist = (radius / Math.sin(fov / 2)) * (aspect < 1 ? 1.1 / Math.max(aspect, 0.45) : 1.02);
+    const dir = new THREE.Vector3(...(view === '3d' && dirOverride ? dirOverride : VIEW_DIRS[view])).normalize();
+    camera.position.copy(dir.multiplyScalar(dist)).add(center);
+    camera.lookAt(center);
     camera.updateProjectionMatrix();
+    return center.clone();
   };
 
-  return { scene, camera, setContent, frame };
+  /** Dim daylight so LEDs glow ("night" view). */
+  const setNight = (night: boolean) => {
+    hemi.intensity = night ? 0.12 : 1.1;
+    sun.intensity = night ? 0.05 : 2.2;
+    fill.intensity = night ? 0.03 : 0.6;
+    scene.environmentIntensity = night ? 0.08 : 0.55;
+    scene.background = new THREE.Color(night ? '#1d2027' : '#eef0f3');
+  };
+
+  return { scene, camera, setContent, frame, setNight };
 }
 
-export const unitSize = (u: Unit) => ({ w: u.width, h: u.height, d: u.depth + (u.countertopId ? u.countertopOverhang : 0) });
+export function unitBounds(u: Unit, cat: Catalog): Bounds {
+  const e = unitExtents(u, cat);
+  return { x0: e.x0, x1: e.x1, y0: 0, y1: Math.max(e.y1, 300), z0: e.z0, z1: e.z1 };
+}
+
+export function runBounds(rb: RunBuild): Bounds {
+  return { x0: 0, x1: rb.size.w, y0: 0, y1: rb.size.h, z0: 0, z1: rb.size.d };
+}
 
 /* --------------------------------------------------------- still renders */
 
 let stillRenderer: THREE.WebGLRenderer | null = null;
 
-/** Render a unit to a PNG data URL (used for quotation PDFs and thumbnails). */
-export function renderUnitImage(unit: Unit, build: UnitBuild, cat: Catalog, width = 900, height = 700, mime: 'image/png' | 'image/jpeg' = 'image/png'): string | null {
+/** Look into the corner of L / U kitchens so the side walls' fronts are visible. */
+export const runViewDir = (run: Run): [number, number, number] | undefined => (run.shape === 'L' ? [-0.75, 0.6, 1] : run.shape === 'U' ? [0, 0.85, 1] : undefined);
+
+function still(obj: THREE.Object3D, bounds: Bounds, width: number, height: number, mime: string, view: ViewName, night = false, dir?: [number, number, number]): string | null {
   try {
     if (!stillRenderer) stillRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     stillRenderer.setPixelRatio(1);
     stillRenderer.setSize(width, height, false);
     const stage = createStage(stillRenderer);
     stage.scene.background = new THREE.Color('#ffffff');
-    const size = unitSize(unit);
-    stage.setContent(buildUnitObject(unit, build, cat, { showFronts: true }), size);
+    if (night) stage.setNight(true);
+    stage.setContent(obj, bounds);
     stage.camera.aspect = width / height;
-    stage.frame(size, width / height);
+    stage.frame(width / height, view, dir);
     stillRenderer.render(stage.scene, stage.camera);
     return stillRenderer.domElement.toDataURL(mime, 0.88);
   } catch {
     return null;
   }
 }
+
+/** Render a unit to an image data URL (quotation PDFs, thumbnails, attachments). */
+export function renderUnitImage(unit: Unit, build: UnitBuild, cat: Catalog, width = 900, height = 700, mime: 'image/png' | 'image/jpeg' = 'image/png', view: ViewName = '3d', night = false): string | null {
+  const obj = buildUnitObject(unit, build, cat, { showFronts: true, lightsOn: night });
+  const bounds = unitBounds(unit, cat);
+  if (unit.installType === 'builtIn' && view !== 'back') addUnitRoom(obj as THREE.Group, unitExtents(unit, cat));
+  return still(obj, bounds, width, height, mime, view, night);
+}
+
+export function renderRunImage(run: Run, rb: RunBuild, cat: Catalog, width = 1200, height = 700, mime: 'image/png' | 'image/jpeg' = 'image/png', view: ViewName = '3d', night = false): string | null {
+  return still(buildRunObject(run, rb, cat, { showFronts: true, lightsOn: night, room: view === '3d' || view === 'front' }), runBounds(rb), width, height, mime, view, night, runViewDir(run));
+}
+
+export { addUnitRoom };

@@ -2,6 +2,7 @@ import { del, get, set } from 'idb-keyval';
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { defaultCatalog, defaultSettings } from './lib/defaults';
+import { normalizeUnit } from './lib/presets';
 import { calculateQuote } from './lib/pricing';
 import type { Catalog, Counters, Invoice, Payment, Quote, Settings } from './lib/types';
 import { addDaysISO, deepClone, todayISO, uid } from './lib/util';
@@ -37,6 +38,26 @@ interface AppState extends AppData {
   resetCatalog: () => void;
 }
 
+/** Add catalog items / fields introduced by newer app versions, keeping user edits. */
+export function mergeCatalog(c: Partial<Catalog>): Catalog {
+  const d = defaultCatalog();
+  const mergeList = <T extends { id: string }>(user: T[] | undefined, def: T[]): T[] => {
+    if (!user) return def;
+    const byId = new Map(def.map((x) => [x.id, x]));
+    const out = user.map((x) => ({ ...(byId.get(x.id) ?? {}), ...x }) as T);
+    const have = new Set(out.map((x) => x.id));
+    return [...out, ...def.filter((x) => !have.has(x.id))];
+  };
+  const boards = mergeList(c.boards, d.boards).map((b) => ({ ...b, finish: b.finish ?? (/gloss/i.test(b.name) ? 'gloss' : 'matte') }));
+  const countertops = mergeList(c.countertops, d.countertops).map((t) => ({ ...t, finish: t.finish ?? 'satin' }));
+  return { boards, countertops, edging: mergeList(c.edging, d.edging), glass: mergeList(c.glass, d.glass), aluminium: mergeList(c.aluminium, d.aluminium), accessories: mergeList(c.accessories, d.accessories), appliances: mergeList(c.appliances, d.appliances) };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizeQuote(q: any): Quote {
+  return { ...q, units: (q.units ?? []).map(normalizeUnit), runs: q.runs ?? [], attachments: q.attachments ?? [], includeAppliances: q.includeAppliances ?? true };
+}
+
 const num = (prefix: string, n: number) => `${prefix}${String(n).padStart(4, '0')}`;
 
 export const useStore = create<AppState>()(
@@ -70,7 +91,10 @@ export const useStore = create<AppState>()(
           status: 'draft',
           client: { name: '', phone: '', email: '', address: '' },
           units: [],
+          runs: [],
           extras: [],
+          attachments: [],
+          includeAppliances: true,
           transportId: null,
           transportCustom: 0,
           installation: false,
@@ -103,6 +127,7 @@ export const useStore = create<AppState>()(
         if (!src) return null;
         const c = deepClone(src);
         c.units.forEach((u) => (u.id = uid('u')));
+        c.runs.forEach((r) => (r.id = uid('r')));
         return getState().createQuote({ ...c, id: uid('q'), title: `${src.title} (copy)`, status: 'draft', date: todayISO(), createdAt: Date.now() });
       },
       createInvoiceFromQuote: (quoteId) => {
@@ -110,11 +135,11 @@ export const useStore = create<AppState>()(
         const q = quotes.find((x) => x.id === quoteId);
         if (!q) return null;
         const calc = calculateQuote(q, catalog, settings);
-        const lines = calc.units.map((u) => ({
+        const lines = calc.items.map((it) => ({
           id: uid('l'),
-          description: `${u.unit.name} (${u.unit.width} × ${u.unit.height} × ${u.unit.depth} mm)`,
-          qty: u.unit.qty,
-          unitPrice: u.sellEach,
+          description: it.kind === 'unit' && it.unit ? `${it.name} (${it.unit.width} × ${it.unit.height} × ${it.unit.depth} mm)` : `${it.name} – ${it.lines[0] ?? ''}`,
+          qty: it.qty,
+          unitPrice: it.sellEach,
         }));
         const tr = settings.pricing.transportOptions.find((t) => t.id === q.transportId);
         if (calc.transport > 0) lines.push({ id: uid('l'), description: tr ? `Transport – ${tr.name}` : 'Transport', qty: 1, unitPrice: calc.transport });
@@ -192,12 +217,14 @@ export const useStore = create<AppState>()(
         setState({ counters: { ...getState().counters, receipt: n } });
         return pay.id;
       },
-      importData: (d) => setState({ settings: d.settings, catalog: d.catalog, quotes: d.quotes, invoices: d.invoices, counters: d.counters }),
+      importData: (d) => setState({ settings: d.settings, catalog: mergeCatalog(d.catalog), quotes: d.quotes.map(normalizeQuote), invoices: d.invoices, counters: d.counters }),
       resetCatalog: () => setState({ catalog: defaultCatalog() }),
     }),
     {
       name: 'woodquote-data',
-      version: 1,
+      version: 2,
+      // data is upgraded in merge() below, so older versions pass straight through
+      migrate: (state) => state as AppData,
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ settings: s.settings, catalog: s.catalog, quotes: s.quotes, invoices: s.invoices, counters: s.counters }),
       merge: (persisted, current) => {
@@ -206,6 +233,8 @@ export const useStore = create<AppState>()(
         return {
           ...current,
           ...p,
+          catalog: p.catalog ? mergeCatalog(p.catalog) : current.catalog,
+          quotes: (p.quotes ?? []).map(normalizeQuote),
           // keep new default keys when the app is updated
           settings: p.settings
             ? { company: { ...d.company, ...p.settings.company }, pricing: { ...d.pricing, ...p.settings.pricing }, doc: { ...d.doc, ...p.settings.doc }, ai: { ...d.ai, ...p.settings.ai } }

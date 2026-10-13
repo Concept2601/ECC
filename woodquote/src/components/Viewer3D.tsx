@@ -1,21 +1,53 @@
-import { useEffect, useRef } from 'react';
+import { DoorClosed, DoorOpen, Eye, EyeOff, Lightbulb, LightbulbOff } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { Catalog, Unit, UnitBuild } from '../lib/types';
-import { buildUnitObject, createStage, unitSize } from '../render/scene';
+import type { RunBuild } from '../lib/runs';
+import type { Box3, Catalog, Run, SectionRef, Unit, UnitBuild } from '../lib/types';
+import { addUnitRoom, buildRunObject, buildUnitObject, createStage, runBounds, runViewDir, unitBounds, type ViewName } from '../render/scene';
+import { unitExtents } from '../lib/generate';
 
-interface Props {
-  unit: Unit;
-  build: UnitBuild;
-  catalog: Catalog;
-  showFronts: boolean;
-  className?: string;
+export interface Pick {
+  unitId: string | null;
+  ref: SectionRef | null;
 }
 
-/** Interactive orbitable 3D render of a unit. */
-export default function Viewer3D({ unit, build, catalog, showFronts, className }: Props) {
+interface Props {
+  catalog: Catalog;
+  unit?: Unit;
+  build?: UnitBuild;
+  run?: Run;
+  runBuild?: RunBuild;
+  highlight?: SectionRef | null;
+  selectedUnitId?: string | null;
+  onPick?: (p: Pick) => void;
+  className?: string;
+  compact?: boolean;
+  /** context shown around a unit, e.g. the kitchen worktop for a run cabinet */
+  extraBoxes?: { box: Box3; color: string }[];
+}
+
+const VIEWS: { v: ViewName; label: string }[] = [
+  { v: '3d', label: '3D' },
+  { v: 'front', label: 'Front' },
+  { v: 'left', label: 'Left' },
+  { v: 'right', label: 'Right' },
+  { v: 'back', label: 'Back' },
+  { v: 'top', label: 'Top' },
+];
+
+/** Interactive orbitable 3D render. Tap a compartment to select it. */
+export default function Viewer3D({ catalog, unit, build, run, runBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const ctx = useRef<{ renderer: THREE.WebGLRenderer; stage: ReturnType<typeof createStage>; controls: OrbitControls; key: string } | null>(null);
+  const pickRef = useRef(onPick);
+  useEffect(() => {
+    pickRef.current = onPick;
+  }, [onPick]);
+  const [view, setView] = useState<ViewName>('3d');
+  const [fronts, setFronts] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [lights, setLights] = useState(false);
 
   useEffect(() => {
     const el = host.current!;
@@ -34,6 +66,34 @@ export default function Viewer3D({ unit, build, catalog, showFronts, className }
     controls.enableDamping = true;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
     ctx.current = { renderer, stage, controls, key: '' };
+
+    // tap (not drag) → pick the compartment / unit under the finger
+    let down: { x: number; y: number } | null = null;
+    const ray = new THREE.Raycaster();
+    const onDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
+    const onUp = (e: PointerEvent) => {
+      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6 || !pickRef.current) return;
+      const r = renderer.domElement.getBoundingClientRect();
+      ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), stage.camera);
+      const hits = ray.intersectObjects(stage.scene.children, true).filter((h) => h.object.type === 'Mesh' && h.object.visible);
+      for (const h of hits) {
+        let o: THREE.Object3D | null = h.object;
+        let ref: SectionRef | null = null;
+        let unitId: string | null = null;
+        while (o) {
+          ref = ref ?? (o.userData.ref as SectionRef | undefined) ?? null;
+          unitId = unitId ?? (o.userData.unitId as string | undefined) ?? null;
+          o = o.parent;
+        }
+        if (ref || unitId) {
+          pickRef.current({ unitId, ref });
+          return;
+        }
+      }
+    };
+    renderer.domElement.addEventListener('pointerdown', onDown);
+    renderer.domElement.addEventListener('pointerup', onUp);
+
     let raf = 0;
     const loop = () => {
       controls.update();
@@ -54,6 +114,8 @@ export default function Viewer3D({ unit, build, catalog, showFronts, className }
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      renderer.domElement.removeEventListener('pointerdown', onDown);
+      renderer.domElement.removeEventListener('pointerup', onUp);
       controls.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
@@ -64,17 +126,57 @@ export default function Viewer3D({ unit, build, catalog, showFronts, className }
   useEffect(() => {
     const c = ctx.current;
     if (!c) return;
-    const size = unitSize(unit);
-    c.stage.setContent(buildUnitObject(unit, build, catalog, { showFronts }), size);
-    // only re-frame the camera when overall size changes
-    const key = `${size.w}|${size.h}|${size.d}`;
+    const opt = { showFronts: fronts, openDoors: open, lightsOn: lights, highlight: highlight ?? null };
+    let obj: THREE.Object3D;
+    let bounds;
+    if (run && runBuild) {
+      obj = buildRunObject(run, runBuild, catalog, { ...opt, selectedUnitId: selectedUnitId ?? null, room: view !== 'back' && view !== 'top' });
+      bounds = runBounds(runBuild);
+    } else if (unit && build) {
+      obj = buildUnitObject(unit, build, catalog, opt);
+      for (const xb of extraBoxes ?? []) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(xb.box.w, xb.box.h, xb.box.d), new THREE.MeshStandardMaterial({ color: xb.color, roughness: 0.4 }));
+        m.position.set(xb.box.x + xb.box.w / 2, xb.box.y + xb.box.h / 2, xb.box.z + xb.box.d / 2);
+        obj.add(m);
+      }
+      if (unit.installType === 'builtIn' && view !== 'back' && view !== 'top') addUnitRoom(obj as THREE.Group, unitExtents(unit, catalog));
+      bounds = unitBounds(unit, catalog);
+    } else return;
+    c.stage.setNight(lights);
+    c.stage.setContent(obj, bounds);
+    const key = `${view}|${run?.shape ?? ''}|${Math.round(bounds.x1 - bounds.x0)}|${Math.round(bounds.y1)}|${Math.round(bounds.z1 - bounds.z0)}`;
     if (key !== c.key) {
       const el = host.current!;
-      c.stage.frame(size, (el.clientWidth || 1) / (el.clientHeight || 1));
-      c.controls.target.set(0, size.h / 2, 0);
+      const target = c.stage.frame((el.clientWidth || 1) / (el.clientHeight || 1), view, run ? runViewDir(run) : undefined);
+      c.controls.target.copy(target);
       c.key = key;
     }
-  }, [unit, build, catalog, showFronts]);
+  }, [unit, build, run, runBuild, catalog, fronts, open, lights, highlight, selectedUnitId, view, extraBoxes]);
 
-  return <div ref={host} className={`min-w-0 overflow-hidden ${className ?? 'h-72 w-full'}`} />;
+  const chip = (active: boolean) => `rounded-lg px-2 py-1 text-[11px] font-semibold ${active ? 'bg-brand-600 text-white' : 'bg-white/90 text-stone-700'}`;
+  return (
+    <div className={`relative min-w-0 overflow-hidden ${className ?? 'h-72 w-full'}`}>
+      <div ref={host} className="h-full w-full" />
+      <div className="no-scrollbar absolute left-1.5 right-1.5 top-1.5 flex gap-1 overflow-x-auto">
+        {VIEWS.map((x) => (
+          <button key={x.v} className={chip(view === x.v)} onClick={() => setView(x.v)}>
+            {x.label}
+          </button>
+        ))}
+      </div>
+      {!compact && (
+        <div className="absolute bottom-1.5 right-1.5 flex gap-1">
+          <button className={chip(!fronts)} onClick={() => setFronts(!fronts)} title={fronts ? 'Hide doors' : 'Show doors'} aria-label="Toggle doors">
+            {fronts ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+          <button className={chip(open)} onClick={() => setOpen(!open)} title="Open doors & drawers" aria-label="Open doors">
+            {open ? <DoorOpen size={14} /> : <DoorClosed size={14} />}
+          </button>
+          <button className={chip(lights)} onClick={() => setLights(!lights)} title="Lights on (night view)" aria-label="Toggle lights">
+            {lights ? <Lightbulb size={14} /> : <LightbulbOff size={14} />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -7,6 +7,7 @@ import Library from './pages/Library';
 import QuoteEditor from './pages/QuoteEditor';
 import Quotes from './pages/Quotes';
 import Reader from './pages/Reader';
+import RunDesigner from './pages/RunDesigner';
 import SettingsPage from './pages/Settings';
 import UnitDesigner from './pages/UnitDesigner';
 import { useStore } from './store';
@@ -22,7 +23,7 @@ const NAV = [
 function BottomNav() {
   const loc = useLocation();
   // hide on the full-screen designer
-  if (/\/units\//.test(loc.pathname)) return null;
+  if (/\/(units|runs)\//.test(loc.pathname)) return null;
   return (
     <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 backdrop-blur">
       <div className="mx-auto grid max-w-5xl grid-cols-5">
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="/quotes" element={<Quotes />} />
           <Route path="/quotes/:id" element={<QuoteEditor />} />
           <Route path="/quotes/:id/units/:uid" element={<UnitDesigner />} />
+          <Route path="/quotes/:id/runs/:rid" element={<RunDesigner />} />
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/invoices/:id" element={<InvoiceEditor />} />
           <Route path="/library" element={<Library />} />

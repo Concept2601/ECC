@@ -3,13 +3,13 @@ import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { jsPDF } from 'jspdf';
 import { autoTable, type RowInput } from 'jspdf-autotable';
-import { describeUnit } from '../lib/describe';
 import { elevation } from '../lib/generate';
 import type { BoardPlan } from '../lib/optimizer';
 import { accessoryPacks, balanceAfterPayment, calculateInvoice, type QuoteCalc } from '../lib/pricing';
-import type { Catalog, Invoice, Payment, Quote, Settings, Unit } from '../lib/types';
+import { activeLegs, LEG_LABELS, legLength } from '../lib/runs';
+import type { Catalog, Invoice, Payment, Quote, Run, Settings, Unit } from '../lib/types';
 import { addDaysISO, fmtDate, money } from '../lib/util';
-import { renderUnitImage } from '../render/scene';
+import { renderRunImage, renderUnitImage } from '../render/scene';
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -244,31 +244,36 @@ function signatures(doc: Doc, y: number, s: Settings, left: string, right: strin
   return y + 8;
 }
 
-/** Front elevation with dimensions drawn with vector primitives. */
-export function drawElevation(doc: Doc, u: Unit, cat: Catalog, x: number, y: number, w: number, h: number) {
-  const pad = 9;
-  const sc = Math.min((w - pad * 2) / u.width, (h - pad * 2) / u.height);
-  const ox = x + pad + (w - pad * 2 - u.width * sc) / 2;
-  const oy = y + pad + (h - pad * 2 - u.height * sc) / 2;
-  const X = (mm: number) => ox + mm * sc;
-  const Y = (mm: number) => oy + (u.height - mm) * sc; // flip y
+/** Draw one unit's front at a given scale. X0 = left edge, Yfloor = page y of the floor line. */
+export function drawUnitFront(doc: Doc, u: Unit, cat: Catalog, X0: number, Yfloor: number, sc: number, withDims = true) {
+  const yo = u.mount === 'wall' ? u.mountHeight : 0;
+  const X = (mm: number) => X0 + mm * sc;
+  const Y = (mm: number) => Yfloor - (mm + yo) * sc;
   const e = elevation(u, cat);
+  const H = u.height;
+  const W = u.width;
   doc.setLineWidth(0.25);
   doc.setDrawColor(40);
-  // countertop
-  if (u.countertopId) {
+  const th = (side: 'left' | 'right') => (u.finishPanels[side].enabled ? cat.boards.find((b) => b.id === u.finishPanels[side].materialId)?.thickness ?? 18 : 0);
+  if (u.countertopId || u.topBoardId) {
     doc.setFillColor(200, 200, 200);
-    doc.rect(X(0), Y(u.height), u.width * sc, (u.height - e.topY) * sc, 'FD');
+    const x0 = -th('left') - u.overhang.left;
+    doc.rect(X(x0), Y(H), (W + th('left') + th('right') + u.overhang.left + u.overhang.right) * sc, (H - e.topY) * sc, 'FD');
   }
-  // carcass outline
+  for (const side of ['left', 'right'] as const) {
+    if (!u.finishPanels[side].enabled) continue;
+    doc.setFillColor(215, 200, 180);
+    const y0 = u.finishPanels[side].toFloor && u.mount === 'floor' ? 0 : e.baseH;
+    doc.rect(side === 'left' ? X(-th('left')) : X(W), Y(e.topY), th(side) * sc, (e.topY - y0) * sc, 'FD');
+  }
   doc.setFillColor(250, 246, 240);
-  doc.rect(X(0), Y(e.topY), u.width * sc, (e.topY - e.baseH) * sc, 'FD');
-  if (u.base === 'plinth' && e.baseH) {
+  doc.rect(X(0), Y(e.topY), W * sc, (e.topY - e.baseH) * sc, 'FD');
+  if (u.mount === 'floor' && u.base === 'plinth' && e.baseH) {
     doc.setFillColor(225, 225, 225);
-    doc.rect(X(0), Y(e.baseH), u.width * sc, e.baseH * sc, 'FD');
-  } else if (u.base === 'legs' && e.baseH) {
+    doc.rect(X(0), Y(e.baseH), W * sc, e.baseH * sc, 'FD');
+  } else if (u.mount === 'floor' && u.base === 'legs' && e.baseH) {
     doc.setFillColor(60, 60, 60);
-    for (const lx of [40, u.width - 40]) doc.rect(X(lx) - 0.6, Y(e.baseH), 1.2, e.baseH * sc, 'F');
+    for (const lx of [40, W - 40]) doc.rect(X(lx) - 0.5, Y(e.baseH), 1, e.baseH * sc, 'F');
   }
   for (const b of e.bays) {
     const bay = u.bays[b.index];
@@ -287,37 +292,41 @@ export function drawElevation(doc: Doc, u: Unit, cat: Catalog, x: number, y: num
           const yy = y0 + ((y1 - y0) * k) / s.drawerCount;
           doc.line(x0, yy, x1, yy);
         }
-        for (let k = 0; k < s.drawerCount; k++) {
-          const cy = y0 + ((y1 - y0) * (k + 1)) / s.drawerCount - ((y1 - y0) / s.drawerCount) * 0.75;
-          doc.line((x0 + x1) / 2 - 3, cy, (x0 + x1) / 2 + 3, cy);
-        }
-      } else if (front === 'door' || front === 'glassDoor') {
-        if (front === 'glassDoor') {
+      } else if (front === 'door' || front === 'sliding') {
+        if (s.doorMaterial !== 'wood') {
           doc.setFillColor(220, 236, 242);
-          doc.rect(x0 + 1, y1 + 1, x1 - x0 - 2, y0 - y1 - 2, 'F');
+          doc.rect(x0 + 0.5, y1 + 0.5, x1 - x0 - 1, y0 - y1 - 1, 'F');
         }
-        const dw = (x1 - x0) / s.doorCount;
-        for (let k = 0; k < s.doorCount; k++) {
-          const dx0 = x0 + k * dw;
-          const dx1 = dx0 + dw;
-          if (k > 0) doc.line(dx0, y0, dx0, y1);
-          // opening triangle: apex on handle side
-          const hingeLeft = s.doorCount === 2 ? k === 0 : b.index < e.bays.length / 2;
-          doc.setLineDashPattern([0.8, 0.8], 0);
-          if (hingeLeft) {
-            doc.line(dx0, y0, dx1, (y0 + y1) / 2);
-            doc.line(dx0, y1, dx1, (y0 + y1) / 2);
-          } else {
-            doc.line(dx1, y0, dx0, (y0 + y1) / 2);
-            doc.line(dx1, y1, dx0, (y0 + y1) / 2);
-          }
-          doc.setLineDashPattern([], 0);
+        if (front === 'sliding') {
+          doc.setFontSize(Math.max(5, 9 * Math.min(1, sc * 8)));
+          doc.text(s.slide === 'left' ? '<-' : s.slide === 'right' ? '->' : '<->', (x0 + x1) / 2, (y0 + y1) / 2, { align: 'center' });
+        } else {
+          const ops = s.opening === 'pair' ? (['left', 'right'] as const) : [s.opening];
+          const dw = (x1 - x0) / ops.length;
+          ops.forEach((op, k) => {
+            const dx0 = x0 + k * dw;
+            const dx1 = dx0 + dw;
+            const ym = (y0 + y1) / 2;
+            if (k > 0) doc.line(dx0, y0, dx0, y1);
+            doc.setLineDashPattern([0.8, 0.8], 0);
+            // lines meet at the hinge side
+            if (op === 'left') (doc.line(dx1, y0, dx0, ym), doc.line(dx1, y1, dx0, ym));
+            else if (op === 'right') (doc.line(dx0, y0, dx1, ym), doc.line(dx0, y1, dx1, ym));
+            else if (op === 'up') (doc.line(dx0, y0, (dx0 + dx1) / 2, y1), doc.line(dx1, y0, (dx0 + dx1) / 2, y1));
+            else (doc.line(dx0, y1, (dx0 + dx1) / 2, y0), doc.line(dx1, y1, (dx0 + dx1) / 2, y0));
+            doc.setLineDashPattern([], 0);
+          });
         }
-      } else if (front === 'flap') {
-        doc.setLineDashPattern([0.8, 0.8], 0);
-        doc.line(x0, y1, (x0 + x1) / 2, y0);
-        doc.line(x1, y1, (x0 + x1) / 2, y0);
-        doc.setLineDashPattern([], 0);
+      } else if (front === 'appliance') {
+        doc.setFillColor(40, 40, 44);
+        doc.rect(x0 + 0.4, y1 + 0.4, x1 - x0 - 0.8, y0 - y1 - 0.8, 'F');
+        const a = cat.appliances.find((x) => x.id === s.applianceId);
+        if (a && x1 - x0 > 8) {
+          doc.setTextColor(230);
+          doc.setFontSize(Math.max(4, Math.min(7, (x1 - x0) * 0.6)));
+          doc.text(a.category === 'fridge' ? 'Fridge' : a.category === 'dishwasher' ? 'DW' : a.category === 'microwave' ? 'MW' : a.category === 'oven' ? 'Oven' : a.category, (x0 + x1) / 2, (y0 + y1) / 2, { align: 'center' });
+          doc.setTextColor(0);
+        }
       } else {
         for (let k = 0; k < s.shelves; k++) {
           const yy = y0 + ((y1 - y0) * (k + 1)) / (s.shelves + 1);
@@ -325,7 +334,6 @@ export function drawElevation(doc: Doc, u: Unit, cat: Catalog, x: number, y: num
         }
       }
       if (s.hangingRail && (front === 'open' || u.sliding.enabled)) {
-        doc.setDrawColor(80);
         doc.setLineWidth(0.6);
         doc.line(x0 + 1, y1 + 3, x1 - 1, y1 + 3);
         doc.setLineWidth(0.25);
@@ -333,29 +341,104 @@ export function drawElevation(doc: Doc, u: Unit, cat: Catalog, x: number, y: num
       doc.setDrawColor(40);
     }
   }
+  // hob / sink on top
+  for (const t of u.topAppliances) {
+    const a = cat.appliances.find((x) => x.id === t.applianceId);
+    const b = e.bays[Math.min(t.bay, e.bays.length - 1)];
+    if (!a || !b) continue;
+    doc.setFillColor(a.category === 'sink' ? 150 : 20, a.category === 'sink' ? 155 : 20, a.category === 'sink' ? 160 : 22);
+    const cx = b.x + b.w / 2;
+    doc.rect(X(cx - a.width / 2), Y(H) - 1.2, a.width * sc, 1.2, 'F');
+  }
   if (u.sliding.enabled) {
-    doc.setDrawColor(...hexToRgb('#8a5a2b'));
+    doc.setDrawColor(138, 90, 43);
     doc.setLineDashPattern([2, 1], 0);
     const p = u.sliding.panels;
-    for (let k = 1; k < p; k++) doc.line(X((u.width * k) / p), Y(e.topY), X((u.width * k) / p), Y(e.baseH));
+    for (let k = 1; k < p; k++) doc.line(X((W * k) / p), Y(e.topY), X((W * k) / p), Y(e.baseH));
     doc.setLineDashPattern([], 0);
     doc.setDrawColor(40);
   }
-  // dimensions
+  if (!withDims) return;
   doc.setDrawColor(150);
   doc.setFontSize(7);
   doc.setTextColor(80);
-  const dy = Y(0) + 4;
-  doc.line(X(0), dy, X(u.width), dy);
+  const dy = Yfloor + 4;
+  doc.line(X(0), dy, X(W), dy);
   doc.line(X(0), dy - 1.2, X(0), dy + 1.2);
-  doc.line(X(u.width), dy - 1.2, X(u.width), dy + 1.2);
-  doc.text(`${u.width}`, (X(0) + X(u.width)) / 2, dy + 3.2, { align: 'center' });
+  doc.line(X(W), dy - 1.2, X(W), dy + 1.2);
+  doc.text(`${W}`, (X(0) + X(W)) / 2, dy + 3.2, { align: 'center' });
   const dx = X(0) - 4;
-  doc.line(dx, Y(0), dx, Y(u.height));
+  doc.line(dx, Y(0), dx, Y(H));
   doc.line(dx - 1.2, Y(0), dx + 1.2, Y(0));
-  doc.line(dx - 1.2, Y(u.height), dx + 1.2, Y(u.height));
-  doc.text(`${u.height}`, dx - 1.5, (Y(0) + Y(u.height)) / 2, { angle: 90, align: 'center' });
-  doc.text(`D ${u.depth}`, X(u.width), Y(u.height) - 1.5, { align: 'right' });
+  doc.line(dx - 1.2, Y(H), dx + 1.2, Y(H));
+  doc.text(`${H}`, dx - 1.5, (Y(0) + Y(H)) / 2, { angle: 90, align: 'center' });
+  doc.text(`D ${u.depth}`, X(W), Y(H) - 1.5, { align: 'right' });
+  if (yo) doc.text(`${yo} AFF`, X(W) + 1.5, Y(0) + 2);
+  doc.setTextColor(0);
+}
+
+/** Front elevation of one unit fitted into a box. */
+export function drawElevation(doc: Doc, u: Unit, cat: Catalog, x: number, y: number, w: number, h: number) {
+  const pad = 9;
+  const yo = u.mount === 'wall' ? u.mountHeight : 0;
+  const totalH = u.height + yo;
+  const sc = Math.min((w - pad * 2) / (u.width + 80), (h - pad * 2) / totalH);
+  const ox = x + pad + (w - pad * 2 - u.width * sc) / 2;
+  const floor = y + h - pad;
+  doc.setDrawColor(200);
+  doc.line(x + 3, floor, x + w - 3, floor);
+  drawUnitFront(doc, u, cat, ox, floor, sc);
+}
+
+/** Front elevation of one wall of a kitchen run. */
+export function drawRunLeg(doc: Doc, run: Run, leg: number, cat: Catalog, x: number, y: number, w: number, h: number) {
+  const mods = run.legs[leg];
+  const L = Math.max(600, legLength(mods));
+  const H = Math.max(run.tallHeight, run.wallBottom + run.wallHeight);
+  const pad = 9;
+  const sc = Math.min((w - pad * 2) / L, (h - pad * 2) / H);
+  const ox = x + pad + (w - pad * 2 - L * sc) / 2;
+  const floor = y + h - pad;
+  doc.setDrawColor(200);
+  doc.line(x + 3, floor, x + w - 3, floor);
+  let s = 0;
+  for (const m of mods) {
+    const X0 = ox + s * sc;
+    if (m.base) drawUnitFront(doc, m.base, cat, X0, floor, sc, false);
+    if (m.wall) drawUnitFront(doc, m.wall, cat, X0, floor, sc, false);
+    if (m.kind === 'gap') {
+      doc.setDrawColor(160);
+      doc.setLineDashPattern([1, 1], 0);
+      const a = cat.appliances.find((p) => p.id === m.gapApplianceId);
+      const gh = a ? a.height : run.counterHeight;
+      doc.rect(X0 + ((m.width - (a?.width ?? m.width)) / 2) * sc, floor - gh * sc, (a?.width ?? m.width) * sc, gh * sc);
+      doc.setLineDashPattern([], 0);
+      doc.setFontSize(6);
+      doc.text(m.gapLabel || 'Space', X0 + (m.width * sc) / 2, floor - (gh * sc) / 2, { align: 'center' });
+    }
+    if (m.hoodId) {
+      doc.setFillColor(181, 185, 190);
+      const hy = floor - (run.wallBottom + (m.wall ? 0 : 100)) * sc;
+      doc.triangle(X0 + m.width * 0.15 * sc, hy, X0 + m.width * 0.85 * sc, hy, X0 + (m.width * sc) / 2, hy - 250 * sc, 'F');
+    }
+    doc.setFontSize(6);
+    doc.setTextColor(90);
+    doc.text(`${m.width}`, X0 + (m.width * sc) / 2, floor + 3, { align: 'center' });
+    doc.setTextColor(0);
+    s += m.width;
+  }
+  const counter = cat.countertops.find((c) => c.id === run.countertopId);
+  if (counter && mods.length) {
+    doc.setFillColor(60, 60, 60);
+    let s2 = 0;
+    for (const m of mods) {
+      if (m.kind === 'base') doc.rect(ox + s2 * sc, floor - run.counterHeight * sc, m.width * sc, counter.thickness * sc, 'F');
+      s2 += m.width;
+    }
+  }
+  doc.setFontSize(7);
+  doc.setTextColor(80);
+  doc.text(`${LEG_LABELS[leg]} – ${L}mm`, x + 3, y + 5);
   doc.setTextColor(0);
 }
 
@@ -373,26 +456,21 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
 
   const body: RowInput[] = [];
   if (s.doc.quoteDetail === 'units') {
-    calc.units.forEach((u, i) => {
-      body.push([
-        String(i + 1),
-        { content: `${u.unit.name}\n${describeUnit(u.unit, cat).join('\n')}`, styles: { fontSize: 8 } },
-        String(u.unit.qty),
-        fm(u.sellEach),
-        fm(u.sell),
-      ]);
+    calc.items.forEach((it, i) => {
+      body.push([String(i + 1), { content: `${it.name}\n${it.lines.join('\n')}`, styles: { fontSize: 8 } }, String(it.qty), fm(it.sellEach), fm(it.sell)]);
     });
   } else {
     const mk = 1 + q.markupPercent / 100;
     let i = 1;
-    calc.units.forEach((u) => body.push([String(i++), { content: `${u.unit.name}\n${describeUnit(u.unit, cat).join('\n')}`, styles: { fontSize: 8 } }, String(u.unit.qty), '', '']));
-    for (const l of calc.costLines) body.push([String(i++), `${l.group}: ${l.description}`, `${l.qty} ${l.unit}`, fm(l.unitPrice * mk), fm(l.total * mk)]);
+    calc.items.forEach((it) => body.push([String(i++), { content: `${it.name}\n${it.lines.join('\n')}`, styles: { fontSize: 8 } }, String(it.qty), '', '']));
+    for (const l of calc.costLines) if (l.total > 0) body.push([String(i++), `${l.group}: ${l.description}`, `${l.qty} ${l.unit}`, fm(l.unitPrice * mk), fm(l.total * mk)]);
     if (calc.labour) body.push([String(i++), 'Labour & manufacturing', '1', fm(calc.labour * mk), fm(calc.labour * mk)]);
     if (calc.installation) body.push([String(i++), 'Installation', '1', fm(calc.installation * mk), fm(calc.installation * mk)]);
   }
   const tr = s.pricing.transportOptions.find((t) => t.id === q.transportId);
   if (calc.transport) body.push([String(body.length + 1), tr ? `Transport – ${tr.name}` : 'Transport', '1', fm(calc.transport), fm(calc.transport)]);
   for (const e of q.extras) body.push([String(body.length + 1), e.description, String(e.qty), fm(e.unitPrice), fm(e.qty * e.unitPrice)]);
+  const supplied = calc.costLines.filter((l) => l.group === 'Appliances' && l.total === 0);
 
   autoTable(doc, {
     startY: y,
@@ -413,6 +491,7 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
   if (q.applyTax) rows.push([`${s.pricing.taxLabel} (${s.pricing.taxRate}%)`, fm(calc.tax)]);
   rows.push(['TOTAL', fm(calc.total), true]);
   y = totalsBlock(doc, rows, y, s);
+  if (supplied.length) y = textSection(doc, 'Appliances supplied by client', supplied.map((l) => `• ${l.description} × ${l.qty}`).join('\n'), y + 2, s);
 
   y = textSection(doc, 'Terms & conditions', s.doc.quoteTerms, y + 2, s);
   y = textSection(doc, 'Banking details', s.doc.bankDetails, y, s);
@@ -426,23 +505,47 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
     doc.setFontSize(13);
     doc.text('Design drawings', M, y + 2);
     y += 8;
-    for (const u of calc.units) {
+    const both = s.doc.showRenders && s.doc.showElevations;
+    for (const it of calc.items) {
+      const isRun = it.kind === 'run' && it.run && it.runBuild;
       const blockH = 82;
       y = ensureSpace(doc, y, blockH + 8, s);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-      doc.text(`${u.unit.name}${u.unit.qty > 1 ? ` × ${u.unit.qty}` : ''}`, M, y);
+      doc.text(`${it.name}${it.qty > 1 ? ` × ${it.qty}` : ''}`, M, y);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.setTextColor(110);
-      doc.text(`${u.unit.width} × ${u.unit.height} × ${u.unit.depth} mm`, PAGE_W - M, y, { align: 'right' });
+      doc.text(it.unit ? `${it.unit.width} × ${it.unit.height} × ${it.unit.depth} mm` : it.lines[0] ?? '', PAGE_W - M, y, { align: 'right' });
       doc.setTextColor(0);
       y += 3;
-      const both = s.doc.showRenders && s.doc.showElevations;
-      const colW = both ? (PAGE_W - 2 * M - 6) / 2 : PAGE_W - 2 * M;
       doc.setDrawColor(225);
-      if (s.doc.showRenders) {
-        const img = renderUnitImage(u.unit, u.build, cat, 900, 700, 'image/jpeg');
+      if (isRun) {
+        // full-width render, then one elevation per wall
+        if (s.doc.showRenders) {
+          const img = renderRunImage(it.run!, it.runBuild!, cat, 1400, 760, 'image/jpeg');
+          doc.roundedRect(M, y, PAGE_W - 2 * M, blockH, 2, 2, 'S');
+          if (img) {
+            const ih = blockH - 4;
+            const iw = Math.min(PAGE_W - 2 * M - 4, (ih * 1400) / 760);
+            doc.addImage(img, 'JPEG', M + (PAGE_W - 2 * M - iw) / 2, y + 2, iw, ih);
+          }
+          y += blockH + 4;
+        }
+        if (s.doc.showElevations) {
+          for (let leg = 0; leg < activeLegs(it.run!); leg++) {
+            y = ensureSpace(doc, y, 64, s);
+            doc.roundedRect(M, y, PAGE_W - 2 * M, 60, 2, 2, 'S');
+            drawRunLeg(doc, it.run!, leg, cat, M, y, PAGE_W - 2 * M, 60);
+            y += 64;
+          }
+        }
+        y += 5;
+        continue;
+      }
+      const colW = both ? (PAGE_W - 2 * M - 6) / 2 : PAGE_W - 2 * M;
+      if (s.doc.showRenders && it.unit && it.build) {
+        const img = renderUnitImage(it.unit, it.build, cat, 900, 700, 'image/jpeg');
         doc.roundedRect(M, y, colW, blockH, 2, 2, 'S');
         if (img) {
           const ih = blockH - 4;
@@ -450,12 +553,46 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
           doc.addImage(img, 'JPEG', M + (colW - iw) / 2, y + 2, iw, ih);
         }
       }
-      if (s.doc.showElevations) {
+      if (s.doc.showElevations && it.unit) {
         const ex = both ? M + colW + 6 : M;
         doc.roundedRect(ex, y, colW, blockH, 2, 2, 'S');
-        drawElevation(doc, u.unit, cat, ex, y, colW, blockH);
+        drawElevation(doc, it.unit, cat, ex, y, colW, blockH);
       }
       y += blockH + 9;
+    }
+  }
+
+  // attached designs
+  const att = q.attachments.filter((a) => a.includeInPdf);
+  for (let i = 0; i < att.length; i++) {
+    const a = att[i];
+    const slot = i % 2;
+    if (slot === 0) {
+      doc.addPage();
+      y = drawMiniHeader(doc, s);
+      if (i === 0) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('Attached designs', M, y + 2);
+        y += 6;
+      }
+    }
+    try {
+      const props = doc.getImageProperties(a.dataUrl);
+      const maxW = PAGE_W - 2 * M;
+      const maxH = 112;
+      const r = Math.min(maxW / props.width, maxH / props.height);
+      const w = props.width * r;
+      const h = props.height * r;
+      doc.addImage(a.dataUrl, imgFormat(a.dataUrl), M + (maxW - w) / 2, y + 2, w, h);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(80);
+      doc.text(a.caption || a.name, PAGE_W / 2, y + h + 7, { align: 'center' });
+      doc.setTextColor(0);
+      y += maxH + 14;
+    } catch {
+      /* skip unreadable image */
     }
   }
   drawFooters(doc, s);
@@ -499,19 +636,20 @@ export function workshopPdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog
   y += 4;
   const board = (id: string | null) => cat.boards.find((b) => b.id === id);
 
-  for (const u of calc.units) {
+  for (const u of calc.entries) {
+    if (!u.build.parts.length && !u.build.hardware.length) continue;
     const rows: RowInput[] = u.build.parts.map((p) => [
       p.name,
       String(p.length),
       String(p.width),
       String(p.thickness),
-      String(p.qty * u.unit.qty),
+      String(p.qty * u.qty),
       p.kind === 'board' ? board(p.materialId)?.name ?? '' : p.kind === 'glass' ? cat.glass.find((g) => g.id === p.materialId)?.name ?? 'Glass' : cat.countertops.find((c) => c.id === p.materialId)?.name ?? '',
-      p.edgeLength ? (p.edgeLength * p.qty * u.unit.qty).toFixed(2) : '',
+      p.edgeLength ? (p.edgeLength * p.qty * u.qty).toFixed(2) : '',
     ]);
     autoTable(doc, {
       startY: y + 3,
-      head: [[{ content: `${u.unit.name} × ${u.unit.qty}   (${u.unit.width}×${u.unit.height}×${u.unit.depth})`, colSpan: 7 }], ['Part', 'Length', 'Width', 'Thk', 'Qty', 'Material', 'Edge m']],
+      head: [[{ content: `${u.name} × ${u.qty}${u.unit ? `   (${u.unit.width}×${u.unit.height}×${u.unit.depth})` : ''}`, colSpan: 7 }], ['Part', 'Length', 'Width', 'Thk', 'Qty', 'Material', 'Edge m']],
       body: rows,
       theme: 'grid',
       headStyles: { fillColor: hexToRgb(s.doc.accentColor), fontSize: 8 },
@@ -524,7 +662,7 @@ export function workshopPdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog
     y = lastY(doc, y) + 2;
     const hw: RowInput[] = u.build.hardware.map((h) => {
       const a = cat.accessories.find((x) => x.id === h.accessoryId);
-      return [a ? `${a.name} ${a.size}` : h.accessoryId, `${+(h.qty * u.unit.qty).toFixed(2)} ${a?.unit ?? ''}`, h.reason];
+      return [a ? `${a.name} ${a.size}` : h.accessoryId, `${+(h.qty * u.qty).toFixed(2)} ${a?.unit ?? ''}`, h.reason];
     });
     if (hw.length) {
       autoTable(doc, {

@@ -8,13 +8,17 @@ import type { Catalog, FrontKind, ProductType, Unit } from '../lib/types';
 import { uid } from '../lib/util';
 
 const PRODUCT_TYPES = ['tv_stand', 'kitchen_base', 'kitchen_wall', 'kitchen_tall', 'island', 'built_in', 'wardrobe', 'sliding_wardrobe', 'bookshelf', 'vanity', 'custom'] as const;
-const FRONTS = ['open', 'door', 'glassDoor', 'drawer', 'flap'] as const;
+const FRONTS = ['open', 'door', 'glassDoor', 'drawer', 'flap', 'sliding', 'appliance'] as const;
+const APPLIANCE_KINDS = ['none', 'oven', 'microwave', 'dishwasher', 'fridge', 'washer', 'wineCooler'] as const;
+const TOP_KINDS = ['gasHob', 'electricHob', 'inductionHob', 'sink', 'doubleSink'] as const;
 
 const SectionZ = z.object({
   heightRatio: z.number().describe('relative height of this compartment within its bay'),
   front: z.enum(FRONTS),
   doorCount: z.number().int().describe('1 or 2 doors for door/glassDoor fronts'),
   drawerCount: z.number().int().describe('number of stacked drawers when front = drawer'),
+  opening: z.enum(['left', 'right', 'pair', 'up', 'down']).describe('hinge side for doors: left / right / pair; up = lift-up flap, down = drop-down flap'),
+  appliance: z.enum(APPLIANCE_KINDS).describe('appliance housed in the compartment when front = appliance'),
   shelves: z.number().int().describe('adjustable shelves inside this compartment'),
   hangingRail: z.boolean(),
 });
@@ -30,6 +34,8 @@ const ItemZ = z.object({
   baseHeight: z.number().describe('plinth or leg height in mm, 0 when none'),
   countertop: z.boolean(),
   countertopOverhang: z.number().describe('mm, front overhang or island seating overhang'),
+  mount: z.enum(['floor', 'wall']),
+  topAppliances: z.array(z.enum(TOP_KINDS)).describe('hobs / sinks set into the countertop, left to right'),
   slidingDoors: z.boolean(),
   slidingPanels: z.number().int(),
   slidingStyle: z.enum(['board', 'glass', 'mirror']),
@@ -51,7 +57,7 @@ export type ReadingItem = z.infer<typeof ItemZ>;
 
 const SYSTEM = `You are an experienced cabinet maker and estimator. You read furniture and joinery drawings — architectural plans, elevations, hand sketches, photos of existing furniture and 3D renders — and convert them into a structured list of cabinet units for a quotation app.
 
-Model every piece as one or more rectangular carcass units. Each unit is split into vertical bays (left → right). Each bay is split into compartments stacked bottom → top. Each compartment has a front: open, door (1 or 2), glassDoor (aluminium-framed glass, 1 or 2), drawer (with a drawer count) or flap (lift-up). Compartments can also have adjustable shelves and a wardrobe hanging rail.
+Model every piece as one or more rectangular carcass units. Each unit is split into vertical bays (left → right). Each bay is split into compartments stacked bottom → top. Each compartment has a front: open, door (1 or 2, with opening direction), glassDoor (aluminium-framed glass), drawer (with a drawer count), flap (lift-up), sliding, or appliance (oven, microwave, dishwasher, fridge, washer, wine cooler). Compartments can also have adjustable shelves and a wardrobe hanging rail. Note hobs and sinks on countertops, and wall-hung units (mount = wall).
 
 Guidance:
 - Use dimensions written on the drawing whenever present (convert cm/m/inches to mm). If there is a scale bar or known reference, use it. Otherwise use standard sizes: kitchen base 870-900 H incl. top × 560-600 D, wall cabinets 720 H × 320 D, tall units 2100-2400 H, wardrobes 2400 H × 600 D, TV stands 450-550 H × 400 D, vanities 850 H × 480 D. Say what you estimated in assumptions.
@@ -169,25 +175,36 @@ export function itemToUnit(item: ReadingItem, cat: Catalog): Unit {
   u.baseHeight = item.base === 'none' ? 0 : clampInt(item.baseHeight || 100, 20, 400);
   if (item.countertop && !u.countertopId) u.countertopId = cat.countertops[0]?.id ?? null;
   if (!item.countertop) u.countertopId = null;
-  u.countertopOverhang = clampInt(item.countertopOverhang, 0, 600);
+  u.overhang = u.type === 'island' ? { front: 20, back: clampInt(item.countertopOverhang, 0, 600), left: 0, right: 0 } : { front: clampInt(item.countertopOverhang, 0, 600), back: 0, left: 0, right: 0 };
+  u.mount = item.mount === 'wall' ? 'wall' : 'floor';
   u.sliding = { enabled: item.slidingDoors, panels: clampInt(item.slidingPanels || 2, 2, 6), style: item.slidingStyle };
   u.carcassMaterialId = matchBoard(cat, item.carcassFinish, u.carcassMaterialId);
   u.frontMaterialId = matchBoard(cat, item.frontFinish, u.frontMaterialId);
   u.notes = item.confidence === 'low' ? `Check: ${item.notes}`.trim() : '';
+  const applianceFor = (k: string) => cat.appliances.find((a) => a.category === k && a.placement !== 'top')?.id ?? null;
   if (item.bays.length) {
     u.bays = item.bays.slice(0, 12).map((b) => ({
       id: uid('b'),
       size: Math.max(0.05, b.widthRatio || 1),
-      sections: (b.sections.length ? b.sections : [{ heightRatio: 1, front: 'door' as FrontKind, doorCount: 1, drawerCount: 1, shelves: 0, hangingRail: false }]).slice(0, 10).map((s) => ({
-        ...sec(),
-        size: Math.max(0.05, s.heightRatio || 1),
-        front: (FRONTS as readonly string[]).includes(s.front) ? s.front : 'open',
-        doorCount: s.doorCount >= 2 ? 2 : 1,
-        drawerCount: clampInt(s.drawerCount || 1, 1, 8),
-        shelves: clampInt(s.shelves, 0, 12),
-        hangingRail: !!s.hangingRail,
-      })),
+      sections: (b.sections.length ? b.sections : [{ heightRatio: 1, front: 'door' as const, doorCount: 1, drawerCount: 1, opening: 'left' as const, appliance: 'none' as const, shelves: 0, hangingRail: false }]).slice(0, 10).map((s) => {
+        const f = s.front as string;
+        return sec({
+          size: Math.max(0.05, s.heightRatio || 1),
+          front: f === 'glassDoor' || f === 'flap' ? 'door' : (FRONTS as readonly string[]).includes(f) ? (f as FrontKind) : 'open',
+          doorMaterial: f === 'glassDoor' ? 'glass' : 'wood',
+          opening: f === 'flap' ? 'up' : s.doorCount >= 2 ? 'pair' : s.opening ?? 'left',
+          drawerCount: clampInt(s.drawerCount || 1, 1, 8),
+          shelves: clampInt(s.shelves, 0, 12),
+          hangingRail: !!s.hangingRail,
+          applianceId: f === 'appliance' && s.appliance && s.appliance !== 'none' ? applianceFor(s.appliance) : null,
+        });
+      }),
     }));
   }
+  const topIds: Record<string, string> = { gasHob: 'ap-hob-gas4', electricHob: 'ap-hob-elec4', inductionHob: 'ap-hob-ind4', sink: 'ap-sink-single', doubleSink: 'ap-sink-double' };
+  u.topAppliances = (item.topAppliances ?? [])
+    .map((k, i) => ({ id: uid('ta'), applianceId: topIds[k], bay: Math.min(i, u.bays.length - 1) }))
+    .filter((t) => cat.appliances.some((a) => a.id === t.applianceId));
+  if (u.topAppliances.length && !u.countertopId) u.countertopId = cat.countertops[0]?.id ?? null;
   return u;
 }

@@ -3,7 +3,8 @@ import { defaultCatalog, defaultSettings } from '../defaults';
 import { buildUnit, hingesForDoor } from '../generate';
 import { packBars, packSheets, priceBoardPlan } from '../optimizer';
 import { balanceAfterPayment, calculateInvoice, calculateQuote } from '../pricing';
-import { createUnit, PRODUCT_ORDER } from '../presets';
+import { createUnit, normalizeUnit, PRODUCT_ORDER, sec } from '../presets';
+import { createRun, syncRun } from '../runs';
 import type { Invoice, Quote } from '../types';
 import { sum } from '../util';
 
@@ -12,7 +13,7 @@ const settings = defaultSettings();
 
 const quote = (units = [createUnit('wardrobe')]): Quote => ({
   id: 'q', number: 'QUO-1', title: 't', date: '2026-01-01', status: 'draft',
-  client: { name: 'A', phone: '', email: '', address: '' }, units, extras: [{ id: 'e', description: 'x', qty: 2, unitPrice: 10 }],
+  client: { name: 'A', phone: '', email: '', address: '' }, units, runs: [], attachments: [], includeAppliances: true, extras: [{ id: 'e', description: 'x', qty: 2, unitPrice: 10 }],
   transportId: 'tr-local', transportCustom: 0, installation: true, markupPercent: 30,
   discountType: 'percent', discountValue: 10, applyTax: true, notes: '', sourceImage: null, createdAt: 0, updatedAt: 0,
 });
@@ -28,19 +29,19 @@ describe('generator', () => {
 
   it('counts hinges, runners and rails for a wardrobe', () => {
     const b = buildUnit(createUnit('wardrobe'), cat, settings.pricing);
-    const hinge = b.hardware.find((h) => h.accessoryId === 'h-softclose');
+    const hinge = b.hardware.find((h) => h.accessoryId === 'h-soft-overlay');
     expect(hinge).toBeTruthy();
     // 3 tall doors (4 hinges each @ >1600mm), 3 small top doors (2), 1 mid door (3)
     expect(hinge!.qty).toBeGreaterThanOrEqual(12);
-    expect(b.hardware.some((h) => h.accessoryId.startsWith('r-bb'))).toBe(true);
+    expect(b.hardware.some((h) => h.accessoryId.startsWith('r-sc'))).toBe(true);
     expect(b.hardware.some((h) => h.accessoryId === 'rl-oval')).toBe(true);
   });
 
   it('auto sizes runners to depth', () => {
     const u = createUnit('vanity'); // depth 480
     const b = buildUnit(u, cat, settings.pricing);
-    const runner = b.hardware.find((h) => h.accessoryId.startsWith('r-bb'));
-    expect(runner!.accessoryId).toBe('r-bb400');
+    const runner = b.hardware.find((h) => h.accessoryId.startsWith('r-sc'));
+    expect(runner!.accessoryId).toBe('r-sc400');
   });
 
   it('adds rollers and tracks for sliding doors', () => {
@@ -57,7 +58,7 @@ describe('generator', () => {
   it('applies hardware overrides', () => {
     const u = createUnit('kitchen_base');
     const b0 = buildUnit(u, cat, settings.pricing);
-    const k = b0.hardware.find((h) => h.accessoryId === 'h-softclose')!.key;
+    const k = b0.hardware.find((h) => h.accessoryId === 'h-soft-overlay')!.key;
     u.hardwareOverrides[k] = 9;
     expect(buildUnit(u, cat, settings.pricing).hardware.find((h) => h.key === k)!.qty).toBe(9);
   });
@@ -68,7 +69,7 @@ describe('optimizer', () => {
     const pieces = Array.from({ length: 5 }, (_, i) => ({ id: `${i}`, label: 'p', length: 1200, width: 450, canRotate: true }));
     const plan = packSheets(pieces, 2440, 1220, { kerf: 4, trim: 10, minOffcut: 200, mode: 'guillotine' });
     expect(plan.sheets.length).toBe(1);
-    const priced = priceBoardPlan(cat.boards[2], plan, 'fullSheets');
+    const priced = priceBoardPlan(cat.boards.find((b) => b.id === 'b-mdf18')!, plan, 'fullSheets');
     expect(priced.fullSheetsCost).toBe(45);
     expect(priced.usedCost + priced.offcutValue + priced.wasteCost).toBeCloseTo(45);
     expect(priced.wasteCost).toBeGreaterThan(0);
@@ -114,7 +115,7 @@ describe('pricing', () => {
     const c = calculateQuote(q, cat, settings);
     const linesTotal = sum(c.costLines.map((l) => l.total));
     expect(c.materialsCost).toBeCloseTo(linesTotal, 4);
-    expect(sum(c.units.map((u) => u.sell))).toBeCloseTo(c.unitsSell, 4);
+    expect(sum(c.items.map((u) => u.sell))).toBeCloseTo(c.unitsSell, 4);
     expect(c.subtotal).toBeCloseTo(c.unitsSell + 30 + 20, 1);
     expect(c.discount).toBeCloseTo(c.subtotal * 0.1, 1);
     expect(c.total).toBeCloseTo((c.subtotal - c.discount) * 1.15, 1);
@@ -137,5 +138,108 @@ describe('pricing', () => {
     expect(c.balance).toBe(160);
     expect(c.status).toBe('deposit paid');
     expect(balanceAfterPayment(inv, settings, 'p1').balance).toBe(360);
+  });
+});
+
+describe('new design features', () => {
+  const pr = settings.pricing;
+  it('door opening, fit and glass options drive hinges', () => {
+    const u = createUnit('custom');
+    u.bays[0].sections = [sec({ front: 'door', opening: 'pair', fit: 'inset', size: 1 }), sec({ front: 'door', doorMaterial: 'frameless', opening: 'up', size: 1 })];
+    const b = buildUnit(u, cat, pr);
+    expect(b.hardware.find((h) => h.accessoryId === 'h-soft-inset')?.qty).toBe(4);
+    expect(b.hardware.some((h) => h.accessoryId === 'h-glass')).toBe(true);
+    expect(b.hardware.some((h) => h.accessoryId === 'st-flap')).toBe(true);
+    expect(b.parts.some((p) => p.name.includes('frameless'))).toBe(true);
+    const doors = b.parts.filter((p) => p.role === 'door').flatMap((p) => p.boxes);
+    expect(doors.map((d) => d.meta?.hinge).sort()).toEqual(['left', 'right']);
+  });
+
+  it('sliding fronts open left / right / bypass', () => {
+    const u = createUnit('custom');
+    u.bays[0].sections = [sec({ front: 'sliding', slide: 'bypass' })];
+    const b = buildUnit(u, cat, pr);
+    const panels = b.parts.filter((p) => p.name === 'Sliding door').flatMap((p) => p.boxes);
+    expect(panels.map((p) => p.meta?.slide).sort()).toEqual(['left', 'right']);
+  });
+
+  it('adds overhang, kick boards on every side and finish panels', () => {
+    const u = createUnit('island');
+    const b = buildUnit(u, cat, pr);
+    const top = b.parts.find((p) => p.name === 'Countertop')!;
+    const fpT = 18;
+    expect(top.length).toBe(u.width + 2 * fpT + u.overhang.left + u.overhang.right);
+    expect(top.width).toBe(u.depth + fpT + u.overhang.front + u.overhang.back);
+    expect(b.parts.filter((p) => p.name.startsWith('Kick board')).length).toBe(4);
+    expect(b.parts.filter((p) => p.name.startsWith('Finish panel')).length).toBe(3);
+    expect(b.applianceList.some((a) => a.applianceId === 'ap-hob-ind4')).toBe(true);
+    expect(b.hardware.some((h) => h.accessoryId === 'sv-cutout')).toBe(true);
+    expect(b.hardware.some((h) => h.accessoryId === 'in-bin')).toBe(true);
+  });
+
+  it('lighting adds strips, driver and sensors with colour temperature', () => {
+    const u = createUnit('wardrobe');
+    const b = buildUnit(u, cat, pr);
+    expect(b.lights.length).toBe(3);
+    expect(b.lights[0].color).toMatch(/^#/);
+    expect(b.hardware.some((h) => h.accessoryId === 'lt-driver')).toBe(true);
+    expect(b.hardware.find((h) => h.accessoryId === 'lt-profile')!.qty).toBeGreaterThan(1.5);
+  });
+
+  it('wall hung units are lifted, floor units can sit directly on the floor', () => {
+    const w = buildUnit(createUnit('kitchen_wall'), cat, pr);
+    expect(Math.min(...w.parts.flatMap((p) => p.boxes.map((b) => b.y)))).toBeGreaterThanOrEqual(1450);
+    const f = createUnit('kitchen_base');
+    f.base = 'none';
+    const fb = buildUnit(f, cat, pr);
+    expect(fb.parts.some((p) => p.role === 'plinth')).toBe(false);
+    expect(fb.hardware.some((h) => h.accessoryId.startsWith('l-'))).toBe(false);
+  });
+
+  it('migrates units saved by the previous version', () => {
+    const old = { ...createUnit('custom'), countertopOverhang: 40, overhang: undefined, bays: [{ id: 'b', size: 1, sections: [{ id: 's', size: 1, front: 'glassDoor', doorCount: 2, drawerCount: 1, shelves: 1, hangingRail: false }] }] };
+    const u = normalizeUnit(old);
+    expect(u.overhang.front).toBe(40);
+    expect(u.bays[0].sections[0]).toMatchObject({ front: 'door', doorMaterial: 'glass', opening: 'pair' });
+    expect(() => buildUnit(u, cat, pr)).not.toThrow();
+  });
+});
+
+describe('kitchen runs', () => {
+  for (const shape of ['straight', 'L', 'U'] as const) {
+    it(`prices a ${shape} kitchen as one item`, () => {
+      const run = createRun(shape);
+      syncRun(run, cat);
+      const q = quote([]);
+      q.runs = [run];
+      const c = calculateQuote(q, cat, settings);
+      expect(c.items).toHaveLength(1);
+      expect(c.items[0].kind).toBe('run');
+      expect(c.items[0].sell).toBeGreaterThan(500);
+      expect(c.costLines.some((l) => l.group === 'Countertops')).toBe(true);
+      expect(c.costLines.some((l) => l.group === 'Appliances')).toBe(true);
+      expect(sum(c.items.map((i) => i.sell))).toBeCloseTo(c.unitsSell, 4);
+    });
+  }
+  it('keeps base and wall units in line with run sizes', () => {
+    const run = createRun('L');
+    run.counterHeight = 920;
+    run.legs[0][1].width = 700;
+    syncRun(run, cat);
+    const m = run.legs[0][1];
+    expect(m.base!.width).toBe(700);
+    expect(m.wall!.width).toBe(700);
+    expect(m.base!.height).toBe(890);
+    expect(m.wall!.mountHeight).toBe(run.wallBottom);
+  });
+  it('excludes appliance prices when the client supplies them', () => {
+    const run = createRun('straight');
+    const q = quote([]);
+    q.runs = [run];
+    const a = calculateQuote(q, cat, settings);
+    q.includeAppliances = false;
+    const b = calculateQuote(q, cat, settings);
+    expect(b.appliancesCost).toBe(0);
+    expect(a.total).toBeGreaterThan(b.total);
   });
 });

@@ -1,5 +1,6 @@
 import { FileText, Home as HomeIcon, Layers, Receipt, Settings as SettingsIcon } from 'lucide-react';
 import { HashRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import ExportSheet from './components/ExportSheet';
 import Home from './pages/Home';
 import InvoiceEditor from './pages/InvoiceEditor';
 import Invoices from './pages/Invoices';
@@ -8,6 +9,7 @@ import QuoteEditor from './pages/QuoteEditor';
 import Quotes from './pages/Quotes';
 import Reader from './pages/Reader';
 import RunDesigner from './pages/RunDesigner';
+import RoomDesigner from './pages/RoomDesigner';
 import SettingsPage from './pages/Settings';
 import UnitDesigner from './pages/UnitDesigner';
 import { useStore } from './store';
@@ -23,7 +25,7 @@ const NAV = [
 function BottomNav() {
   const loc = useLocation();
   // hide on the full-screen designer
-  if (/\/(units|runs)\//.test(loc.pathname)) return null;
+  if (/\/(units|runs)\/|\/room$/.test(loc.pathname)) return null;
   return (
     <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 backdrop-blur">
       <div className="mx-auto grid max-w-5xl grid-cols-5">
@@ -61,6 +63,7 @@ export default function App() {
           <Route path="/quotes/:id" element={<QuoteEditor />} />
           <Route path="/quotes/:id/units/:uid" element={<UnitDesigner />} />
           <Route path="/quotes/:id/runs/:rid" element={<RunDesigner />} />
+          <Route path="/quotes/:id/room" element={<RoomDesigner />} />
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/invoices/:id" element={<InvoiceEditor />} />
           <Route path="/library" element={<Library />} />
@@ -69,6 +72,7 @@ export default function App() {
         </Routes>
       </div>
       <BottomNav />
+      <ExportSheet />
     </HashRouter>
   );
 }

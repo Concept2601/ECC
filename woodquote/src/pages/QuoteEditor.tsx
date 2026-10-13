@@ -1,4 +1,4 @@
-import { AlertTriangle, Camera, Copy, FileDown, Hammer, ImagePlus, LayoutPanelTop, Minus, MoreVertical, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
+import { AlertTriangle, Camera, Home, Copy, FileDown, Hammer, ImagePlus, LayoutPanelTop, Minus, MoreVertical, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import AddUnitModal from '../components/AddUnitModal';
@@ -184,6 +184,15 @@ export default function QuoteEditor() {
                 </div>
               );
             })}
+            {calc.items.length > 0 && (
+              <Link to={`/quotes/${quote.id}/room`} className="card flex items-center gap-3 border-emerald-200 bg-emerald-50 p-4 hover:border-emerald-400">
+                <Home size={22} className="text-emerald-700" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-emerald-900">{quote.room ? 'Room layout' : 'Show in a room layout'}</div>
+                  <div className="text-xs text-emerald-800">{quote.room ? `${quote.room.width} × ${quote.room.depth}mm · ${quote.room.openings.length} opening(s) · included in the quotation PDF` : 'Walls, windows, doors and open-plan beams so the client sees the design in their space'}</div>
+                </div>
+              </Link>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-brand-700 hover:border-brand-400" onClick={() => setAdding(true)}>
                 <Plus size={18} /> Add unit (TV stand, wardrobe, island…)

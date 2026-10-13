@@ -56,6 +56,7 @@ export default function SettingsPage() {
       runs: [],
       attachments: [],
       includeAppliances: true,
+      room: null,
       extras: [],
       transportId: p.transportOptions[0]?.id ?? null,
       transportCustom: 0,

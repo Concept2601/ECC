@@ -5,12 +5,13 @@ import ElevationEditor, { type EditorView, type Sel, type SidePick } from '../co
 import { choices, FIT_ICONS, FIT_LABELS, FRONT_ICONS, FRONT_LABELS, IconChoice, MATERIAL_ICONS, MATERIAL_LABELS, OPENING_ICONS, OPENING_LABELS, PANEL_ICONS, PANEL_LABELS, SLIDE_ICONS, SLIDE_LABELS } from '../components/OptionIcons';
 import { Card, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import Viewer3D from '../components/Viewer3D';
+import ApplianceSelect from '../components/ApplianceSelect';
 import { useMoney, useQuoteCalc } from '../hooks';
 import { elevation } from '../lib/generate';
 import { locateUnit } from '../lib/locate';
 import { PRODUCT_LABELS, PRODUCT_ORDER, sec } from '../lib/presets';
 import { syncRun } from '../lib/runs';
-import { ACCESSORY_LABELS, APPLIANCE_LABELS, type AccessoryCategory, type FrontKind, type LightLocation, type ProductType, type Unit } from '../lib/types';
+import { ACCESSORY_LABELS, type AccessoryCategory, type FrontKind, type LightLocation, type ProductType, type Unit } from '../lib/types';
 import { kelvinToHex, LIGHT_TEMPS, uid } from '../lib/util';
 import { accessoryPacksLabel } from '../pdf/pdf';
 import { useStore } from '../store';
@@ -41,6 +42,8 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
+const defaultCustom = (u: Unit) => ({ x: 50, y: Math.round(u.height * 0.6), z: Math.round(u.depth / 2), length: Math.max(100, u.width - 100), vertical: false, dir: 'down' as const });
+
 const LOCATION_LABELS: Record<LightLocation, string> = {
   underCabinet: 'Under the cabinet (task light)',
   insideTop: 'Inside, top of each bay',
@@ -48,6 +51,7 @@ const LOCATION_LABELS: Record<LightLocation, string> = {
   plinth: 'Plinth / kick board (floor wash)',
   top: 'On top (cornice up-light)',
   backPanel: 'Back panel (accent)',
+  custom: 'Custom position (set below)',
 };
 
 export default function UnitDesigner() {
@@ -151,7 +155,6 @@ export default function UnitDesigner() {
   );
 
   const frontKinds: FrontKind[] = ['open', 'door', 'drawer', 'sliding', 'appliance'];
-  const inbuiltAppliances = catalog.appliances.filter((a) => a.placement !== 'top' && a.category !== 'hood');
 
   return (
     <div className="flex h-[100dvh] flex-col">
@@ -290,12 +293,7 @@ export default function UnitDesigner() {
                     )}
                     {curSec.front === 'appliance' && (
                       <Field label="Appliance in this compartment">
-                        <Select
-                          value={curSec.applianceId}
-                          allowNone="Choose appliance…"
-                          onChange={(v) => upSec((x) => (x.applianceId = v))}
-                          options={inbuiltAppliances.map((a) => ({ value: a.id, label: `${APPLIANCE_LABELS[a.category]}: ${a.name} (${a.width}×${a.height}) – ${fmt(a.price)}` }))}
-                        />
+                        <ApplianceSelect value={curSec.applianceId} none="Choose appliance…" onChange={(v) => upSec((x) => (x.applianceId = v))} filter={(a) => a.placement !== 'top' && a.category !== 'hood'} />
                       </Field>
                     )}
                     <div className="flex flex-wrap items-end gap-6">
@@ -688,8 +686,31 @@ export default function UnitDesigner() {
                       <Select value={l.accessoryId} onChange={(v) => v && up((u) => (u.lights[i].accessoryId = v))} options={catalog.accessories.filter((a) => a.category === 'lighting' && ['strip', 'profile', 'spot', 'bar'].includes(a.lightKind ?? '')).map((a) => ({ value: a.id, label: `${a.name} – ${fmt(a.price)}${a.unit === 'm' ? '/m' : ''}` }))} />
                     </Field>
                     <Field label="Position">
-                      <Select value={l.location} onChange={(v) => v && up((u) => (u.lights[i].location = v))} options={(Object.keys(LOCATION_LABELS) as LightLocation[]).map((k) => ({ value: k, label: LOCATION_LABELS[k] }))} />
+                      <Select value={l.location} onChange={(v) => v && up((u) => ((u.lights[i].location = v), v === 'custom' && !u.lights[i].custom && (u.lights[i].custom = defaultCustom(u))))} options={(Object.keys(LOCATION_LABELS) as LightLocation[]).map((k) => ({ value: k, label: LOCATION_LABELS[k] }))} />
                     </Field>
+                    {l.location === 'custom' && (
+                      <div className="grid grid-cols-3 gap-2 rounded-xl bg-stone-50 p-2 md:col-span-2">
+                        {(
+                          [
+                            ['x', 'From left (mm)'],
+                            ['y', 'Height (mm)'],
+                            ['z', 'From back (mm)'],
+                            ['length', 'Length (mm)'],
+                          ] as const
+                        ).map(([k, label]) => (
+                          <Field key={k} label={label}>
+                            <NumInput value={l.custom?.[k] ?? 0} onChange={(v) => up((u) => (u.lights[i].custom = { ...defaultCustom(u), ...u.lights[i].custom, [k]: v }))} />
+                          </Field>
+                        ))}
+                        <Field label="Runs">
+                          <Select value={l.custom?.vertical ? 'v' : 'h'} onChange={(v) => up((u) => (u.lights[i].custom = { ...defaultCustom(u), ...u.lights[i].custom, vertical: v === 'v' }))} options={[{ value: 'h', label: 'Horizontal' }, { value: 'v', label: 'Vertical' }]} />
+                        </Field>
+                        <Field label="Shines">
+                          <Select value={l.custom?.dir ?? 'down'} onChange={(v) => v && up((u) => (u.lights[i].custom = { ...defaultCustom(u), ...u.lights[i].custom, dir: v }))} options={[{ value: 'down', label: 'Down' }, { value: 'up', label: 'Up' }, { value: 'front', label: 'Forward' }]} />
+                        </Field>
+                        <p className="col-span-3 text-[11px] text-stone-500">Measured from the unit's left side, bottom and back. Check the position in the 2D front view or the 3D view with the lights on.</p>
+                      </div>
+                    )}
                     <div className="md:col-span-2">
                       <span className="label">Colour temperature / colour</span>
                       <div className="flex flex-wrap gap-2">
@@ -740,24 +761,61 @@ export default function UnitDesigner() {
             <div className="grid gap-3 md:grid-cols-2">
               <Card title="On the top (hob / sink)">
                 <div className="space-y-2">
-                  {unit.topAppliances.map((t, i) => (
-                    <div key={t.id} className="grid grid-cols-[1fr_90px_auto] items-center gap-2">
-                      <Select value={t.applianceId} onChange={(v) => v && up((u) => (u.topAppliances[i].applianceId = v))} options={catalog.appliances.filter((a) => a.placement === 'top').map((a) => ({ value: a.id, label: `${a.name} – ${fmt(a.price)}` }))} />
-                      <select className="input" value={t.bay} onChange={(e) => up((u) => (u.topAppliances[i].bay = Number(e.target.value)))}>
-                        {unit.bays.map((_, b) => (
-                          <option key={b} value={b}>
-                            Bay {b + 1}
-                          </option>
-                        ))}
-                      </select>
-                      <button className="btn-ghost px-2 text-red-600" onClick={() => up((u) => u.topAppliances.splice(i, 1))}>
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
+                  {unit.topAppliances.map((t, i) => {
+                    const ap = catalog.appliances.find((x) => x.id === t.applianceId);
+                    const isHob = ap?.category === 'hob';
+                    return (
+                      <div key={t.id} className="space-y-2 rounded-xl border border-stone-200 p-2">
+                        <div className="grid grid-cols-[1fr_90px_auto] items-center gap-2">
+                          <ApplianceSelect value={t.applianceId} onChange={(v) => v && up((u) => (u.topAppliances[i].applianceId = v))} filter={(a) => a.placement === 'top' && a.category !== 'downdraft'} />
+                          <select className="input" value={t.bay} onChange={(e) => up((u) => (u.topAppliances[i].bay = Number(e.target.value)))}>
+                            {unit.bays.map((_, b) => (
+                              <option key={b} value={b}>
+                                Bay {b + 1}
+                              </option>
+                            ))}
+                          </select>
+                          <button className="btn-ghost px-2 text-red-600" onClick={() => up((u) => u.topAppliances.splice(i, 1))}>
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Field label="Front edge → front of hob/sink">
+                            <input className="input" inputMode="numeric" placeholder="Centred" value={t.frontGap ?? ''} onChange={(e) => up((u) => (u.topAppliances[i].frontGap = e.target.value === '' ? null : Number(e.target.value) || 0))} />
+                          </Field>
+                          <Field label="Unit left edge → left of hob/sink">
+                            <input className="input" inputMode="numeric" placeholder="Centred on bay" value={t.xOffset ?? ''} onChange={(e) => up((u) => (u.topAppliances[i].xOffset = e.target.value === '' ? null : Number(e.target.value) || 0))} />
+                          </Field>
+                        </div>
+                        {isHob && (
+                          <Field label="Downdraft extractor behind the hob">
+                            <ApplianceSelect
+                              value={t.downdraftId}
+                              none="None"
+                              onChange={(v) => up((u) => (u.topAppliances[i].downdraftId = v))}
+                              filter={(a) => a.category === 'downdraft'}
+                            />
+                          </Field>
+                        )}
+                        {isHob && !t.downdraftId && (
+                          <button
+                            className="text-xs font-semibold text-brand-700"
+                            onClick={() =>
+                              up((u) => {
+                                const dds = catalog.appliances.filter((a) => a.category === 'downdraft').sort((x, y) => Math.abs(x.width - (ap?.width ?? 600)) - Math.abs(y.width - (ap?.width ?? 600)));
+                                u.topAppliances[i].downdraftId = dds[0]?.id ?? null;
+                              })
+                            }
+                          >
+                            + Add matching downdraft ({catalog.appliances.filter((a) => a.category === 'downdraft').sort((x, y) => Math.abs(x.width - (ap?.width ?? 600)) - Math.abs(y.width - (ap?.width ?? 600)))[0]?.name ?? '—'})
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                   <div className="flex flex-wrap gap-2 pt-1">
-                    <button className="btn-secondary px-3 py-1.5 text-xs" onClick={() => up((u) => u.topAppliances.push({ id: uid('ta'), applianceId: 'ap-hob-gas4', bay: 0 }))}>
-                      <Plus size={14} /> Gas / electric hob
+                    <button className="btn-secondary px-3 py-1.5 text-xs" onClick={() => up((u) => u.topAppliances.push({ id: uid('ta'), applianceId: 'ap-hob-gas4', bay: 0, frontGap: 60, xOffset: null, downdraftId: null }))}>
+                      <Plus size={14} /> Stove hob
                     </button>
                     <button className="btn-secondary px-3 py-1.5 text-xs" onClick={() => up((u) => u.topAppliances.push({ id: uid('ta'), applianceId: 'ap-sink-single', bay: 0 }))}>
                       <Plus size={14} /> Sink

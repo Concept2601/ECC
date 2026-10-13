@@ -84,6 +84,7 @@ export default function Library() {
   const fmt = useMoney();
   const [tab, setTab] = useState<Tab>('boards');
   const [cat, setCat] = useState<string>('all');
+  const [appCat, setAppCat] = useState<string>('all');
 
   function listProps<K extends keyof Catalog>(key: K) {
     return {
@@ -234,8 +235,24 @@ export default function Library() {
           </>
         )}
         {tab === 'appliances' && (
+          <>
+          <div className="no-scrollbar flex gap-1 overflow-x-auto">
+            {['all', ...APPLIANCE_CATEGORIES].map((c) => (
+              <button key={c} className={`chip whitespace-nowrap py-1.5 ${appCat === c ? 'bg-brand-600 text-white' : 'border border-stone-300 bg-white text-stone-700'}`} onClick={() => setAppCat(c)}>
+                {c === 'all' ? 'All' : APPLIANCE_LABELS[c as keyof typeof APPLIANCE_LABELS]}
+              </button>
+            ))}
+          </div>
           <EditableList
-            {...listProps('appliances')}
+            items={catalog.appliances.filter((a) => appCat === 'all' || a.category === appCat)}
+            onChange={(i, patch) => {
+              const id = catalog.appliances.filter((a) => appCat === 'all' || a.category === appCat)[i].id;
+              updateCatalog((c) => Object.assign(c.appliances.find((a) => a.id === id)!, patch));
+            }}
+            onRemove={(i) => {
+              const id = catalog.appliances.filter((a) => appCat === 'all' || a.category === appCat)[i].id;
+              updateCatalog((c) => (c.appliances = c.appliances.filter((a) => a.id !== id)));
+            }}
             swatch={(a) => a.color}
             summary={(a) => `${APPLIANCE_LABELS[a.category]} · ${a.variant} · ${a.width}×${a.height}×${a.depth}mm · ${fmt(a.price)}`}
             fields={[
@@ -247,10 +264,12 @@ export default function Library() {
               { key: 'width', label: 'Width', type: 'number', suffix: 'mm' },
               { key: 'height', label: 'Height', type: 'number', suffix: 'mm' },
               { key: 'depth', label: 'Depth', type: 'number', suffix: 'mm' },
+              { key: 'plates', label: 'Plates / burners (hobs)', type: 'number' },
               { key: 'color', label: 'Colour', type: 'color' },
             ]}
-            onAdd={() => updateCatalog((c) => c.appliances.push({ id: uid('ap-'), category: 'other', name: 'New appliance', variant: '', width: 600, height: 600, depth: 550, price: 300, color: '#d4d4d8', placement: 'inbuilt' }))}
+            onAdd={() => updateCatalog((c) => c.appliances.push({ id: uid('ap-'), category: appCat === 'all' ? 'other' : (appCat as never), name: 'New appliance', variant: '', width: 600, height: 600, depth: 550, price: 300, color: '#d4d4d8', placement: appCat === 'hob' || appCat === 'sink' || appCat === 'downdraft' ? 'top' : 'inbuilt' }))}
           />
+          </>
         )}
         {tab === 'transport' && (
           <EditableList<TransportOption>

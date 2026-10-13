@@ -2,14 +2,18 @@ import { Capacitor } from '@capacitor/core';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { jsPDF } from 'jspdf';
+import { create } from 'zustand';
 import { autoTable, type RowInput } from 'jspdf-autotable';
 import { elevation } from '../lib/generate';
 import type { BoardPlan } from '../lib/optimizer';
-import { accessoryPacks, balanceAfterPayment, calculateInvoice, type QuoteCalc } from '../lib/pricing';
+import { accessoryPacks, balanceAfterPayment, calculateInvoice, type ItemPrice, type QuoteCalc } from '../lib/pricing';
 import { activeLegs, LEG_LABELS, legLength } from '../lib/runs';
-import type { Catalog, Invoice, Payment, Quote, Run, Settings, Unit } from '../lib/types';
+import type { Catalog, Invoice, Payment, Quote, Room, Run, Settings, Unit } from '../lib/types';
 import { addDaysISO, fmtDate, money } from '../lib/util';
-import { renderRunImage, renderUnitImage } from '../render/scene';
+import { renderRoomImage, renderRunImage, renderUnitImage } from '../render/scene';
+import { footprints } from '../lib/room';
+
+export const usePdfExport = create<{ doc: jsPDF | null; filename: string; result: string | null }>(() => ({ doc: null, filename: '', result: null }));
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -562,6 +566,28 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
     }
   }
 
+  // room visualisation
+  if (q.room && calc.items.length) {
+    doc.addPage();
+    y = drawMiniHeader(doc, s);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text('Room visualisation', M, y + 2);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(110);
+    doc.text(`${q.room.width} × ${q.room.depth} mm · wall height ${Math.max(...q.room.wallHeights)} mm`, PAGE_W - M, y + 2, { align: 'right' });
+    doc.setTextColor(0);
+    y += 6;
+    const img = renderRoomImage(q.room, calc.items, cat, 1500, 950, 'image/jpeg');
+    if (img) {
+      const w = PAGE_W - 2 * M;
+      doc.addImage(img, 'JPEG', M, y, w, (w * 950) / 1500);
+      y += (w * 950) / 1500 + 4;
+    }
+    drawRoomPlan(doc, q.room, calc.items, cat, M, y, PAGE_W - 2 * M, PAGE_H - 26 - y);
+  }
+
   // attached designs
   const att = q.attachments.filter((a) => a.includeInPdf);
   for (let i = 0; i < att.length; i++) {
@@ -597,6 +623,72 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
   }
   drawFooters(doc, s);
   return doc;
+}
+
+/** Dimensioned plan of the room with openings and item footprints. */
+export function drawRoomPlan(doc: Doc, room: Room, items: ItemPrice[], cat: Catalog, x: number, y: number, w: number, h: number) {
+  const T = room.wallThickness;
+  const pad = 10;
+  const sc = Math.min((w - 2 * pad) / (room.width + 2 * T), (h - 2 * pad) / (room.depth + 2 * T));
+  const ox = x + (w - (room.width + 2 * T) * sc) / 2 + T * sc;
+  const oy = y + pad + T * sc;
+  const X = (mm: number) => ox + mm * sc;
+  const Y = (mm: number) => oy + mm * sc;
+  doc.setDrawColor(225);
+  doc.roundedRect(x, y, w, h, 2, 2, 'S');
+  doc.setFillColor(87, 83, 78);
+  doc.rect(X(-T), Y(-T), (room.width + 2 * T) * sc, T * sc, 'F');
+  doc.rect(X(-T), Y(room.depth), (room.width + 2 * T) * sc, T * sc, 'F');
+  doc.rect(X(-T), Y(-T), T * sc, (room.depth + 2 * T) * sc, 'F');
+  doc.rect(X(room.width), Y(-T), T * sc, (room.depth + 2 * T) * sc, 'F');
+  doc.setFontSize(6);
+  for (const o of room.openings) {
+    const horiz = o.wall === 0 || o.wall === 2;
+    const wx = horiz ? X(o.offset) : o.wall === 1 ? X(room.width) : X(-T);
+    const wy = horiz ? (o.wall === 0 ? Y(-T) : Y(room.depth)) : Y(o.offset);
+    const ww = horiz ? o.width * sc : T * sc;
+    const wh = horiz ? T * sc : o.width * sc;
+    doc.setFillColor(255, 255, 255);
+    doc.rect(wx, wy, ww, wh, 'F');
+    if (o.kind === 'window') {
+      doc.setDrawColor(56, 189, 248);
+      doc.setLineWidth(0.5);
+      if (horiz) doc.line(wx, wy + wh / 2, wx + ww, wy + wh / 2);
+      else doc.line(wx + ww / 2, wy, wx + ww / 2, wy + wh);
+      doc.setLineWidth(0.2);
+    }
+    if (o.kind === 'opening' && o.beam) {
+      doc.setDrawColor(120);
+      doc.setLineDashPattern([1, 1], 0);
+      doc.rect(wx, wy, ww, wh);
+      doc.setLineDashPattern([], 0);
+    }
+    doc.setTextColor(90);
+    const label = `${o.label || o.kind} ${o.width}${o.kind === 'opening' && o.beam ? ' (RC beam)' : ''}`;
+    if (horiz) doc.text(label, wx + ww / 2, o.wall === 0 ? wy - 1 : wy + wh + 2.5, { align: 'center' });
+    else doc.text(label, o.wall === 3 ? wx - 1 : wx + ww + 1, wy + wh / 2, { align: o.wall === 3 ? 'right' : 'left' });
+  }
+  doc.setTextColor(30);
+  doc.setDrawColor(87, 83, 78);
+  for (const p of room.placements) {
+    const it = items.find((i) => i.id === p.itemId);
+    if (!it) continue;
+    let pts: [number, number][] = [];
+    for (const poly of footprints(it, cat, p)) {
+      pts = poly.map(([a, b]) => [X(a), Y(b)] as [number, number]);
+      if (it.kind === 'run') doc.setFillColor(221, 214, 254);
+      else doc.setFillColor(233, 201, 159);
+      const lines = pts.map((pt, i) => [pts[(i + 1) % 4][0] - pt[0], pts[(i + 1) % 4][1] - pt[1]]);
+      doc.lines(lines.slice(0, 3), pts[0][0], pts[0][1], [1, 1], 'FD', true);
+    }
+    pts = footprints(it, cat, p)[0].map(([a, b]) => [X(a), Y(b)] as [number, number]);
+    doc.text(it.name.slice(0, 28), pts.reduce((a, q) => a + q[0], 0) / 4, pts.reduce((a, q) => a + q[1], 0) / 4, { align: 'center' });
+  }
+  doc.setFontSize(7);
+  doc.setTextColor(60);
+  doc.text(`${room.width} mm`, X(room.width / 2), Y(-T) - 2, { align: 'center' });
+  doc.text(`${room.depth} mm`, X(-T) - 2, Y(room.depth / 2), { angle: 90, align: 'center' });
+  doc.setTextColor(0);
 }
 
 /* ============================================================ workshop */
@@ -834,15 +926,39 @@ export function receiptPdf(inv: Invoice, pay: Payment, s: Settings): jsPDF {
 
 /* ============================================================= output */
 
+/** Hand a finished PDF to the export sheet (download to phone / share). */
 export async function saveOrShare(doc: jsPDF, filename: string): Promise<void> {
-  const safe = filename.replace(/[^\w.-]+/g, '_');
+  usePdfExport.setState({ doc, filename: filename.replace(/[^\w.-]+/g, '_'), result: null });
+}
+
+/** Save a PDF to the device: Documents/WoodQuote on Android, the Downloads folder in a browser. */
+export async function downloadPdf(doc: jsPDF, filename: string): Promise<string> {
+  if (!Capacitor.isNativePlatform()) {
+    doc.save(filename);
+    return `Downloaded ${filename}`;
+  }
+  const data = doc.output('datauristring').split(',')[1];
+  try {
+    await Filesystem.requestPermissions().catch(() => undefined);
+    await Filesystem.writeFile({ path: `WoodQuote/${filename}`, data, directory: Directory.Documents, recursive: true });
+    return `Saved to Documents/WoodQuote/${filename}`;
+  } catch {
+    const res = await Filesystem.writeFile({ path: `WoodQuote/${filename}`, data, directory: Directory.External, recursive: true });
+    return `Saved to ${res.uri.replace('file://', '')}`;
+  }
+}
+
+export async function sharePdf(doc: jsPDF, filename: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     const data = doc.output('datauristring').split(',')[1];
-    const res = await Filesystem.writeFile({ path: safe, data, directory: Directory.Cache });
-    await Share.share({ title: safe, url: res.uri, dialogTitle: 'Share or save PDF' });
-  } else {
-    doc.save(safe);
+    const res = await Filesystem.writeFile({ path: filename, data, directory: Directory.Cache });
+    await Share.share({ title: filename, url: res.uri, dialogTitle: 'Share PDF' });
+    return;
   }
+  const file = new File([doc.output('blob')], filename, { type: 'application/pdf' });
+  const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+  if (nav.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: filename });
+  else window.open(URL.createObjectURL(file), '_blank');
 }
 
 export async function shareTextFile(filename: string, text: string, mime: string): Promise<void> {

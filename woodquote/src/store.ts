@@ -55,7 +55,7 @@ export function mergeCatalog(c: Partial<Catalog>): Catalog {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizeQuote(q: any): Quote {
-  return { ...q, units: (q.units ?? []).map(normalizeUnit), runs: q.runs ?? [], attachments: q.attachments ?? [], includeAppliances: q.includeAppliances ?? true };
+  return { ...q, units: (q.units ?? []).map(normalizeUnit), runs: q.runs ?? [], attachments: q.attachments ?? [], includeAppliances: q.includeAppliances ?? true, room: q.room ?? null };
 }
 
 const num = (prefix: string, n: number) => `${prefix}${String(n).padStart(4, '0')}`;
@@ -95,6 +95,7 @@ export const useStore = create<AppState>()(
           extras: [],
           attachments: [],
           includeAppliances: true,
+          room: null,
           transportId: null,
           transportCustom: 0,
           installation: false,

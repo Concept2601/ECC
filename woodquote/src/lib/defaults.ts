@@ -11,11 +11,21 @@ const hingeFamily = (prefix: string, family: string, name: string, prices: Parti
   );
 
 export const defaultAppliances = (): Appliance[] => [
-  { id: 'ap-hob-gas4', category: 'hob', name: 'Gas hob 4 burner', variant: 'Gas', width: 600, height: 50, depth: 520, price: 180, color: '#1d1d1f', placement: 'top' },
-  { id: 'ap-hob-gas5', category: 'hob', name: 'Gas hob 5 burner', variant: 'Gas', width: 900, height: 50, depth: 520, price: 260, color: '#1d1d1f', placement: 'top' },
-  { id: 'ap-hob-elec4', category: 'hob', name: 'Electric ceramic hob 4 zone', variant: 'Electric', width: 600, height: 50, depth: 520, price: 220, color: '#0d0d0f', placement: 'top' },
-  { id: 'ap-hob-ind4', category: 'hob', name: 'Induction hob 4 zone', variant: 'Induction', width: 600, height: 50, depth: 520, price: 380, color: '#0d0d0f', placement: 'top' },
-  { id: 'ap-hob-combo', category: 'hob', name: 'Gas + electric combo hob', variant: 'Gas / electric', width: 600, height: 50, depth: 520, price: 240, color: '#1d1d1f', placement: 'top' },
+  // stove hobs: gas and electric, 2 to 6 plates
+  { id: 'ap-hob-gas2', category: 'hob', name: 'Gas hob 2 plate (domino)', variant: 'Gas', plates: 2, width: 300, height: 50, depth: 520, price: 95, color: '#1d1d1f', placement: 'top' },
+  { id: 'ap-hob-gas4', category: 'hob', name: 'Gas hob 4 plate', variant: 'Gas', plates: 4, width: 600, height: 50, depth: 520, price: 180, color: '#1d1d1f', placement: 'top' },
+  { id: 'ap-hob-gas5', category: 'hob', name: 'Gas hob 5 plate', variant: 'Gas', plates: 5, width: 750, height: 50, depth: 520, price: 240, color: '#1d1d1f', placement: 'top' },
+  { id: 'ap-hob-gas6', category: 'hob', name: 'Gas hob 6 plate', variant: 'Gas', plates: 6, width: 900, height: 50, depth: 520, price: 320, color: '#1d1d1f', placement: 'top' },
+  { id: 'ap-hob-elec4', category: 'hob', name: 'Electric hob 4 plate', variant: 'Electric', plates: 4, width: 600, height: 50, depth: 520, price: 220, color: '#0d0d0f', placement: 'top' },
+  { id: 'ap-hob-elec5', category: 'hob', name: 'Electric hob 5 plate', variant: 'Electric', plates: 5, width: 750, height: 50, depth: 520, price: 290, color: '#0d0d0f', placement: 'top' },
+  { id: 'ap-hob-elec6', category: 'hob', name: 'Electric hob 6 plate', variant: 'Electric', plates: 6, width: 900, height: 50, depth: 520, price: 360, color: '#0d0d0f', placement: 'top' },
+  { id: 'ap-hob-ind4', category: 'hob', name: 'Induction hob 4 zone', variant: 'Induction', plates: 4, width: 600, height: 50, depth: 520, price: 380, color: '#0d0d0f', placement: 'top' },
+  { id: 'ap-hob-combo', category: 'hob', name: 'Gas + electric combo hob 4 plate', variant: 'Gas / electric', plates: 4, width: 600, height: 50, depth: 520, price: 240, color: '#1d1d1f', placement: 'top' },
+  // downdraft extractors (rise out of the worktop behind the hob)
+  { id: 'ap-dd-300', category: 'downdraft', name: 'Downdraft extractor 30cm', variant: 'Pop-up', width: 300, height: 300, depth: 90, price: 280, color: '#18181b', placement: 'top' },
+  { id: 'ap-dd-600', category: 'downdraft', name: 'Downdraft extractor 60cm', variant: 'Pop-up', width: 600, height: 300, depth: 90, price: 520, color: '#18181b', placement: 'top' },
+  { id: 'ap-dd-750', category: 'downdraft', name: 'Downdraft extractor 75cm', variant: 'Pop-up', width: 750, height: 300, depth: 90, price: 610, color: '#18181b', placement: 'top' },
+  { id: 'ap-dd-900', category: 'downdraft', name: 'Downdraft extractor 90cm', variant: 'Pop-up', width: 900, height: 300, depth: 90, price: 690, color: '#18181b', placement: 'top' },
   { id: 'ap-sink-single', category: 'sink', name: 'Stainless sink single bowl + drainer', variant: 'Single bowl', width: 860, height: 200, depth: 500, price: 95, color: '#c9cdd2', placement: 'top' },
   { id: 'ap-sink-double', category: 'sink', name: 'Stainless sink double bowl', variant: 'Double bowl', width: 1160, height: 200, depth: 500, price: 150, color: '#c9cdd2', placement: 'top' },
   { id: 'ap-sink-undermount', category: 'sink', name: 'Undermount sink', variant: 'Undermount', width: 600, height: 200, depth: 450, price: 160, color: '#b5b9be', placement: 'top' },

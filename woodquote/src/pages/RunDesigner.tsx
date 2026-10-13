@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, confirmAction, Field, NumInput, PageHeader, Select, Tabs, TextInput } from '../components/ui';
 import Viewer3D from '../components/Viewer3D';
+import ApplianceSelect from '../components/ApplianceSelect';
 import { useMoney, useQuoteCalc } from '../hooks';
 import { activeLegs, applyRunMaterials, ensureLegs, BASE_TEMPLATES, baseModule, GAP_TEMPLATES, gapModule, LEG_LABELS, legLength, RUN_SHAPE_LABELS, runUnits, setWallTemplate, syncRun, TALL_TEMPLATES, tallModule, WALL_TEMPLATES, type BaseTemplate, type GapTemplate, type TallTemplate, type WallTemplate } from '../lib/runs';
 import type { Catalog, Run, RunModule, RunShape } from '../lib/types';
@@ -250,13 +251,13 @@ export default function RunDesigner() {
                           <TextInput value={sel.m.gapLabel} onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.gapLabel = v))} />
                         </Field>
                         <Field label="Free-standing appliance">
-                          <Select value={sel.m.gapApplianceId} allowNone="Empty space" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.gapApplianceId = v))} options={catalog.appliances.filter((a) => a.placement === 'freestanding' && a.category !== 'hood').map((a) => ({ value: a.id, label: `${a.name} (${a.width}mm) – ${fmt(a.price)}` }))} />
+                          <ApplianceSelect value={sel.m.gapApplianceId} none="Empty space" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.gapApplianceId = v))} filter={(a) => a.placement === 'freestanding' && a.category !== 'hood'} />
                         </Field>
                       </>
                     )}
                     {sel.m.kind !== 'tall' && (
                       <Field label="Extractor hood above">
-                        <Select value={sel.m.hoodId} allowNone="No hood" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.hoodId = v))} options={catalog.appliances.filter((a) => a.category === 'hood').map((a) => ({ value: a.id, label: `${a.name} – ${fmt(a.price)}` }))} />
+                        <ApplianceSelect value={sel.m.hoodId} none="No hood" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.hoodId = v))} filter={(a) => a.category === 'hood'} />
                       </Field>
                     )}
                   </div>

@@ -5,6 +5,7 @@ import { packBars, packSheets, priceBoardPlan } from '../optimizer';
 import { balanceAfterPayment, calculateInvoice, calculateQuote } from '../pricing';
 import { createUnit, normalizeUnit, PRODUCT_ORDER, sec } from '../presets';
 import { createRun, syncRun } from '../runs';
+import { autoPlace, defaultRoom, footprint, newOpening, roomWarnings, snapToWall, wallPieces } from '../room';
 import type { Invoice, Quote } from '../types';
 import { sum } from '../util';
 
@@ -13,7 +14,7 @@ const settings = defaultSettings();
 
 const quote = (units = [createUnit('wardrobe')]): Quote => ({
   id: 'q', number: 'QUO-1', title: 't', date: '2026-01-01', status: 'draft',
-  client: { name: 'A', phone: '', email: '', address: '' }, units, runs: [], attachments: [], includeAppliances: true, extras: [{ id: 'e', description: 'x', qty: 2, unitPrice: 10 }],
+  client: { name: 'A', phone: '', email: '', address: '' }, units, runs: [], attachments: [], includeAppliances: true, room: null, extras: [{ id: 'e', description: 'x', qty: 2, unitPrice: 10 }],
   transportId: 'tr-local', transportCustom: 0, installation: true, markupPercent: 30,
   discountType: 'percent', discountValue: 10, applyTax: true, notes: '', sourceImage: null, createdAt: 0, updatedAt: 0,
 });
@@ -241,5 +242,64 @@ describe('kitchen runs', () => {
     const b = calculateQuote(q, cat, settings);
     expect(b.appliancesCost).toBe(0);
     expect(a.total).toBeGreaterThan(b.total);
+  });
+});
+
+describe('hobs, lights and rooms', () => {
+  const pr = settings.pricing;
+  it('has every requested hob type', () => {
+    const hobs = cat.appliances.filter((a) => a.category === 'hob');
+    for (const [fuel, plates] of [['Gas', 2], ['Gas', 4], ['Gas', 5], ['Gas', 6], ['Electric', 4], ['Electric', 5], ['Electric', 6]] as const)
+      expect(hobs.some((h) => h.variant === fuel && h.plates === plates)).toBe(true);
+    expect(cat.appliances.filter((a) => a.category === 'downdraft').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('positions a hob by edge distances and adds a downdraft', () => {
+    const u = createUnit('kitchen_base');
+    u.topAppliances = [{ id: 't', applianceId: 'ap-hob-gas4', bay: 0, frontGap: 80, xOffset: 100, downdraftId: 'ap-dd-600' }];
+    const b = buildUnit(u, cat, pr);
+    const hob = b.appliances.find((a) => a.applianceId === 'ap-hob-gas4')!;
+    expect(hob.box.x).toBe(100);
+    expect(u.depth + u.overhang.front - (hob.box.z + hob.box.d)).toBe(80);
+    const dd = b.appliances.find((a) => a.applianceId === 'ap-dd-600')!;
+    expect(dd.box.z + dd.box.d).toBeLessThan(hob.box.z);
+    expect(b.applianceList.some((a) => a.applianceId === 'ap-dd-600')).toBe(true);
+    expect(b.hardware.find((h) => h.accessoryId === 'sv-cutout')!.qty).toBe(2);
+    u.topAppliances[0].frontGap = 10;
+    expect(buildUnit(u, cat, pr).warnings.some((w) => /front edge/.test(w))).toBe(true);
+  });
+
+  it('places custom lights anywhere', () => {
+    const u = createUnit('bookshelf');
+    u.lights = [{ id: 'l', accessoryId: 'lt-strip', location: 'custom', temperature: 2700, color: '#fff', bays: [], sensorId: null, custom: { x: 30, y: 400, z: 100, length: 1200, vertical: true, dir: 'front' } }];
+    const b = buildUnit(u, cat, pr);
+    expect(b.lights).toHaveLength(1);
+    expect(b.lights[0].box).toMatchObject({ x: 30, y: 400, z: 100, h: 1200 });
+    expect(b.hardware.find((h) => h.accessoryId === 'lt-strip')!.qty).toBeCloseTo(1.2);
+  });
+
+  it('builds walls around windows, doors and beams', () => {
+    const room = defaultRoom();
+    room.openings.push({ ...newOpening('opening', 1, room), beamDepth: 350 });
+    const back = wallPieces(room, 0);
+    const win = room.openings[0];
+    expect(back.pieces.some((p) => p.y1 === win.sill && p.u0 === win.offset)).toBe(true);
+    expect(back.pieces.some((p) => p.y0 === win.height)).toBe(true);
+    const right = wallPieces(room, 1);
+    expect(right.pieces.some((p) => p.kind === 'beam' && p.y0 === room.wallHeights[1] - 350)).toBe(true);
+    expect(roomWarnings(room)).toEqual([]);
+  });
+
+  it('auto-places items and snaps them to walls', () => {
+    const q = quote([createUnit('tv_stand'), createUnit('wardrobe')]);
+    const c = calculateQuote(q, cat, settings);
+    let room = autoPlace(defaultRoom(), c.items, cat);
+    expect(room.placements).toHaveLength(2);
+    const p = snapToWall(room, c.items[1], cat, room.placements[1], 3);
+    expect(p.rot).toBe(90);
+    const xs = footprint(c.items[1], cat, p).map((q2) => q2[0]);
+    expect(Math.min(...xs)).toBeCloseTo(0);
+    room = { ...room, placements: [room.placements[0], p] };
+    expect(room.placements[1].rot).toBe(90);
   });
 });

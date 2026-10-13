@@ -183,7 +183,7 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
   if (view === 'top') {
     const zMin = -fpT('back') - ov.back;
     const Z = (z: number) => z - zMin; // back wall at the top, front at the bottom
-    const appls = build?.appliances.filter((a) => unit.topAppliances.some((t) => t.applianceId === a.applianceId)) ?? [];
+    const appls = build?.appliances.filter((a) => unit.topAppliances.some((t) => t.applianceId === a.applianceId || t.downdraftId === a.applianceId)) ?? [];
     return (
       <svg ref={svg} viewBox={vb} className="h-full w-full select-none">
         {defs}
@@ -399,7 +399,7 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
         })}
       {!isBack &&
         build?.appliances
-          .filter((a) => unit.topAppliances.some((t) => t.applianceId === a.applianceId) && !a.ref)
+          .filter((a) => unit.topAppliances.some((t) => t.applianceId === a.applianceId || t.downdraftId === a.applianceId) && !a.ref)
           .map((a, i) => <rect key={i} x={a.box.x} y={Y(a.box.y + Math.min(a.box.h, 60))} width={a.box.w} height={Math.min(a.box.h, 60)} fill={catalog.appliances.find((x) => x.id === a.applianceId)?.category === 'sink' ? '#9ca3af' : '#111'} opacity={0.85} />)}
       {!isBack && lights.map((l, i) => <rect key={i} x={l.box.x} y={Y(l.box.y + l.box.h)} width={l.box.w} height={Math.max(l.box.h, 10)} fill={l.color} stroke="#eab308" strokeWidth={3} />)}
       {isBack && <text x={W / 2} y={Y(yo + e.topY / 2)} fontSize={fs * 1.2} textAnchor="middle" fill="#555" onClick={pick('back')}>{fp.back.enabled ? `Finished back (${fp.back.style})` : 'Back panel'} – tap to edit</text>}

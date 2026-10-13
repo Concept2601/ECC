@@ -50,6 +50,8 @@ export function pickHinge(cat: Catalog, selectedId: string | null, fit: Section[
 export interface BuildContext {
   /** top surface height when the top is supplied by a kitchen run */
   topY?: number;
+  /** front edge of the shared worktop (z) for hob / sink positioning */
+  topFront?: number;
 }
 
 export function topThickness(u: Unit, cat: Catalog): number {
@@ -480,10 +482,27 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
     useAppliance(a);
     if (counter || ctx.topY != null) addHw('cutout', 'sv-cutout', 1, `Cut-out for ${a.name}`);
     else if (!topBoard) warnings.push(`${a.name} needs a countertop.`);
-    const cx = g.x + g.w / 2;
-    const depthCenter = (D + u.overhang.front) / 2;
-    applR.push({ applianceId: a.id, box: { x: cx - a.width / 2, y: surfaceY, z: depthCenter - a.depth / 2, w: a.width, h: a.height, d: a.depth } });
-    if (a.width > g.w + 2 * t + 40) warnings.push(`${a.name} is wider than bay ${ta.bay + 1} below it.`);
+    // worktop edges in unit coordinates
+    const frontEdge = ctx.topFront ?? D + u.overhang.front;
+    const backEdge = ctx.topY != null ? 0 : -fpT('back') - u.overhang.back;
+    const x0 = ta.xOffset != null ? ta.xOffset : g.x + g.w / 2 - a.width / 2;
+    const z0 = ta.frontGap != null ? frontEdge - ta.frontGap - a.depth : (frontEdge + backEdge) / 2 - a.depth / 2 + 20;
+    applR.push({ applianceId: a.id, box: { x: x0, y: surfaceY, z: z0, w: a.width, h: a.height, d: a.depth } });
+    const toFront = Math.round(frontEdge - (z0 + a.depth));
+    if (toFront < 50) warnings.push(`${a.name} is only ${toFront}mm from the worktop front edge (50mm minimum).`);
+    if (ctx.topY == null) {
+      if (x0 - oL < 50) warnings.push(`${a.name} is only ${Math.round(x0 - oL)}mm from the left edge of the top.`);
+      if (oR - (x0 + a.width) < 50) warnings.push(`${a.name} is only ${Math.round(oR - x0 - a.width)}mm from the right edge of the top.`);
+    }
+    if (a.width > g.w + 2 * t + 40 && ta.xOffset == null) warnings.push(`${a.name} is wider than bay ${ta.bay + 1} below it.`);
+    const dd = appl(ta.downdraftId ?? null);
+    if (dd) {
+      useAppliance(dd);
+      if (counter || ctx.topY != null) addHw('cutout', 'sv-cutout', 1, `Cut-out for ${dd.name}`);
+      const dz = z0 - dd.depth - 15;
+      if (dz < backEdge + 20) warnings.push(`Not enough worktop behind ${a.name} for the ${dd.name} — move the hob forward.`);
+      applR.push({ applianceId: dd.id, box: { x: x0 + (a.width - dd.width) / 2, y: surfaceY, z: dz, w: dd.width, h: dd.height, d: dd.depth } });
+    }
   }
 
   /* ------------------------------------------------------------- lights */
@@ -515,23 +534,31 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
       case 'backPanel':
         for (const b of bays) runAlong(bayGeo[b].x + 5, bayGeo[b].w - 10, bayGeo[b].topSecY - 40, backT + 2, 'front');
         break;
+      case 'custom':
+        if (l.custom) {
+          const c = l.custom;
+          strips.push({ box: c.vertical ? { x: c.x, y: c.y, z: c.z, w: 12, h: Math.max(10, c.length), d: 12 } : { x: c.x, y: c.y, z: c.z, w: Math.max(10, c.length), h: 8, d: 12 }, dir: c.dir });
+        }
+        break;
     }
     if (!strips.length) continue;
     driverNeeded = true;
     if (la.lightKind === 'spot') {
       let spots = 0;
       for (const s of strips) {
-        const k = Math.max(1, Math.round(s.box.w / 450));
+        const len = Math.max(s.box.w, s.box.h);
+        const k = Math.max(1, Math.round(len / 450));
         for (let q = 0; q < k; q++) {
-          const cx = s.box.x + (s.box.w * (q + 0.5)) / k;
-          lightsR.push({ box: { x: cx - 30, y: s.box.y, z: s.box.z - 20, w: 60, h: 8, d: 60 }, color, dir: s.dir });
+          const along = (len * (q + 0.5)) / k;
+          const vertical = s.box.h > s.box.w;
+          lightsR.push({ box: { x: (vertical ? s.box.x : s.box.x + along) - 30, y: vertical ? s.box.y + along : s.box.y, z: s.box.z - 20, w: 60, h: 8, d: 60 }, color, dir: s.dir });
         }
         spots += k;
       }
       addHw(`light-${l.id}`, la.id, spots, `Spotlights (${l.location})`);
     } else {
       for (const s of strips) lightsR.push({ box: s.box, color, dir: s.dir });
-      const metres = sum(strips.map((s) => s.box.w)) / 1000;
+      const metres = sum(strips.map((s) => Math.max(s.box.w, s.box.h))) / 1000;
       addHw(`light-${l.id}`, la.id, la.unit === 'm' ? metres : Math.ceil(metres), `LED ${l.location} ${l.temperature ? `${l.temperature}K` : 'RGB'}`);
     }
     if (l.sensorId) addHw(`sensor-${l.id}`, l.sensorId, 1, 'Light switch / sensor');

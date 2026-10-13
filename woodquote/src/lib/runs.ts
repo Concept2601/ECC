@@ -239,7 +239,7 @@ const emptyBuild = (): UnitBuild => ({ parts: [], hardware: [], aluminium: [], r
 
 export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunBuild {
   const counter = cat.countertops.find((c) => c.id === run.countertopId) ?? null;
-  const ctx: BuildContext = { topY: run.counterHeight };
+  const ctx: BuildContext = { topY: run.counterHeight, topFront: run.baseDepth + run.counterOverhang };
   const pieces: RunPiece[] = [];
   const extra = emptyBuild();
   const extraPlacements: RunBuild['extraPlacements'] = [];

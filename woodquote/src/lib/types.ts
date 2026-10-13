@@ -130,11 +130,12 @@ export interface Accessory {
   price: number; // price per pack (or per metre when unit = m)
 }
 
-export const APPLIANCE_CATEGORIES = ['hob', 'oven', 'microwave', 'fridge', 'dishwasher', 'hood', 'sink', 'washer', 'wineCooler', 'cooker', 'other'] as const;
+export const APPLIANCE_CATEGORIES = ['cooker', 'hob', 'downdraft', 'oven', 'microwave', 'fridge', 'dishwasher', 'washer', 'hood', 'sink', 'wineCooler', 'other'] as const;
 export type ApplianceCategory = (typeof APPLIANCE_CATEGORIES)[number];
 
 export const APPLIANCE_LABELS: Record<ApplianceCategory, string> = {
-  hob: 'Hobs',
+  hob: 'Stove hobs',
+  downdraft: 'Downdraft extractors',
   oven: 'Ovens',
   microwave: 'Microwaves',
   fridge: 'Refrigerators',
@@ -143,7 +144,7 @@ export const APPLIANCE_LABELS: Record<ApplianceCategory, string> = {
   sink: 'Sinks',
   washer: 'Washing machines',
   wineCooler: 'Wine coolers',
-  cooker: 'Freestanding stoves',
+  cooker: 'Stoves (free-standing)',
   other: 'Other appliances',
 };
 
@@ -159,6 +160,7 @@ export interface Appliance {
   color: string;
   /** where it lives: on top of a counter, inside a compartment, or free standing */
   placement: 'top' | 'inbuilt' | 'freestanding';
+  plates?: number; // hobs: number of plates / burners
 }
 
 export interface Catalog {
@@ -327,7 +329,17 @@ export interface FinishPanel {
   toFloor: boolean; // run down past the plinth / legs to the floor
 }
 
-export type LightLocation = 'underCabinet' | 'insideTop' | 'shelves' | 'plinth' | 'top' | 'backPanel';
+export type LightLocation = 'underCabinet' | 'insideTop' | 'shelves' | 'plinth' | 'top' | 'backPanel' | 'custom';
+
+/** A light placed anywhere, in unit coordinates (mm from the unit's left, floor/bottom and back). */
+export interface CustomLightPos {
+  x: number;
+  y: number;
+  z: number;
+  length: number;
+  vertical: boolean;
+  dir: 'down' | 'up' | 'front';
+}
 
 export interface Light {
   id: ID;
@@ -337,12 +349,16 @@ export interface Light {
   color: string; // used when temperature = 0
   bays: number[]; // empty = every bay
   sensorId: ID | null; // door sensor / hand-wave / touch switch
+  custom?: CustomLightPos; // used when location = custom
 }
 
 export interface TopAppliance {
   id: ID;
   applianceId: ID; // hob or sink set into the top
   bay: number;
+  frontGap?: number | null; // mm from the worktop front edge to the front of the hob / sink (blank = centred)
+  xOffset?: number | null; // mm from the unit's left edge to the hob's left edge (blank = centred over the bay)
+  downdraftId?: ID | null; // downdraft extractor fitted behind the hob
 }
 
 export interface Unit {
@@ -579,8 +595,45 @@ export interface Quote {
   applyTax: boolean;
   notes: string;
   sourceImage: string | null; // diagram used by the reader
+  room: Room | null; // room layout for visualising the design
   createdAt: number;
   updatedAt: number;
+}
+
+/* -------------------------------------------------------------- rooms */
+
+export type WallSide = 0 | 1 | 2 | 3; // back, right, front, left
+
+export interface RoomOpening {
+  id: ID;
+  kind: 'window' | 'door' | 'opening';
+  wall: WallSide;
+  offset: number; // mm from the start of the wall (left end for back/front, back end for left/right)
+  width: number;
+  height: number; // top of the opening above the floor
+  sill: number; // windows: bottom above the floor
+  beam: boolean; // RC beam over an open-plan opening
+  beamDepth: number; // how far the beam drops below the ceiling
+  label: string;
+}
+
+export interface RoomPlacement {
+  itemId: ID; // unit or kitchen run id
+  x: number; // position of the item's back-left corner
+  z: number;
+  rot: 0 | 90 | 180 | 270;
+}
+
+export interface Room {
+  width: number; // x
+  depth: number; // z
+  wallHeights: [number, number, number, number];
+  wallThickness: number;
+  showWalls: [boolean, boolean, boolean, boolean];
+  wallColor: string;
+  floorColor: string;
+  openings: RoomOpening[];
+  placements: RoomPlacement[];
 }
 
 /* ----------------------------------------------------- invoices / receipts */

@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { elevation, unitExtents } from '../lib/generate';
+import type { ItemPrice } from '../lib/pricing';
+import { itemBounds, wallPieces } from '../lib/room';
 import { activeLegs, legLength, legTransform, type RunBuild } from '../lib/runs';
-import type { Appliance, Box3 as PartBox, BoardMaterial, Catalog, HandleStyle, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
+import type { Appliance, Box3 as PartBox, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild, WallSide } from '../lib/types';
 
 /* ---------------------------------------------------- procedural textures */
 
@@ -186,18 +188,42 @@ export function applianceObject(a: Appliance, b: PartBox): THREE.Object3D {
   const front = b.z + b.d;
   switch (a.category) {
     case 'hob': {
-      add({ x: b.x, y: b.y, z: b.z, w: b.w, h: 6, d: b.d }, a.variant === 'Gas' ? darkMetal : blackGlass);
-      const cols = b.w > 700 ? 3 : 2;
-      for (let i = 0; i < cols; i++)
-        for (let j = 0; j < 2; j++) {
-          const x = b.x + (b.w * (i + 0.5)) / cols;
-          const z = b.z + (b.d * (j + 0.5)) / 2;
-          const r = 55 + ((i + j) % 2) * 20;
-          if (/gas/i.test(a.variant)) {
-            cyl(x, b.y + 12, z, r * 0.55, 12, darkMetal);
-            cyl(x, b.y + 20, z, r * 0.8, 4, metal);
-          } else cyl(x, b.y + 6.5, z, r, 1, new THREE.MeshStandardMaterial({ color: /induction/i.test(a.variant) ? '#3a3a40' : '#5a1f18', roughness: 0.4 }));
-        }
+      const gas = /gas/i.test(a.variant) && !/electric/i.test(a.variant);
+      add({ x: b.x, y: b.y, z: b.z, w: b.w, h: 6, d: b.d }, gas ? darkMetal : blackGlass);
+      // burner / plate layout by count: 2 → 1×2, 4 → 2×2, 5 → 2+1+2, 6 → 3×2
+      const plates = a.plates ?? (b.w > 700 ? 6 : 4);
+      const spots: [number, number, number][] = [];
+      if (plates <= 2) spots.push([0.5, 0.28, 1], [0.5, 0.72, 1]);
+      else if (plates === 5) spots.push([0.18, 0.28, 0.9], [0.18, 0.72, 0.9], [0.5, 0.5, 1.25], [0.82, 0.28, 0.9], [0.82, 0.72, 0.9]);
+      else {
+        const cols = Math.ceil(plates / 2);
+        for (let i = 0; i < cols; i++) for (let j = 0; j < 2; j++) spots.push([(i + 0.5) / cols, j === 0 ? 0.3 : 0.7, (i + j) % 2 ? 1.15 : 0.9]);
+      }
+      const r0 = Math.min(b.w / Math.max(2, Math.ceil(plates / 2)) / 2.6, b.d / 5.2);
+      const ring = new THREE.MeshStandardMaterial({ color: /induction/i.test(a.variant) ? '#3a3a40' : '#4a1a14', roughness: 0.45 });
+      spots.forEach(([u, v, sz], k) => {
+        const x = b.x + b.w * u;
+        const z = b.z + b.d * v;
+        const r = r0 * sz;
+        const isGas = gas || (/combo|gas \//i.test(a.variant + a.name) && k < 2);
+        if (isGas) {
+          cyl(x, b.y + 12, z, r * 0.45, 12, darkMetal);
+          cyl(x, b.y + 20, z, r * 0.75, 4, metal);
+          for (let q = 0; q < 4; q++) {
+            const bar = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 8, 8), darkMetal);
+            bar.position.set(x, b.y + 26, z);
+            bar.rotation.y = (q * Math.PI) / 4;
+            g.add(bar);
+          }
+        } else cyl(x, b.y + 6.5, z, r, 1, ring);
+      });
+      // control knobs / touch strip at the front
+      if (gas) for (let k = 0; k < plates; k++) cyl(b.x + (b.w * (k + 0.5)) / plates, b.y + 14, b.z + b.d - 25, 12, 16, metal);
+      break;
+    }
+    case 'downdraft': {
+      add({ x: b.x, y: b.y, z: b.z, w: b.w, h: b.h, d: b.d }, blackGlass);
+      add({ x: b.x + 15, y: b.y + b.h - 70, z: b.z + b.d, w: b.w - 30, h: 50, d: 1 }, new THREE.MeshStandardMaterial({ color: '#3a3d42', roughness: 0.6 }));
       break;
     }
     case 'sink': {
@@ -389,17 +415,21 @@ export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt:
     strip.position.set(l.box.x + l.box.w / 2, l.box.y + l.box.h / 2, l.box.z + l.box.d / 2);
     root.add(strip);
     if (opt.lightsOn && lightBudget > 0) {
-      const n = Math.min(lightBudget, Math.max(1, Math.round(l.box.w / 700)));
+      const vertical = l.box.h > l.box.w;
+      const len = vertical ? l.box.h : l.box.w;
+      const n = Math.min(lightBudget, Math.max(1, Math.round(len / 700)));
       for (let k = 0; k < n; k++) {
         const pl = new THREE.PointLight(l.color, 1.6, 900, 0);
         const off = l.dir === 'down' ? -120 : l.dir === 'up' ? 160 : 0;
-        pl.position.set(l.box.x + (l.box.w * (k + 0.5)) / n, l.box.y + off, l.box.z + (l.dir === 'front' ? 120 : 0));
+        const along = (len * (k + 0.5)) / n;
+        pl.position.set(vertical ? l.box.x : l.box.x + along, (vertical ? l.box.y + along : l.box.y) + off, l.box.z + (l.dir === 'front' ? 120 : 0));
         root.add(pl);
         lightBudget--;
       }
       // soft glow halo
-      const halo = new THREE.Mesh(new THREE.PlaneGeometry(l.box.w, 160), new THREE.MeshBasicMaterial({ color: l.color, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
-      if (l.dir === 'front') halo.position.set(l.box.x + l.box.w / 2, l.box.y - 60, l.box.z + 2);
+      const halo = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? 160 : l.box.w, vertical ? l.box.h : 160), new THREE.MeshBasicMaterial({ color: l.color, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
+      if (vertical) halo.position.set(l.box.x + 6, l.box.y + l.box.h / 2, l.box.z + 14);
+      else if (l.dir === 'front') halo.position.set(l.box.x + l.box.w / 2, l.box.y - 60, l.box.z + 2);
       else {
         halo.rotation.x = Math.PI / 2;
         halo.position.set(l.box.x + l.box.w / 2, l.box.y + (l.dir === 'up' ? 20 : -2), l.box.z);
@@ -699,3 +729,125 @@ export function renderRunImage(run: Run, rb: RunBuild, cat: Catalog, width = 120
 }
 
 export { addUnitRoom };
+
+/* ---------------------------------------------------------------- rooms */
+
+export function roomBounds(room: Room): Bounds {
+  const T = room.wallThickness;
+  return { x0: -T, x1: room.width + T, y0: 0, y1: Math.max(...room.wallHeights), z0: -T, z1: room.depth + T };
+}
+
+export const ROOM_VIEW_DIR: [number, number, number] = [0.45, 1.05, 1];
+
+export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, opt: SceneOptions & { selectedItemId?: string | null }): THREE.Group {
+  const root = new THREE.Group();
+  const T = room.wallThickness;
+  const W = room.width;
+  const D = room.depth;
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 2 * T, 20, D + 2 * T), surfaceMaterial(room.floorColor, 'satin', woodTexture(room.floorColor, false)));
+  floor.position.set(W / 2, -10, D / 2);
+  floor.receiveShadow = true;
+  root.add(floor);
+  const wallMat = new THREE.MeshStandardMaterial({ color: room.wallColor, roughness: 0.95 });
+  const beamMat = new THREE.MeshStandardMaterial({ color: '#a7a39c', roughness: 0.85 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: '#f5f5f4', roughness: 0.5 });
+  const glassMat = new THREE.MeshPhysicalMaterial({ color: '#cfe8ef', transparent: true, opacity: 0.28, roughness: 0.05, envMapIntensity: 1.4 });
+  const doorMat = surfaceMaterial('#8b6b4a', 'satin', woodTexture('#8b6b4a', true));
+  // wall coordinates (u along the wall, v across its thickness) → world box
+  const toBox = (wall: WallSide, u0: number, u1: number, y0: number, y1: number, v0 = 0, v1 = T): PartBox => {
+    switch (wall) {
+      case 0:
+        return { x: u0, y: y0, z: -v1, w: u1 - u0, h: y1 - y0, d: v1 - v0 };
+      case 1:
+        return { x: W + v0, y: y0, z: u0, w: v1 - v0, h: y1 - y0, d: u1 - u0 };
+      case 2:
+        return { x: u0, y: y0, z: D + v0, w: u1 - u0, h: y1 - y0, d: v1 - v0 };
+      default:
+        return { x: -v1, y: y0, z: u0, w: v1 - v0, h: y1 - y0, d: u1 - u0 };
+    }
+  };
+  for (const wall of [0, 1, 2, 3] as WallSide[]) {
+    const { pieces, openings, H } = wallPieces(room, wall);
+    const visible = room.showWalls[wall];
+    for (const p of pieces) {
+      const y1 = visible ? p.y1 : Math.min(p.y1, 120);
+      if (y1 <= p.y0) continue;
+      const m = boxMesh(toBox(wall, p.u0, p.u1, p.y0, y1), p.kind === 'beam' ? beamMat : wallMat, false);
+      root.add(m);
+    }
+    if (!visible) continue;
+    for (const o of openings) {
+      const a = o.offset;
+      const b = o.offset + o.width;
+      if (o.kind === 'window') {
+        root.add(boxMesh(toBox(wall, a, b, o.sill, o.height, T / 2 - 4, T / 2 + 4), glassMat, false));
+        for (const [u0, u1, y0, y1] of [
+          [a, a + 50, o.sill, o.height],
+          [b - 50, b, o.sill, o.height],
+          [a, b, o.sill, o.sill + 50],
+          [a, b, o.height - 50, o.height],
+          [(a + b) / 2 - 25, (a + b) / 2 + 25, o.sill, o.height],
+        ])
+          root.add(boxMesh(toBox(wall, u0, u1, y0, y1, T / 2 - 30, T / 2 + 30), frameMat, false));
+      } else if (o.kind === 'door') {
+        for (const [u0, u1, y0, y1] of [
+          [a - 40, a, 0, o.height + 40],
+          [b, b + 40, 0, o.height + 40],
+          [a, b, o.height, o.height + 40],
+        ])
+          root.add(boxMesh(toBox(wall, u0, u1, y0, y1, -20, T + 20), frameMat, false));
+        // door leaf, slightly open into the room
+        const leaf = new THREE.Group();
+        leaf.add(boxMesh({ x: 0, y: 0, z: 0, w: o.width - 10, h: o.height - 10, d: 40 }, doorMat));
+        const hinge = toBox(wall, a + 5, a + 6, 0, 1, 0, 1);
+        leaf.position.set(hinge.x, 0, hinge.z);
+        leaf.rotation.y = [0, -Math.PI / 2, Math.PI, Math.PI / 2][wall] + (wall === 0 || wall === 3 ? 0.5 : -0.5);
+        root.add(leaf);
+      }
+      if (o.kind === 'opening' && o.beam) {
+        const bb = toBox(wall, a, b, H - o.beamDepth, H, -40, T + 40);
+        root.add(boxMesh(bb, beamMat));
+      }
+    }
+  }
+  // corner posts
+  const maxH = Math.max(...room.wallHeights);
+  for (const [x, z, w0, w1] of [
+    [-T, -T, 0, 3],
+    [W, -T, 0, 1],
+    [W, D, 1, 2],
+    [-T, D, 2, 3],
+  ]) {
+    const vis = room.showWalls[w0] && room.showWalls[w1];
+    const h = vis ? Math.min(room.wallHeights[w0], room.wallHeights[w1]) : 120;
+    root.add(boxMesh({ x, y: 0, z, w: T, h: Math.min(h, maxH), d: T }, wallMat, false));
+  }
+  // the quoted items
+  for (const p of room.placements) {
+    const it = items.find((i) => i.id === p.itemId);
+    if (!it) continue;
+    let obj: THREE.Object3D | null = null;
+    if (it.kind === 'run' && it.run && it.runBuild) obj = buildRunObject(it.run, it.runBuild, cat, { ...opt, room: false, highlight: null });
+    else if (it.unit && it.build) obj = buildUnitObject(it.unit, it.build, cat, { ...opt, highlight: null });
+    if (!obj) continue;
+    const g = new THREE.Group();
+    g.add(obj);
+    g.position.set(p.x, 0, p.z);
+    g.rotation.y = (-p.rot * Math.PI) / 180;
+    g.userData.itemId = it.id;
+    g.traverse((c) => (c.userData.itemId = it.id));
+    if (opt.selectedItemId === it.id) {
+      const b = itemBounds(it, cat);
+      const hb: PartBox = { x: b.x0, y: 0, z: b.z0, w: b.x1 - b.x0, h: b.h, d: b.z1 - b.z0 };
+      const ln = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(hb)), new THREE.LineBasicMaterial({ color: '#ea580c' }));
+      ln.position.set(hb.x + hb.w / 2, hb.h / 2, hb.z + hb.d / 2);
+      g.add(ln);
+    }
+    root.add(g);
+  }
+  return root;
+}
+
+export function renderRoomImage(room: Room, items: ItemPrice[], cat: Catalog, width = 1400, height = 900, mime: 'image/png' | 'image/jpeg' = 'image/jpeg', view: ViewName = '3d', night = false): string | null {
+  return still(buildRoomObject(room, items, cat, { showFronts: true, lightsOn: night }), roomBounds(room), width, height, mime, view, night, ROOM_VIEW_DIR);
+}

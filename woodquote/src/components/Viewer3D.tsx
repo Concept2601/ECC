@@ -3,12 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { RunBuild } from '../lib/runs';
-import type { Box3, Catalog, Run, SectionRef, Unit, UnitBuild } from '../lib/types';
-import { addUnitRoom, buildRunObject, buildUnitObject, createStage, runBounds, runViewDir, unitBounds, type ViewName } from '../render/scene';
+import type { Box3, Catalog, Room, Run, SectionRef, Unit, UnitBuild } from '../lib/types';
+import { addUnitRoom, buildRoomObject, buildRunObject, buildUnitObject, createStage, ROOM_VIEW_DIR, roomBounds, runBounds, runViewDir, unitBounds, type ViewName } from '../render/scene';
+import type { ItemPrice } from '../lib/pricing';
 import { unitExtents } from '../lib/generate';
 
 export interface Pick {
   unitId: string | null;
+  itemId?: string | null;
   ref: SectionRef | null;
 }
 
@@ -25,6 +27,9 @@ interface Props {
   compact?: boolean;
   /** context shown around a unit, e.g. the kitchen worktop for a run cabinet */
   extraBoxes?: { box: Box3; color: string }[];
+  room?: Room;
+  roomItems?: ItemPrice[];
+  selectedItemId?: string | null;
 }
 
 const VIEWS: { v: ViewName; label: string }[] = [
@@ -37,7 +42,7 @@ const VIEWS: { v: ViewName; label: string }[] = [
 ];
 
 /** Interactive orbitable 3D render. Tap a compartment to select it. */
-export default function Viewer3D({ catalog, unit, build, run, runBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes }: Props) {
+export default function Viewer3D({ catalog, unit, build, run, runBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes, room, roomItems, selectedItemId }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const ctx = useRef<{ renderer: THREE.WebGLRenderer; stage: ReturnType<typeof createStage>; controls: OrbitControls; key: string } | null>(null);
   const pickRef = useRef(onPick);
@@ -80,13 +85,15 @@ export default function Viewer3D({ catalog, unit, build, run, runBuild, highligh
         let o: THREE.Object3D | null = h.object;
         let ref: SectionRef | null = null;
         let unitId: string | null = null;
+        let itemId: string | null = null;
         while (o) {
+          itemId = itemId ?? (o.userData.itemId as string | undefined) ?? null;
           ref = ref ?? (o.userData.ref as SectionRef | undefined) ?? null;
           unitId = unitId ?? (o.userData.unitId as string | undefined) ?? null;
           o = o.parent;
         }
-        if (ref || unitId) {
-          pickRef.current({ unitId, ref });
+        if (ref || unitId || itemId) {
+          pickRef.current({ unitId, ref, itemId });
           return;
         }
       }
@@ -129,9 +136,15 @@ export default function Viewer3D({ catalog, unit, build, run, runBuild, highligh
     const opt = { showFronts: fronts, openDoors: open, lightsOn: lights, highlight: highlight ?? null };
     let obj: THREE.Object3D;
     let bounds;
-    if (run && runBuild) {
+    let dir: [number, number, number] | undefined;
+    if (room && roomItems) {
+      obj = buildRoomObject(room, roomItems, catalog, { ...opt, selectedItemId: selectedItemId ?? null });
+      bounds = roomBounds(room);
+      dir = ROOM_VIEW_DIR;
+    } else if (run && runBuild) {
       obj = buildRunObject(run, runBuild, catalog, { ...opt, selectedUnitId: selectedUnitId ?? null, room: view !== 'back' && view !== 'top' });
       bounds = runBounds(runBuild);
+      dir = runViewDir(run);
     } else if (unit && build) {
       obj = buildUnitObject(unit, build, catalog, opt);
       for (const xb of extraBoxes ?? []) {
@@ -144,14 +157,14 @@ export default function Viewer3D({ catalog, unit, build, run, runBuild, highligh
     } else return;
     c.stage.setNight(lights);
     c.stage.setContent(obj, bounds);
-    const key = `${view}|${run?.shape ?? ''}|${Math.round(bounds.x1 - bounds.x0)}|${Math.round(bounds.y1)}|${Math.round(bounds.z1 - bounds.z0)}`;
+    const key = `${view}|${room ? 'room' : run?.shape ?? ''}|${Math.round(bounds.x1 - bounds.x0)}|${Math.round(bounds.y1)}|${Math.round(bounds.z1 - bounds.z0)}`;
     if (key !== c.key) {
       const el = host.current!;
-      const target = c.stage.frame((el.clientWidth || 1) / (el.clientHeight || 1), view, run ? runViewDir(run) : undefined);
+      const target = c.stage.frame((el.clientWidth || 1) / (el.clientHeight || 1), view, dir);
       c.controls.target.copy(target);
       c.key = key;
     }
-  }, [unit, build, run, runBuild, catalog, fronts, open, lights, highlight, selectedUnitId, view, extraBoxes]);
+  }, [unit, build, run, runBuild, catalog, fronts, open, lights, highlight, selectedUnitId, view, extraBoxes, room, roomItems, selectedItemId]);
 
   const chip = (active: boolean) => `rounded-lg px-2 py-1 text-[11px] font-semibold ${active ? 'bg-brand-600 text-white' : 'bg-white/90 text-stone-700'}`;
   return (

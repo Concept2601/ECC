@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">WoodQuote</string>
-    <string name="title_activity_main">WoodQuote</string>
+    <string name="app_name">WoodQuote by 2601</string>
+    <string name="title_activity_main">WoodQuote by 2601</string>
     <string name="package_name">zw.co.zuslyprojects.woodquote</string>
     <string name="custom_url_scheme">zw.co.zuslyprojects.woodquote</string>
 </resources>

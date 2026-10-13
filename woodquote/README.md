@@ -1,6 +1,6 @@
-# WoodQuote — joinery quotation app for Android
+# WoodQuote by 2601 — joinery quotation app for Android
 
-WoodQuote prices TV stands, kitchen cabinets, kitchen centre islands, built-in cabinets, fitted wardrobes (hinged or sliding), bookshelves, vanities and custom units. It also produces 3D renders, cut plans, quotations, invoices and receipts.
+WoodQuote by 2601 prices TV stands, kitchen cabinets, kitchen centre islands, built-in cabinets, fitted wardrobes (hinged or sliding), bookshelves, vanities and custom units. It also produces 3D renders, cut plans, quotations, invoices and receipts.
 
 It is a React + TypeScript app packaged for Android with Capacitor. All data stays on the device (IndexedDB) and the app works offline. Only the AI diagram reader needs internet.
 

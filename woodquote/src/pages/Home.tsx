@@ -29,7 +29,7 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {settings.company.logo ? <img src={settings.company.logo} className="h-10 w-10 rounded-xl bg-white object-contain p-1" /> : <img src="./favicon.svg" className="h-10 w-10" />}
             <div>
-              <div className="text-xs uppercase tracking-widest text-brand-100">WoodQuote</div>
+              <div className="text-xs uppercase tracking-widest text-brand-100">WoodQuote by 2601</div>
               <div className="text-xl font-bold">{settings.company.name}</div>
             </div>
           </div>

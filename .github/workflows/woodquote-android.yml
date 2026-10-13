@@ -1,0 +1,46 @@
+name: WoodQuote Android APK
+
+on:
+  push:
+    paths: ['woodquote/**', '.github/workflows/woodquote-android.yml']
+  pull_request:
+    paths: ['woodquote/**', '.github/workflows/woodquote-android.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: woodquote
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: woodquote/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build web app & sync Android project
+        run: npm run android:sync
+
+      - name: Build debug APK
+        working-directory: woodquote/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WoodQuote-debug-apk
+          path: woodquote/android/app/build/outputs/apk/debug/*.apk

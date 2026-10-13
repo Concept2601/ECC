@@ -1,3 +1,4 @@
+import { leafSections } from './sections';
 import type { Catalog, Unit } from './types';
 
 export function unitCounts(u: Unit) {
@@ -10,8 +11,7 @@ export function unitCounts(u: Unit) {
   let slidingFronts = 0;
   let appliances = 0;
   let inserts = 0;
-  for (const b of u.bays)
-    for (const s of b.sections) {
+  for (const s of leafSections(u)) {
       shelves += s.shelves;
       if (s.hangingRail) rails++;
       if (s.insertId) inserts++;
@@ -60,9 +60,9 @@ export function describeUnit(u: Unit, cat: Catalog): string[] {
   if (u.handleId) hw.push(acc(u.handleId)!);
   if (hw.filter(Boolean).length) lines.push(`Hardware: ${hw.filter(Boolean).join(', ')}`);
   const extras: string[] = [];
-  for (const b of u.bays) for (const s of b.sections) if (s.insertId) extras.push(name(cat.accessories, s.insertId) ?? '');
+  for (const s of leafSections(u)) if (s.insertId) extras.push(name(cat.accessories, s.insertId) ?? '');
   if (extras.length) lines.push(`Organisers: ${extras.join(', ')}`);
-  const appl: string[] = [...u.topAppliances.map((t) => name(cat.appliances, t.applianceId) ?? ''), ...u.bays.flatMap((b) => b.sections.filter((s) => s.front === 'appliance' && s.applianceId).map((s) => name(cat.appliances, s.applianceId) ?? ''))];
+  const appl: string[] = [...u.topAppliances.map((t) => name(cat.appliances, t.applianceId) ?? ''), ...leafSections(u).filter((s) => s.front === 'appliance' && s.applianceId).map((s) => name(cat.appliances, s.applianceId) ?? '')];
   if (appl.length) lines.push(`Appliances: ${appl.join(', ')}`);
   if (u.lights.length) lines.push(`Lighting: ${u.lights.map((l) => `${name(cat.accessories, l.accessoryId) ?? 'LED'} ${l.temperature ? `${l.temperature}K` : 'RGB'} (${l.location.replace(/([A-Z])/g, ' $1').toLowerCase()})`).join(', ')}`);
   if (u.mount === 'floor' && u.base === 'legs') lines.push(`Base: ${acc(u.legId) ?? 'legs'} (${u.baseHeight}mm)`);

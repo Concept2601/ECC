@@ -18,6 +18,7 @@ import type {
   PricingSettings,
   RailRender,
   Section,
+  SectionRef,
   Unit,
   UnitBuild,
 } from './types';
@@ -279,6 +280,177 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
   let x = t;
   const bayGeo: { x: number; w: number; shelves: { y: number }[]; topSecY: number }[] = [];
 
+  type Edges = { left: boolean; right: boolean; bottom: boolean; top: boolean };
+  /** one compartment: either split further (side by side / stacked) or filled with its front and contents */
+  const cell = (s: Section, ref: SectionRef, bx: number, sy: number, bw: number, sh: number, edges: Edges, geo: { shelves: { y: number }[] }): void => {
+    const i = ref.bay;
+    const parts = s.split?.parts ?? [];
+    if (s.split && parts.length > 1) {
+      const k = parts.length;
+      const total = sum(parts.map((p) => p.size)) || 1;
+      if (s.split.dir === 'cols') {
+        const clear = bw - (k - 1) * t;
+        let px = bx;
+        parts.forEach((p, idx) => {
+          const pw = (clear * p.size) / total;
+          if (idx < k - 1) {
+            addPart('Partition', 'carcass', 'board', cm, sh, cd, t, sh, eCar, { x: px + pw, y: sy, z: backT, w: t, h: sh, d: cd, meta: { ref } });
+            joints += 2;
+          }
+          cell(p, { ...ref, path: [...(ref.path ?? []), idx] }, px, sy, pw, sh, { ...edges, left: edges.left && idx === 0, right: edges.right && idx === k - 1 }, geo);
+          px += pw + t;
+        });
+      } else {
+        const clear = sh - (k - 1) * t;
+        let py = sy;
+        parts.forEach((p, idx) => {
+          const ph = (clear * p.size) / total;
+          if (idx < k - 1) {
+            addPart('Fixed shelf', 'shelf', 'board', cm, bw, cd, t, bw, eCar, { x: bx, y: py + ph, z: backT, w: bw, h: t, d: cd, meta: { ref } });
+            geo.shelves.push({ y: py + ph });
+            joints += 2;
+          }
+          cell(p, { ...ref, path: [...(ref.path ?? []), idx] }, bx, py, bw, ph, { ...edges, bottom: edges.bottom && idx === 0, top: edges.top && idx === k - 1 }, geo);
+          py += ph + t;
+        });
+      }
+      return;
+    }
+    const isAppliance = s.front === 'appliance' && !sliding;
+    if (s.shelves > 0 && !isAppliance) {
+      for (let k = 0; k < s.shelves; k++) {
+        const yy = sy + (sh * (k + 1)) / (s.shelves + 1) - t / 2;
+        addPart('Adjustable shelf', 'shelf', 'board', cm, bw - 2, cd - 20, t, bw - 2, eCar, { x: bx + 1, y: yy, z: backT, w: bw - 2, h: t, d: cd - 20, meta: { ref } });
+        geo.shelves.push({ y: yy });
+        pins += 4;
+      }
+    }
+    if (s.hangingRail && !isAppliance) {
+      addHw('rail', u.railId, acc(u.railId)?.unit === 'm' ? bw / 1000 : 1, 'Hanging rail');
+      rails.push({ box: { x: bx, y: sy + sh - 70, z: backT + cd / 2 - 12, w: bw, h: 25, d: 15, meta: { ref } } });
+    }
+    if (s.insertId) {
+      const ins = acc(s.insertId);
+      if (ins) {
+        addHw('insert', ins.id, 1, 'Pull-out / organiser');
+        if (ins.minWidth && bw < ins.minWidth) warnings.push(`Bay ${i + 1}: ${ins.name} needs at least ${ins.minWidth}mm clear width.`);
+        inserts.push({ accessoryId: ins.id, box: { x: bx + 15, y: sy + 15, z: backT + 15, w: bw - 30, h: sh - 30, d: cd - 50, meta: { ref } }, ref });
+      }
+    }
+
+    // the opening this front covers
+    const kind = sliding && s.front !== 'drawer' ? 'open' : s.front;
+    if (sliding && s.front !== 'drawer' && s.front !== 'open') warnings.push(`Bay ${i + 1}: compartment fronts are replaced by the sliding wardrobe doors.`);
+    if (kind === 'open') return;
+    const fit = sliding ? 'inset' : s.fit;
+    let fx0: number, fx1: number, fy0: number, fy1: number, fz: number;
+    if (fit === 'inset' || kind === 'appliance') {
+      fx0 = bx + 2;
+      fx1 = bx + bw - 2;
+      fy0 = sy + 2;
+      fy1 = sy + sh - 2;
+      fz = Dc - ft;
+    } else {
+      const outer = fit === 'half' ? t / 2 : 0;
+      fx0 = (edges.left ? outer : bx - t / 2) + GAP / 2;
+      fx1 = (edges.right ? W - outer : bx + bw + t / 2) - GAP / 2;
+      fy0 = (edges.bottom ? baseH + outer : sy - t / 2) + GAP / 2;
+      fy1 = (edges.top ? topY - outer : sy + sh + t / 2) - GAP / 2;
+      fz = Dc;
+    }
+    const fw = fx1 - fx0;
+    const fh = fy1 - fy0;
+
+    if (kind === 'door') {
+      const material = s.doorMaterial;
+      const hingeAcc = doorHinge(material, fit);
+      if (s.opening === 'pair') {
+        const dw = (fw - GAP) / 2;
+        ([['left', fx0], ['right', fx0 + dw + GAP]] as const).forEach(([side, dx]) => {
+          makePanel('Door', material, dx, fy0, dw, fh, fz, { ref, hinge: side, handle: true });
+          const hn = hingesForDoor(fh);
+          addHw('hinge', hingeAcc?.id, hn, `Door hinges (${fit})`);
+          hinges += hn;
+          addHandle(dw);
+        });
+      } else if (s.opening === 'up' || s.opening === 'down') {
+        makePanel(s.opening === 'up' ? 'Lift-up flap' : 'Drop-down flap', material, fx0, fy0, fw, fh, fz, { ref, hinge: s.opening === 'up' ? 'top' : 'bottom', handle: true });
+        const hn = fw > 900 ? 3 : 2;
+        addHw('hinge', hingeAcc?.id, hn, 'Flap hinges');
+        hinges += hn;
+        if (s.opening === 'up') addHw('stay', u.stayId, fw > 600 ? 2 : 1, 'Lift-up stays');
+        else addHw('stay', 'st-drop', 2, 'Drop-down stays');
+        addHandle(fw);
+      } else {
+        makePanel('Door', material, fx0, fy0, fw, fh, fz, { ref, hinge: s.opening, handle: true });
+        const hn = hingesForDoor(fh);
+        addHw('hinge', hingeAcc?.id, hn, `Door hinges (${fit})`);
+        hinges += hn;
+        addHandle(fw);
+      }
+    } else if (kind === 'sliding') {
+      const roller = acc('ro-mini') ?? acc(u.rollerId);
+      addHw('track', u.trackId, fw / 1000, 'Cabinet sliding track');
+      if (s.slide === 'bypass') {
+        const pw = fw / 2 + 15;
+        makePanel('Sliding door', s.doorMaterial, fx0, fy0, pw, fh, fz + ft + 4, { ref, slide: 'right', handle: true });
+        makePanel('Sliding door', s.doorMaterial, fx1 - pw, fy0, pw, fh, fz, { ref, slide: 'left', handle: true });
+        addHw('roller', roller?.id, 2, 'Sliding rollers');
+        addHandle(pw);
+        addHandle(pw);
+      } else {
+        makePanel('Sliding door', s.doorMaterial, fx0, fy0, fw, fh, fz, { ref, slide: s.slide, handle: true });
+        addHw('roller', roller?.id, 1, 'Sliding rollers');
+        addHandle(fw);
+      }
+    } else if (kind === 'appliance') {
+      const a = appl(s.applianceId);
+      if (a) {
+        useAppliance(a);
+        // appliance fascias may overlap the carcass edges; bottom appliances may use the plinth zone
+        const roomW = bw + 2 * t;
+        const roomH = sh + 2 * t + (edges.bottom ? baseH : 0);
+        if (a.width > roomW + 5) warnings.push(`Bay ${i + 1}: ${a.name} (${a.width}mm) is wider than the ${Math.round(roomW)}mm space.`);
+        if (a.height > roomH + 5) warnings.push(`Bay ${i + 1}: ${a.name} (${a.height}mm) is taller than the ${Math.round(roomH)}mm space.`);
+        const aw = Math.min(bw - 4, a.width);
+        const ah = Math.min(sh - 4, a.height);
+        const integrated = /integrated/i.test(a.variant);
+        applR.push({ applianceId: a.id, ref, box: { x: bx + (bw - aw) / 2, y: sy + (sh - ah) / 2, z: Math.max(backT, Dc + ft - a.depth), w: aw, h: ah, d: Math.min(a.depth, Dc + ft - backT), meta: { ref } } });
+        if (integrated) {
+          makePanel('Appliance door panel', 'wood', fx0, fy0, fw, fh, Dc, { ref, handle: true });
+          addHandle(fw);
+        }
+      } else warnings.push(`Bay ${i + 1}: choose an appliance for the appliance compartment.`);
+    } else if (kind === 'drawer') {
+      const dc = Math.max(1, s.drawerCount);
+      const dh = (fh - (dc - 1) * GAP) / dc;
+      const avail = (fit === 'inset' ? cd - ft : cd) - 10;
+      const { acc: runner, fits } = pickRunner(cat, u.runnerId, avail);
+      if (!fits) warnings.push(`Bay ${i + 1}: unit is too shallow for the selected runner range.`);
+      const L = runner?.lengthMm ?? Math.floor(avail / 50) * 50;
+      for (let k = 0; k < dc; k++) {
+        const dy = fy0 + k * (dh + GAP);
+        const door = `d${doorSeq++}`;
+        const meta: BoxMeta = { ref, door, drawer: true };
+        addPart('Drawer front', 'drawerFront', 'board', fm, fw, dh, ft, 2 * (fw + dh), eFront, { x: fx0, y: dy, z: fz, w: fw, h: dh, d: ft, meta: { ...meta, handle: true } });
+        const boxH = clamp(dh - 50, 60, 250);
+        const boxW = bw - DRAWER_CLEAR;
+        const bx0 = bx + DRAWER_CLEAR / 2;
+        const by0 = dy + 15;
+        const bz0 = fz - L;
+        addPart('Drawer side', 'drawerBox', 'board', cm, L, boxH, t, L, eCar, { x: bx0, y: by0, z: bz0, w: t, h: boxH, d: L, meta });
+        addPart('Drawer side', 'drawerBox', 'board', cm, L, boxH, t, L, eCar, { x: bx0 + boxW - t, y: by0, z: bz0, w: t, h: boxH, d: L, meta });
+        addPart('Drawer front/back (inner)', 'drawerBox', 'board', cm, boxW - 2 * t, boxH, t, boxW - 2 * t, eCar, { x: bx0 + t, y: by0, z: bz0, w: boxW - 2 * t, h: boxH, d: t, meta });
+        addPart('Drawer front/back (inner)', 'drawerBox', 'board', cm, boxW - 2 * t, boxH, t, 0, eCar, { x: bx0 + t, y: by0, z: fz - t, w: boxW - 2 * t, h: boxH, d: t, meta });
+        addPart('Drawer bottom', 'drawerBox', 'board', back?.id ?? cm, L, boxW, back?.thickness ?? t, 0, null, { x: bx0, y: by0 - 3, z: bz0, w: boxW, h: back?.thickness ?? t, d: L, meta });
+        joints += 4;
+        runnerPairs++;
+        if (runner) addHw('runner', runner.id, 1, `Drawer runners ${runner.size}`);
+        addHandle(fw);
+      }
+    }
+  };
+
   u.bays.forEach((bay, i) => {
     const bw = (clearW * bay.size) / bayTotal;
     const bx = x;
@@ -292,152 +464,17 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
     const clearH = Hi - (m - 1) * t;
     const secTotal = sum(bay.sections.map((s) => s.size)) || 1;
     let y = y0;
-    bay.sections.forEach((s, j) => {
-      const sh = (clearH * s.size) / secTotal;
+    bay.sections.forEach((top, j) => {
+      const sh = (clearH * top.size) / secTotal;
       const sy = y;
-      const ref = { bay: i, section: j };
+      const ref: SectionRef = { bay: i, section: j };
       if (j < m - 1) {
         addPart('Fixed shelf', 'shelf', 'board', cm, bw, cd, t, bw, eCar, { x: bx, y: sy + sh, z: backT, w: bw, h: t, d: cd, meta: { ref } });
         geo.shelves.push({ y: sy + sh });
         joints += 2;
       }
-      const isAppliance = s.front === 'appliance' && !sliding;
-      if (s.shelves > 0 && !isAppliance) {
-        for (let k = 0; k < s.shelves; k++) {
-          const yy = sy + (sh * (k + 1)) / (s.shelves + 1) - t / 2;
-          addPart('Adjustable shelf', 'shelf', 'board', cm, bw - 2, cd - 20, t, bw - 2, eCar, { x: bx + 1, y: yy, z: backT, w: bw - 2, h: t, d: cd - 20, meta: { ref } });
-          geo.shelves.push({ y: yy });
-          pins += 4;
-        }
-      }
       if (j === m - 1) geo.topSecY = sy + sh;
-      if (s.hangingRail && !isAppliance) {
-        addHw('rail', u.railId, acc(u.railId)?.unit === 'm' ? bw / 1000 : 1, 'Hanging rail');
-        rails.push({ box: { x: bx, y: sy + sh - 70, z: backT + cd / 2 - 12, w: bw, h: 25, d: 15, meta: { ref } } });
-      }
-      if (s.insertId) {
-        const ins = acc(s.insertId);
-        if (ins) {
-          addHw('insert', ins.id, 1, 'Pull-out / organiser');
-          if (ins.minWidth && bw < ins.minWidth) warnings.push(`Bay ${i + 1}: ${ins.name} needs at least ${ins.minWidth}mm clear width.`);
-          inserts.push({ accessoryId: ins.id, box: { x: bx + 15, y: sy + 15, z: backT + 15, w: bw - 30, h: sh - 30, d: cd - 50, meta: { ref } }, ref });
-        }
-      }
-
-      // the opening this front covers
-      const kind = sliding && s.front !== 'drawer' ? 'open' : s.front;
-      if (sliding && s.front !== 'drawer' && s.front !== 'open') warnings.push(`Bay ${i + 1}: compartment fronts are replaced by the sliding wardrobe doors.`);
-      if (kind === 'open') {
-        y = sy + sh + t;
-        return;
-      }
-      const fit = sliding ? 'inset' : s.fit;
-      let fx0: number, fx1: number, fy0: number, fy1: number, fz: number;
-      if (fit === 'inset' || kind === 'appliance') {
-        fx0 = bx + 2;
-        fx1 = bx + bw - 2;
-        fy0 = sy + 2;
-        fy1 = sy + sh - 2;
-        fz = Dc - ft;
-      } else {
-        const outer = fit === 'half' ? t / 2 : 0;
-        fx0 = (i === 0 ? outer : bx - t / 2) + GAP / 2;
-        fx1 = (i === n - 1 ? W - outer : bx + bw + t / 2) - GAP / 2;
-        fy0 = (j === 0 ? baseH + outer : sy - t / 2) + GAP / 2;
-        fy1 = (j === m - 1 ? topY - outer : sy + sh + t / 2) - GAP / 2;
-        fz = Dc;
-      }
-      const fw = fx1 - fx0;
-      const fh = fy1 - fy0;
-
-      if (kind === 'door') {
-        const material = s.doorMaterial;
-        const hingeAcc = doorHinge(material, fit);
-        if (s.opening === 'pair') {
-          const dw = (fw - GAP) / 2;
-          ([['left', fx0], ['right', fx0 + dw + GAP]] as const).forEach(([side, dx]) => {
-            makePanel('Door', material, dx, fy0, dw, fh, fz, { ref, hinge: side, handle: true });
-            const hn = hingesForDoor(fh);
-            addHw('hinge', hingeAcc?.id, hn, `Door hinges (${fit})`);
-            hinges += hn;
-            addHandle(dw);
-          });
-        } else if (s.opening === 'up' || s.opening === 'down') {
-          makePanel(s.opening === 'up' ? 'Lift-up flap' : 'Drop-down flap', material, fx0, fy0, fw, fh, fz, { ref, hinge: s.opening === 'up' ? 'top' : 'bottom', handle: true });
-          const hn = fw > 900 ? 3 : 2;
-          addHw('hinge', hingeAcc?.id, hn, 'Flap hinges');
-          hinges += hn;
-          if (s.opening === 'up') addHw('stay', u.stayId, fw > 600 ? 2 : 1, 'Lift-up stays');
-          else addHw('stay', 'st-drop', 2, 'Drop-down stays');
-          addHandle(fw);
-        } else {
-          makePanel('Door', material, fx0, fy0, fw, fh, fz, { ref, hinge: s.opening, handle: true });
-          const hn = hingesForDoor(fh);
-          addHw('hinge', hingeAcc?.id, hn, `Door hinges (${fit})`);
-          hinges += hn;
-          addHandle(fw);
-        }
-      } else if (kind === 'sliding') {
-        const roller = acc('ro-mini') ?? acc(u.rollerId);
-        addHw('track', u.trackId, fw / 1000, 'Cabinet sliding track');
-        if (s.slide === 'bypass') {
-          const pw = fw / 2 + 15;
-          makePanel('Sliding door', s.doorMaterial, fx0, fy0, pw, fh, fz + ft + 4, { ref, slide: 'right', handle: true });
-          makePanel('Sliding door', s.doorMaterial, fx1 - pw, fy0, pw, fh, fz, { ref, slide: 'left', handle: true });
-          addHw('roller', roller?.id, 2, 'Sliding rollers');
-          addHandle(pw);
-          addHandle(pw);
-        } else {
-          makePanel('Sliding door', s.doorMaterial, fx0, fy0, fw, fh, fz, { ref, slide: s.slide, handle: true });
-          addHw('roller', roller?.id, 1, 'Sliding rollers');
-          addHandle(fw);
-        }
-      } else if (kind === 'appliance') {
-        const a = appl(s.applianceId);
-        if (a) {
-          useAppliance(a);
-          // appliance fascias may overlap the carcass edges; bottom appliances may use the plinth zone
-          const roomW = bw + 2 * t;
-          const roomH = sh + 2 * t + (j === 0 ? baseH : 0);
-          if (a.width > roomW + 5) warnings.push(`Bay ${i + 1}: ${a.name} (${a.width}mm) is wider than the ${Math.round(roomW)}mm space.`);
-          if (a.height > roomH + 5) warnings.push(`Bay ${i + 1}: ${a.name} (${a.height}mm) is taller than the ${Math.round(roomH)}mm space.`);
-          const aw = Math.min(bw - 4, a.width);
-          const ah = Math.min(sh - 4, a.height);
-          const integrated = /integrated/i.test(a.variant);
-          applR.push({ applianceId: a.id, ref, box: { x: bx + (bw - aw) / 2, y: sy + (sh - ah) / 2, z: Math.max(backT, Dc + ft - a.depth), w: aw, h: ah, d: Math.min(a.depth, Dc + ft - backT), meta: { ref } } });
-          if (integrated) {
-            makePanel('Appliance door panel', 'wood', fx0, fy0, fw, fh, Dc, { ref, handle: true });
-            addHandle(fw);
-          }
-        } else warnings.push(`Bay ${i + 1}: choose an appliance for the appliance compartment.`);
-      } else if (kind === 'drawer') {
-        const dc = Math.max(1, s.drawerCount);
-        const dh = (fh - (dc - 1) * GAP) / dc;
-        const avail = (fit === 'inset' ? cd - ft : cd) - 10;
-        const { acc: runner, fits } = pickRunner(cat, u.runnerId, avail);
-        if (!fits) warnings.push(`Bay ${i + 1}: unit is too shallow for the selected runner range.`);
-        const L = runner?.lengthMm ?? Math.floor(avail / 50) * 50;
-        for (let k = 0; k < dc; k++) {
-          const dy = fy0 + k * (dh + GAP);
-          const door = `d${doorSeq++}`;
-          const meta: BoxMeta = { ref, door, drawer: true };
-          addPart('Drawer front', 'drawerFront', 'board', fm, fw, dh, ft, 2 * (fw + dh), eFront, { x: fx0, y: dy, z: fz, w: fw, h: dh, d: ft, meta: { ...meta, handle: true } });
-          const boxH = clamp(dh - 50, 60, 250);
-          const boxW = bw - DRAWER_CLEAR;
-          const bx0 = bx + DRAWER_CLEAR / 2;
-          const by0 = dy + 15;
-          const bz0 = fz - L;
-          addPart('Drawer side', 'drawerBox', 'board', cm, L, boxH, t, L, eCar, { x: bx0, y: by0, z: bz0, w: t, h: boxH, d: L, meta });
-          addPart('Drawer side', 'drawerBox', 'board', cm, L, boxH, t, L, eCar, { x: bx0 + boxW - t, y: by0, z: bz0, w: t, h: boxH, d: L, meta });
-          addPart('Drawer front/back (inner)', 'drawerBox', 'board', cm, boxW - 2 * t, boxH, t, boxW - 2 * t, eCar, { x: bx0 + t, y: by0, z: bz0, w: boxW - 2 * t, h: boxH, d: t, meta });
-          addPart('Drawer front/back (inner)', 'drawerBox', 'board', cm, boxW - 2 * t, boxH, t, 0, eCar, { x: bx0 + t, y: by0, z: fz - t, w: boxW - 2 * t, h: boxH, d: t, meta });
-          addPart('Drawer bottom', 'drawerBox', 'board', back?.id ?? cm, L, boxW, back?.thickness ?? t, 0, null, { x: bx0, y: by0 - 3, z: bz0, w: boxW, h: back?.thickness ?? t, d: L, meta });
-          joints += 4;
-          runnerPairs++;
-          if (runner) addHw('runner', runner.id, 1, `Drawer runners ${runner.size}`);
-          addHandle(fw);
-        }
-      }
+      cell(top, ref, bx, sy, bw, sh, { left: i === 0, right: i === n - 1, bottom: j === 0, top: j === m - 1 }, geo);
       y = sy + sh + t;
     });
     x = bx + bw + t;

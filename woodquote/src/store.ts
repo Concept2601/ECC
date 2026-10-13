@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { defaultCatalog, defaultSettings } from './lib/defaults';
 import { normalizeUnit } from './lib/presets';
+import { normalizeRoom } from './lib/room';
 import { calculateQuote } from './lib/pricing';
 import type { Catalog, Counters, Invoice, Payment, Quote, Settings } from './lib/types';
 import { addDaysISO, deepClone, todayISO, uid } from './lib/util';
@@ -55,7 +56,7 @@ export function mergeCatalog(c: Partial<Catalog>): Catalog {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizeQuote(q: any): Quote {
-  return { ...q, units: (q.units ?? []).map(normalizeUnit), runs: q.runs ?? [], attachments: q.attachments ?? [], includeAppliances: q.includeAppliances ?? true, room: q.room ?? null };
+  return { ...q, units: (q.units ?? []).map(normalizeUnit), runs: q.runs ?? [], attachments: q.attachments ?? [], includeAppliances: q.includeAppliances ?? true, room: normalizeRoom(q.room) };
 }
 
 const num = (prefix: string, n: number) => `${prefix}${String(n).padStart(4, '0')}`;

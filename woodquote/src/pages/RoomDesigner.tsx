@@ -1,12 +1,12 @@
-import { Box, Columns2, DoorOpen, Map as MapIcon, Plus, RotateCw, SquareDashed, Trash2 } from 'lucide-react';
+import { Box, Columns2, DoorOpen, Map as MapIcon, Plus, RotateCw, SquareDashed, Trash2, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import Viewer3D from '../components/Viewer3D';
 import { useQuoteCalc } from '../hooks';
 import type { ItemPrice } from '../lib/pricing';
-import { autoPlace, defaultRoom, footprints, newOpening, OPENING_LABELS, roomWarnings, snapToWall, WALL_NAMES, wallLength } from '../lib/room';
-import type { Catalog, Room, RoomOpening, RoomPlacement, WallSide } from '../lib/types';
+import { autoPlace, closeRoom, defaultRoom, footprints, inwardNormal, isClosed, newOpening, newWall, OPENING_LABELS, ROOM_SHAPES, roomExtents, roomShape, roomWarnings, snapToWall, vertices, wallDir, wallName, type RoomShape } from '../lib/room';
+import type { Catalog, Room, RoomOpening, RoomPlacement } from '../lib/types';
 import { useStore } from '../store';
 
 type Tab = 'room' | 'openings' | 'items';
@@ -19,15 +19,30 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
+type P = [number, number];
+const add = (a: P, b: P, k = 1): P => [a[0] + b[0] * k, a[1] + b[1] * k];
+const pts = (ps: P[]) => ps.map((q) => q.join(',')).join(' ');
+
 /** Top-down plan: walls, openings and draggable items. */
 function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: Room; items: ItemPrice[]; catalog: Catalog; selected: string | null; onSelect: (id: string | null) => void; onMove: (id: string, p: RoomPlacement) => void }) {
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<{ id: string; start: [number, number]; orig: RoomPlacement } | null>(null);
   const T = room.wallThickness;
-  const W = room.width;
-  const D = room.depth;
-  const pad = Math.max(W, D) * 0.1;
-  const fs = Math.max(W, D) / 40;
+  const ext = { ...roomExtents(room) };
+  for (const pl of room.placements) {
+    const it = items.find((i) => i.id === pl.itemId);
+    if (!it) continue;
+    for (const [px, pz] of footprints(it, catalog, pl).flat()) {
+      ext.x0 = Math.min(ext.x0, px);
+      ext.x1 = Math.max(ext.x1, px);
+      ext.z0 = Math.min(ext.z0, pz);
+      ext.z1 = Math.max(ext.z1, pz);
+    }
+  }
+  const span = Math.max(ext.x1 - ext.x0, ext.z1 - ext.z0, 1000);
+  const pad = span * 0.12 + T;
+  const fs = span / 40;
+  const v = vertices(room);
   const toMm = (e: React.PointerEvent): [number, number] => {
     const s = svg.current!;
     const pt = s.createSVGPoint();
@@ -36,13 +51,19 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
     const p = pt.matrixTransform(s.getScreenCTM()!.inverse());
     return [p.x, p.y];
   };
-  const wallRect = (w: WallSide) => (w === 0 ? { x: -T, y: -T, width: W + 2 * T, height: T } : w === 1 ? { x: W, y: -T, width: T, height: D + 2 * T } : w === 2 ? { x: -T, y: D, width: W + 2 * T, height: T } : { x: -T, y: -T, width: T, height: D + 2 * T });
-  const along = (w: WallSide, u0: number, u1: number) => (w === 0 ? { x: u0, y: -T, width: u1 - u0, height: T } : w === 1 ? { x: W, y: u0, width: T, height: u1 - u0 } : w === 2 ? { x: u0, y: D, width: u1 - u0, height: T } : { x: -T, y: u0, width: T, height: u1 - u0 });
+  /** Quad along wall i from u0..u1, from the inside face (0) outwards (t > 0) or inwards (t < 0). */
+  const quad = (i: number, u0: number, u1: number, t0: number, t1: number): P[] => {
+    const d = wallDir(room.walls[i]);
+    const n = inwardNormal(room, i);
+    const a = add(v[i], d, u0);
+    const b = add(v[i], d, u1);
+    return [add(a, n, -t0), add(b, n, -t0), add(b, n, -t1), add(a, n, -t1)];
+  };
 
   return (
     <svg
       ref={svg}
-      viewBox={`${-T - pad} ${-T - pad} ${W + 2 * T + 2 * pad} ${D + 2 * T + 2 * pad}`}
+      viewBox={`${ext.x0 - pad} ${ext.z0 - pad} ${ext.x1 - ext.x0 + 2 * pad} ${ext.z1 - ext.z0 + 2 * pad}`}
       className="h-full w-full touch-none select-none"
       onPointerMove={(e) => {
         if (!drag.current) return;
@@ -54,30 +75,47 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
       onPointerLeave={() => (drag.current = null)}
       onClick={(e) => e.target === svg.current && onSelect(null)}
     >
-      <rect x={0} y={0} width={W} height={D} fill={room.floorColor} opacity={0.35} />
-      {([0, 1, 2, 3] as WallSide[]).map((w) => (
-        <rect key={w} {...wallRect(w)} fill={room.showWalls[w] ? '#57534e' : '#d6d3d1'} />
+      <polygon points={pts(v)} fill={room.floorColor} opacity={0.35} />
+      {room.walls.map((w, i) => (
+        <g key={w.id}>
+          <polygon points={pts(quad(i, -T, w.length + T, 0, T))} fill={w.visible ? '#57534e' : '#d6d3d1'} />
+        </g>
+      ))}
+      {v.slice(0, room.walls.length).map((p, i) => (
+        <circle key={i} cx={p[0]} cy={p[1]} r={fs / 3} fill="#ea580c" />
       ))}
       {room.openings.map((o) => {
-        const r = along(o.wall, o.offset, o.offset + o.width);
-        const horiz = o.wall === 0 || o.wall === 2;
+        const w = room.walls[o.wall];
+        if (!w) return null;
+        const d = wallDir(w);
+        const n = inwardNormal(room, o.wall);
+        const u0 = Math.max(0, o.offset);
+        const u1 = Math.min(w.length, o.offset + o.width);
+        const mid = add(v[o.wall], d, (u0 + u1) / 2);
         return (
           <g key={o.id}>
-            <rect {...r} fill="#fff" />
-            {o.kind === 'window' && (horiz ? <line x1={r.x} x2={r.x + r.width} y1={r.y + T / 2} y2={r.y + T / 2} stroke="#38bdf8" strokeWidth={T / 4} /> : <line y1={r.y} y2={r.y + r.height} x1={r.x + T / 2} x2={r.x + T / 2} stroke="#38bdf8" strokeWidth={T / 4} />)}
-            {o.kind === 'door' && (() => {
-              const inward = o.wall === 0 || o.wall === 3 ? 1 : -1;
-              const hx = o.wall === 0 ? r.x : o.wall === 2 ? r.x : o.wall === 1 ? W : 0;
-              const hz = o.wall === 0 ? 0 : o.wall === 2 ? D : r.y;
-              const path = horiz
-                ? `M${hx} ${hz} L${hx} ${hz + inward * o.width} A${o.width} ${o.width} 0 0 ${inward > 0 ? 0 : 1} ${hx + o.width} ${hz}`
-                : `M${hx} ${hz} L${hx + inward * o.width} ${hz} A${o.width} ${o.width} 0 0 ${inward > 0 ? 1 : 0} ${hx} ${hz + o.width}`;
-              return <path d={path} fill="none" stroke="#8b6b4a" strokeWidth={fs / 6} />;
+            <polygon points={pts(quad(o.wall, u0, u1, -1, T + 1))} fill="#fff" />
+            {o.kind === 'window' && (() => {
+              const [a, b] = [add(add(v[o.wall], d, u0), n, -T / 2), add(add(v[o.wall], d, u1), n, -T / 2)];
+              return <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke="#38bdf8" strokeWidth={T / 4} />;
             })()}
-            {o.kind === 'opening' && o.beam && (horiz ? <rect x={r.x} y={o.wall === 0 ? 0 : D - 300} width={r.width} height={300} fill="none" stroke="#78716c" strokeDasharray={`${fs} ${fs / 2}`} strokeWidth={fs / 8} /> : <rect x={o.wall === 3 ? 0 : W - 300} y={r.y} width={300} height={r.height} fill="none" stroke="#78716c" strokeDasharray={`${fs} ${fs / 2}`} strokeWidth={fs / 8} />)}
-            <text x={r.x + r.width / 2} y={r.y + r.height / 2} fontSize={fs * 0.7} textAnchor="middle" dominantBaseline="middle" fill="#1c1917" transform={horiz ? undefined : `rotate(-90 ${r.x + r.width / 2} ${r.y + r.height / 2})`}>
-              {o.kind === 'opening' ? (o.beam ? 'RC beam over' : 'open') : ''}
-            </text>
+            {o.kind === 'door' && (() => {
+              const r = u1 - u0;
+              const hinge = add(v[o.wall], d, u0);
+              const open = add(hinge, n, r);
+              const end = add(hinge, d, r);
+              const sweep = n[0] * d[1] - n[1] * d[0] > 0 ? 1 : 0;
+              return <path d={`M${hinge.join(' ')} L${open.join(' ')} A${r} ${r} 0 0 ${sweep} ${end.join(' ')}`} fill="none" stroke="#8b6b4a" strokeWidth={fs / 6} />;
+            })()}
+            {o.kind === 'opening' && o.beam && <polygon points={pts(quad(o.wall, u0, u1, 0, -300))} fill="none" stroke="#78716c" strokeDasharray={`${fs} ${fs / 2}`} strokeWidth={fs / 8} />}
+            {o.kind === 'opening' && (() => {
+              const p = add(mid, n, fs * 1.2);
+              return (
+                <text x={p[0]} y={p[1]} fontSize={fs * 0.7} textAnchor="middle" dominantBaseline="middle" fill="#1c1917">
+                  {o.beam ? 'RC beam over' : 'open'}
+                </text>
+              );
+            })()}
           </g>
         );
       })}
@@ -85,9 +123,9 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
         const it = items.find((i) => i.id === p.itemId);
         if (!it) return null;
         const polys = footprints(it, catalog, p);
-        const pts = polys[0];
-        const cx = pts.reduce((a, q) => a + q[0], 0) / 4;
-        const cz = pts.reduce((a, q) => a + q[1], 0) / 4;
+        const ps = polys[0];
+        const cx = ps.reduce((a, q) => a + q[0], 0) / 4;
+        const cz = ps.reduce((a, q) => a + q[1], 0) / 4;
         const sel = selected === it.id;
         return (
           <g
@@ -101,7 +139,7 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
             }}
           >
             {polys.map((poly, k) => (
-              <polygon key={k} points={poly.map((q) => q.join(',')).join(' ')} fill={it.kind === 'run' ? '#ddd6fe' : '#e9c99f'} fillOpacity={0.85} stroke={sel ? '#ea580c' : '#57534e'} strokeWidth={sel ? fs / 3 : fs / 10} />
+              <polygon key={k} points={pts(poly)} fill={it.kind === 'run' ? '#ddd6fe' : '#e9c99f'} fillOpacity={0.85} stroke={sel ? '#ea580c' : '#57534e'} strokeWidth={sel ? fs / 3 : fs / 10} />
             ))}
             <text x={cx} y={cz} fontSize={fs * 0.8} textAnchor="middle" dominantBaseline="middle" fill="#1c1917" fontWeight={600}>
               {it.name.length > 24 ? `${it.name.slice(0, 22)}…` : it.name}
@@ -109,18 +147,18 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
           </g>
         );
       })}
-      <g fill="#333" fontSize={fs} fontWeight={700} textAnchor="middle">
-        <text x={W / 2} y={-T - pad * 0.35}>
-          {W} mm · {WALL_NAMES[0]}
-        </text>
-        <text x={-T - pad * 0.35} y={D / 2} transform={`rotate(-90 ${-T - pad * 0.35} ${D / 2})`}>
-          {D} mm
-        </text>
-        <text x={W / 2} y={D + T + pad * 0.6} fontSize={fs * 0.8} fill="#78716c">
-          {WALL_NAMES[2]}
-          {room.showWalls[2] ? '' : ' (cut away for viewing)'}
-        </text>
-      </g>
+      {room.walls.map((w, i) => {
+        const d = wallDir(w);
+        const n = inwardNormal(room, i);
+        const p = add(add(v[i], d, w.length / 2), n, -(T + fs * 1.1));
+        let a = w.angle % 360;
+        if (a > 90 && a <= 270) a -= 180;
+        return (
+          <text key={w.id} x={p[0]} y={p[1]} fontSize={fs} fontWeight={700} textAnchor="middle" dominantBaseline="middle" fill={w.visible ? '#333' : '#a8a29e'} transform={`rotate(${a} ${p[0]} ${p[1]})`}>
+            W{i + 1} · {w.length} mm{w.visible ? '' : ' (cut away)'}
+          </text>
+        );
+      })}
     </svg>
   );
 }
@@ -148,6 +186,18 @@ export default function RoomDesigner() {
   const sel = room.placements.find((p) => p.itemId === selected);
   const selItem = items.find((i) => i.id === selected);
   const warnings = roomWarnings(room);
+  const ext = roomExtents(room);
+  /** Remove wall i (openings on it go too; later walls keep theirs). */
+  const deleteWall = (r: Room, i: number) => {
+    r.walls.splice(i, 1);
+    r.openings = r.openings.filter((o) => o.wall !== i).map((o) => (o.wall > i ? { ...o, wall: o.wall - 1 } : o));
+  };
+  const insertWall = (r: Room, i: number) => {
+    const w = r.walls[i];
+    r.walls.splice(i + 1, 0, newWall(1000, w.angle + 90, w.height));
+    r.openings = r.openings.map((o) => (o.wall > i ? { ...o, wall: o.wall + 1 } : o));
+  };
+  const turn = (r: Room, i: number, by: number) => (r.walls[i].angle = (((r.walls[i].angle + by) % 360) + 360) % 360);
 
   const viewer = <Viewer3D catalog={catalog} room={room} roomItems={items} selectedItemId={selected} onPick={(p) => p.itemId && (setSelected(p.itemId), setTab('items'))} className="h-full w-full" />;
   const plan = (
@@ -158,7 +208,7 @@ export default function RoomDesigner() {
 
   return (
     <div className="flex h-[100dvh] flex-col">
-      <PageHeader title="Room layout" subtitle={`${quote.title} · ${room.width} × ${room.depth} mm`} back={`/quotes/${quote.id}`} />
+      <PageHeader title="Room layout" subtitle={`${quote.title} · ${Math.round(ext.x1 - ext.x0)} × ${Math.round(ext.z1 - ext.z0)} mm`} back={`/quotes/${quote.id}`} />
       <div className="relative shrink-0 overflow-hidden border-b border-stone-200 bg-stone-200">
         <div className={`grid h-[42vh] min-h-[260px] grid-rows-[100%] md:h-[50vh] ${mode === 'both' ? 'md:grid-cols-2' : ''}`}>
           {(mode === '3d' || mode === 'both') && <div className={`${mode === 'both' ? 'hidden md:block' : ''} h-full min-h-0 min-w-0 overflow-hidden`}>{viewer}</div>}
@@ -199,34 +249,86 @@ export default function RoomDesigner() {
         <div className="mx-auto max-w-5xl space-y-3 p-3">
           {tab === 'room' && (
             <div className="grid gap-3 md:grid-cols-2">
-              <Card title="Room size">
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Width (back wall)">
-                    <NumInput value={room.width} min={1000} suffix="mm" onChange={(v) => up((r) => (r.width = v))} />
-                  </Field>
-                  <Field label="Depth (side walls)">
-                    <NumInput value={room.depth} min={1000} suffix="mm" onChange={(v) => up((r) => (r.depth = v))} />
-                  </Field>
-                  <Field label="Wall thickness">
-                    <NumInput value={room.wallThickness} min={50} suffix="mm" onChange={(v) => up((r) => (r.wallThickness = v))} />
-                  </Field>
-                  <Field label="All wall heights">
-                    <NumInput value={room.wallHeights[0]} min={1800} suffix="mm" onChange={(v) => up((r) => (r.wallHeights = [v, v, v, v]))} />
-                  </Field>
-                  <Field label="Wall colour">
-                    <input type="color" className="h-10 w-full rounded-xl border border-stone-300" value={room.wallColor} onChange={(e) => up((r) => (r.wallColor = e.target.value))} />
-                  </Field>
-                  <Field label="Floor colour">
-                    <input type="color" className="h-10 w-full rounded-xl border border-stone-300" value={room.floorColor} onChange={(e) => up((r) => (r.floorColor = e.target.value))} />
-                  </Field>
+              <Card title="Room shape & finish">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.keys(ROOM_SHAPES) as RoomShape[]).map((k) => (
+                      <button
+                        key={k}
+                        className="btn-secondary px-3 py-1.5 text-xs"
+                        onClick={() =>
+                          up((r) => {
+                            r.walls = roomShape(k, r.walls[0]?.height ?? 2700);
+                            r.walls[Math.min(2, r.walls.length - 1)].visible = false;
+                            r.openings = r.openings.filter((o) => o.wall < r.walls.length);
+                          })
+                        }
+                      >
+                        {ROOM_SHAPES[k]}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Wall thickness">
+                      <NumInput value={room.wallThickness} min={50} suffix="mm" onChange={(v) => up((r) => (r.wallThickness = v))} />
+                    </Field>
+                    <Field label="All wall heights">
+                      <NumInput value={room.walls[0]?.height ?? 2700} min={1800} suffix="mm" onChange={(v) => up((r) => r.walls.forEach((w) => (w.height = v)))} />
+                    </Field>
+                    <Field label="Wall colour">
+                      <input type="color" className="h-10 w-full rounded-xl border border-stone-300" value={room.wallColor} onChange={(e) => up((r) => (r.wallColor = e.target.value))} />
+                    </Field>
+                    <Field label="Floor colour">
+                      <input type="color" className="h-10 w-full rounded-xl border border-stone-300" value={room.floorColor} onChange={(e) => up((r) => (r.floorColor = e.target.value))} />
+                    </Field>
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    Walls are drawn one after another from the first corner. Direction is the way a wall runs on the plan: 0° → right, 90° ↓ towards the front, 180° ← left, 270° ↑ towards the back; any angle in between makes a slanted wall.
+                  </p>
+                  {!isClosed(room) && (
+                    <button className="btn-primary w-full" onClick={() => up((r) => Object.assign(r, closeRoom(r)))}>
+                      <Undo2 size={16} /> Close the room (fit the last wall)
+                    </button>
+                  )}
                 </div>
               </Card>
-              <Card title="Each wall">
-                <div className="space-y-2">
-                  {([0, 1, 2, 3] as WallSide[]).map((w) => (
-                    <div key={w} className="grid grid-cols-[1fr_120px] items-center gap-2">
-                      <Toggle label={`${WALL_NAMES[w]} (${wallLength(room, w)}mm)`} checked={room.showWalls[w]} onChange={(v) => up((r) => (r.showWalls[w] = v))} />
-                      <NumInput value={room.wallHeights[w]} min={1000} suffix="mm" onChange={(v) => up((r) => (r.wallHeights[w] = v))} />
+              <Card title={`Walls (${room.walls.length})`}>
+                <div className="space-y-3">
+                  {room.walls.map((w, i) => (
+                    <div key={w.id} className="rounded-xl border border-stone-200 p-2" data-wall={i}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="text-sm font-bold">{wallName(room, i)}</span>
+                        <span className="ml-auto" />
+                        <button className="btn-ghost px-2 py-1 text-xs" aria-label={`Add wall after wall ${i + 1}`} onClick={() => up((r) => insertWall(r, i))}>
+                          <Plus size={14} /> After
+                        </button>
+                        {room.walls.length > 3 && (
+                          <button className="btn-ghost px-2 text-red-600" aria-label={`Remove wall ${i + 1}`} onClick={() => up((r) => deleteWall(r, i))}>
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Field label="Length">
+                          <NumInput value={w.length} min={100} suffix="mm" onChange={(v) => up((r) => (r.walls[i].length = v))} />
+                        </Field>
+                        <Field label="Direction">
+                          <NumInput value={w.angle} min={0} max={359.9} step={0.5} suffix="°" onChange={(v) => up((r) => (r.walls[i].angle = ((v % 360) + 360) % 360))} />
+                        </Field>
+                        <Field label="Height">
+                          <NumInput value={w.height} min={1000} suffix="mm" onChange={(v) => up((r) => (r.walls[i].height = v))} />
+                        </Field>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-1">
+                        {[-90, -45, 45, 90].map((by) => (
+                          <button key={by} className="btn-secondary px-2 py-1 text-xs" onClick={() => up((r) => turn(r, i, by))}>
+                            {by > 0 ? `↻ ${by}°` : `↺ ${-by}°`}
+                          </button>
+                        ))}
+                        <span className="ml-auto">
+                          <Toggle label="Show" checked={w.visible} onChange={(v) => up((r) => (r.walls[i].visible = v))} />
+                        </span>
+                      </div>
                     </div>
                   ))}
                   <p className="text-xs text-stone-500">Switch a wall off to cut it away in the 3D view so the client can see in (it still appears as a low outline).</p>
@@ -252,15 +354,15 @@ export default function RoomDesigner() {
                       <Select<RoomOpening['kind']> value={o.kind} onChange={(v) => v && up((r) => Object.assign(r.openings[i], { kind: v, beam: v === 'opening' ? r.openings[i].beam : false }))} options={(Object.keys(OPENING_LABELS) as RoomOpening['kind'][]).map((k) => ({ value: k, label: OPENING_LABELS[k] }))} />
                     </Field>
                     <Field label="Wall">
-                      <select className="input" value={o.wall} onChange={(e) => up((r) => (r.openings[i].wall = Number(e.target.value) as WallSide))}>
-                        {WALL_NAMES.map((n, w) => (
+                      <select className="input" value={o.wall} onChange={(e) => up((r) => (r.openings[i].wall = Number(e.target.value)))}>
+                        {room.walls.map((_, w) => (
                           <option key={w} value={w}>
-                            {n}
+                            {wallName(room, w)}
                           </option>
                         ))}
                       </select>
                     </Field>
-                    <Field label={o.wall === 0 || o.wall === 2 ? 'From left corner' : 'From back corner'}>
+                    <Field label="From wall start">
                       <NumInput value={o.offset} min={0} suffix="mm" onChange={(v) => up((r) => (r.openings[i].offset = v))} />
                     </Field>
                     <Field label="Width">
@@ -296,7 +398,7 @@ export default function RoomDesigner() {
                 <button className="btn-secondary" onClick={() => up((r) => r.openings.push(newOpening('window', 0, r)))}>
                   <Plus size={16} /> Window
                 </button>
-                <button className="btn-secondary" onClick={() => up((r) => r.openings.push(newOpening('door', 3, r)))}>
+                <button className="btn-secondary" onClick={() => up((r) => r.openings.push(newOpening('door', Math.min(3, r.walls.length - 1), r)))}>
                   <DoorOpen size={16} /> Door
                 </button>
                 <button className="btn-secondary" onClick={() => up((r) => r.openings.push(newOpening('opening', 1, r)))}>
@@ -319,27 +421,27 @@ export default function RoomDesigner() {
                 <Card title={selItem.name}>
                   <div className="space-y-3">
                     <div className="grid grid-cols-3 gap-3">
-                      <Field label="From left wall (X)">
+                      <Field label="Across (X)">
                         <NumInput value={sel.x} suffix="mm" onChange={(v) => up((r) => (r.placements.find((p) => p.itemId === sel.itemId)!.x = v))} />
                       </Field>
-                      <Field label="From back wall (Z)">
+                      <Field label="Down the plan (Z)">
                         <NumInput value={sel.z} suffix="mm" onChange={(v) => up((r) => (r.placements.find((p) => p.itemId === sel.itemId)!.z = v))} />
                       </Field>
                       <Field label="Facing">
-                        <button className="btn-secondary w-full" onClick={() => up((r) => { const p = r.placements.find((x) => x.itemId === sel.itemId)!; p.rot = (((p.rot + 90) % 360) as RoomPlacement['rot']); })}>
+                        <button className="btn-secondary w-full" onClick={() => up((r) => { const p = r.placements.find((x) => x.itemId === sel.itemId)!; p.rot = (p.rot + 90) % 360; })}>
                           <RotateCw size={14} /> {sel.rot}°
                         </button>
                       </Field>
                     </div>
                     <span className="label">Push against a wall</span>
                     <div className="flex flex-wrap gap-2">
-                      {([0, 1, 2, 3] as WallSide[]).map((w) => (
+                      {room.walls.map((_, w) => (
                         <button key={w} className="btn-secondary px-3 py-1.5 text-xs" onClick={() => up((r) => { const i = r.placements.findIndex((x) => x.itemId === sel.itemId); r.placements[i] = snapToWall(r, selItem, catalog, r.placements[i], w); })}>
-                          {WALL_NAMES[w]}
+                          {wallName(room, w)}
                         </button>
                       ))}
                     </div>
-                    <p className="text-xs text-stone-500">Kitchen runs are placed from their back-left corner; an L or U kitchen fits into the back-left corner of the room when X and Z are 0.</p>
+                    <p className="text-xs text-stone-500">Kitchen runs are placed from their back-left corner; an L or U kitchen fits into the first corner of the room when X and Z are 0.</p>
                   </div>
                 </Card>
               ) : (

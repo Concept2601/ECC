@@ -282,6 +282,8 @@ export interface Section {
   hangingRail: boolean;
   applianceId: ID | null; // front = appliance (oven, microwave, fridge ...)
   insertId: ID | null; // pull-out organiser (spice rack, bin, baskets, pantry)
+  /** divide just this compartment: side by side (cols) or one above another (rows) */
+  split?: { dir: 'cols' | 'rows'; parts: Section[] } | null;
 }
 
 export interface Bay {
@@ -450,6 +452,7 @@ export interface Run {
 export interface SectionRef {
   bay: number;
   section: number;
+  path?: number[]; // index into nested splits of the compartment
 }
 
 export interface BoxMeta {
@@ -602,13 +605,22 @@ export interface Quote {
 
 /* -------------------------------------------------------------- rooms */
 
-export type WallSide = 0 | 1 | 2 | 3; // back, right, front, left
+export type WallSide = number; // index into Room.walls
+
+/** One straight wall. Walls are drawn one after another, each starting where the previous one ended. */
+export interface RoomWall {
+  id: ID;
+  length: number;
+  angle: number; // direction in degrees on the plan: 0 = right, 90 = towards the front, 180 = left, 270 = towards the back
+  height: number;
+  visible: boolean; // hidden walls are cut away in 3D so the client can see in
+}
 
 export interface RoomOpening {
   id: ID;
   kind: 'window' | 'door' | 'opening';
   wall: WallSide;
-  offset: number; // mm from the start of the wall (left end for back/front, back end for left/right)
+  offset: number; // mm from the start of the wall
   width: number;
   height: number; // top of the opening above the floor
   sill: number; // windows: bottom above the floor
@@ -621,15 +633,12 @@ export interface RoomPlacement {
   itemId: ID; // unit or kitchen run id
   x: number; // position of the item's back-left corner
   z: number;
-  rot: 0 | 90 | 180 | 270;
+  rot: number; // degrees
 }
 
 export interface Room {
-  width: number; // x
-  depth: number; // z
-  wallHeights: [number, number, number, number];
+  walls: RoomWall[];
   wallThickness: number;
-  showWalls: [boolean, boolean, boolean, boolean];
   wallColor: string;
   floorColor: string;
   openings: RoomOpening[];

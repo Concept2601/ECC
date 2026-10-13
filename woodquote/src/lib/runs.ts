@@ -4,6 +4,7 @@
 // worktop, free-standing appliances and chimney hoods.
 import { buildUnit, topThickness, type BuildContext } from './generate';
 import { baseUnit, bay, sec } from './presets';
+import { leafSections } from './sections';
 import type { Box3, Catalog, Part, PricingSettings, Run, RunModule, RunShape, Unit, UnitBuild } from './types';
 import { sum, uid } from './util';
 
@@ -317,7 +318,7 @@ export function describeRun(run: Run, cat: Catalog): string[] {
     for (const u of [m.base, m.wall]) {
       if (!u) continue;
       for (const ta of u.topAppliances) appliances.set(ta.applianceId, (appliances.get(ta.applianceId) ?? 0) + 1);
-      for (const b of u.bays) for (const s of b.sections) if (s.front === 'appliance' && s.applianceId) appliances.set(s.applianceId, (appliances.get(s.applianceId) ?? 0) + 1);
+      for (const s of leafSections(u)) if (s.front === 'appliance' && s.applianceId) appliances.set(s.applianceId, (appliances.get(s.applianceId) ?? 0) + 1);
     }
     for (const id of [m.gapApplianceId, m.hoodId]) if (id) appliances.set(id, (appliances.get(id) ?? 0) + 1);
   }

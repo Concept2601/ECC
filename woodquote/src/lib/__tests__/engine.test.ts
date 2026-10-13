@@ -5,7 +5,8 @@ import { packBars, packSheets, priceBoardPlan } from '../optimizer';
 import { balanceAfterPayment, calculateInvoice, calculateQuote } from '../pricing';
 import { createUnit, normalizeUnit, PRODUCT_ORDER, sec } from '../presets';
 import { createRun, syncRun } from '../runs';
-import { autoPlace, defaultRoom, footprint, newOpening, roomWarnings, snapToWall, wallPieces } from '../room';
+import { cellRects, getSection, leafSections, mergeSection, splitSection } from '../sections';
+import { autoPlace, closeRoom, defaultRoom, footprint, isClosed, newOpening, normalizeRoom, roomShape, roomWarnings, snapToWall, wallPieces } from '../room';
 import type { Invoice, Quote } from '../types';
 import { sum } from '../util';
 
@@ -286,7 +287,7 @@ describe('hobs, lights and rooms', () => {
     expect(back.pieces.some((p) => p.y1 === win.sill && p.u0 === win.offset)).toBe(true);
     expect(back.pieces.some((p) => p.y0 === win.height)).toBe(true);
     const right = wallPieces(room, 1);
-    expect(right.pieces.some((p) => p.kind === 'beam' && p.y0 === room.wallHeights[1] - 350)).toBe(true);
+    expect(right.pieces.some((p) => p.kind === 'beam' && p.y0 === room.walls[1].height - 350)).toBe(true);
     expect(roomWarnings(room)).toEqual([]);
   });
 
@@ -296,10 +297,58 @@ describe('hobs, lights and rooms', () => {
     let room = autoPlace(defaultRoom(), c.items, cat);
     expect(room.placements).toHaveLength(2);
     const p = snapToWall(room, c.items[1], cat, room.placements[1], 3);
-    expect(p.rot).toBe(90);
+    expect(p.rot).toBe(270);
     const xs = footprint(c.items[1], cat, p).map((q2) => q2[0]);
     expect(Math.min(...xs)).toBeCloseTo(0);
     room = { ...room, placements: [room.placements[0], p] };
-    expect(room.placements[1].rot).toBe(90);
+    expect(room.placements[1].rot).toBe(270);
+  });
+
+  it('edits wall lengths and directions and closes the room', () => {
+    const room = defaultRoom();
+    room.walls[0].length = 5000;
+    expect(isClosed(room)).toBe(false);
+    expect(roomWarnings(room).some((w) => w.includes('do not meet'))).toBe(true);
+    const closed = closeRoom(room);
+    expect(isClosed(closed)).toBe(true);
+    expect(closed.walls[3].angle).not.toBe(270); // last wall now runs at an angle back to the start
+    const angled = { ...defaultRoom(), walls: roomShape('angled') };
+    expect(isClosed(angled)).toBe(true);
+    expect(isClosed({ ...angled, walls: roomShape('L') })).toBe(true);
+    const old = normalizeRoom({ width: 4000, depth: 3000, wallHeights: [2600, 2600, 2600, 2600], showWalls: [true, true, false, true], openings: [{ id: 'o', kind: 'door', wall: 3, offset: 400, width: 800, height: 2100, sill: 0, beam: false, beamDepth: 300, label: 'Door' }], placements: [] })!;
+    expect(old.walls.map((w) => w.length)).toEqual([4000, 3000, 4000, 3000]);
+    expect(old.walls[2].visible).toBe(false);
+    expect(old.openings[0].offset).toBe(1800);
+    expect(isClosed(old)).toBe(true);
+  });
+});
+
+describe('isolated compartment splits', () => {
+  const pr = settings.pricing;
+  it('splits one compartment side by side without touching the rest of the unit', () => {
+    const u = createUnit('wardrobe');
+    const before = buildUnit(u, cat, pr);
+    const otherFronts = before.parts.filter((p) => p.role === 'drawerFront').reduce((a, p) => a + p.qty, 0);
+    const r = splitSection(u, { bay: 0, section: 0 }, 'cols')!;
+    expect(r.path).toEqual([1]);
+    expect(u.bays.length).toBe(3);
+    expect(u.bays[0].sections.length).toBe(2);
+    const after = buildUnit(u, cat, pr);
+    const partition = after.parts.find((p) => p.name === 'Partition')!;
+    const cellsNow = cellRects(u, cat);
+    const top = cellsNow.find((c) => c.ref.bay === 0 && c.ref.section === 0 && !c.ref.path)!;
+    expect(partition.length).toBe(Math.round(top.h)); // only as tall as the compartment
+    expect(after.parts.filter((p) => p.role === 'drawerFront').reduce((a, p) => a + p.qty, 0)).toBe(otherFronts);
+    const doors = after.parts.filter((p) => p.role === 'door').reduce((a, p) => a + p.qty, 0);
+    expect(doors).toBe(before.parts.filter((p) => p.role === 'door').reduce((a, p) => a + p.qty, 0) + 1);
+    // nested split stacks inside the right half only
+    const r2 = splitSection(u, r, 'rows')!;
+    expect(getSection(u, r2)).toBeTruthy();
+    expect(leafSections(u).length).toBe(leafSections(createUnit('wardrobe')).length + 2);
+    // merging collapses back
+    mergeSection(u, r2);
+    mergeSection(u, { bay: 0, section: 0, path: [1] });
+    expect(u.bays[0].sections[0].split).toBeNull();
+    expect(buildUnit(u, cat, pr).parts.some((p) => p.name === 'Partition')).toBe(false);
   });
 });

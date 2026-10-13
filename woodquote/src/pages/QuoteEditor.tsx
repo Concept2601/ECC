@@ -189,7 +189,7 @@ export default function QuoteEditor() {
                 <Home size={22} className="text-emerald-700" />
                 <div className="min-w-0 flex-1">
                   <div className="font-bold text-emerald-900">{quote.room ? 'Room layout' : 'Show in a room layout'}</div>
-                  <div className="text-xs text-emerald-800">{quote.room ? `${quote.room.width} × ${quote.room.depth}mm · ${quote.room.openings.length} opening(s) · included in the quotation PDF` : 'Walls, windows, doors and open-plan beams so the client sees the design in their space'}</div>
+                  <div className="text-xs text-emerald-800">{quote.room ? `${quote.room.walls.length} walls · ${quote.room.openings.length} opening(s) · included in the quotation PDF` : 'Walls, windows, doors and open-plan beams so the client sees the design in their space'}</div>
                 </div>
               </Link>
             )}

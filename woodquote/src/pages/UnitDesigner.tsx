@@ -11,7 +11,8 @@ import { elevation } from '../lib/generate';
 import { locateUnit } from '../lib/locate';
 import { PRODUCT_LABELS, PRODUCT_ORDER, sec } from '../lib/presets';
 import { syncRun } from '../lib/runs';
-import { ACCESSORY_LABELS, type AccessoryCategory, type FrontKind, type LightLocation, type ProductType, type Unit } from '../lib/types';
+import { cellRects, getSection, mergeSection, sameRef, splitSection } from '../lib/sections';
+import { ACCESSORY_LABELS, type AccessoryCategory, type FrontKind, type LightLocation, type ProductType, type SectionRef, type Unit } from '../lib/types';
 import { kelvinToHex, LIGHT_TEMPS, uid } from '../lib/util';
 import { accessoryPacksLabel } from '../pdf/pdf';
 import { useStore } from '../store';
@@ -91,12 +92,35 @@ export default function UnitDesigner() {
       if (l.run) syncRun(l.run, catalog);
     });
 
-  const s = sel && unit.bays[sel.bay]?.sections[sel.section] ? sel : null;
+  const cells = cellRects(unit, catalog);
+  const cell = sel ? cells.find((c) => sameRef(c.ref, sel) && c.leaf) : undefined;
+  const s = cell ? cell.ref : null;
   const curBay = s ? unit.bays[s.bay] : null;
-  const curSec = s ? unit.bays[s.bay].sections[s.section] : null;
+  const curSec = cell ? cell.sec : null;
   const bayMm = s ? Math.round(elev.bays[s.bay].w) : 0;
   const secMm = s ? Math.round(elev.bays[s.bay].sections[s.section].h) : 0;
-  const upSec = (fn: (x: NonNullable<typeof curSec>) => void) => up((u) => s && fn(u.bays[s.bay].sections[s.section]));
+  const upSec = (fn: (x: NonNullable<typeof curSec>) => void) =>
+    up((u) => {
+      const x = s && getSection(u, s);
+      if (x) fn(x);
+    });
+  /** resize the selected compartment inside its own split (siblings share the space) */
+  const setNestedMm = (dim: 'w' | 'h', v: number) =>
+    up((u) => {
+      if (!s?.path?.length) return;
+      const pref = { ...s, path: s.path.slice(0, -1) };
+      const parent = getSection(u, pref);
+      if (!parent?.split) return;
+      const sib = cells.filter((c) => c.ref.bay === s.bay && c.ref.section === s.section && (c.ref.path ?? []).length === s.path!.length && (c.ref.path ?? []).slice(0, -1).join('.') === pref.path.join('.'));
+      sib.forEach((c, k) => (parent.split!.parts[k].size = dim === 'w' ? c.w : c.h));
+      const idx = s.path[s.path.length - 1];
+      const n = idx < sib.length - 1 ? idx + 1 : idx - 1;
+      if (n < 0) return;
+      const total = (dim === 'w' ? sib[idx].w + sib[n].w : sib[idx].h + sib[n].h);
+      const nv = Math.min(total - 80, Math.max(80, v));
+      parent.split.parts[idx].size = nv;
+      parent.split.parts[n].size = total - nv;
+    });
 
   const setBayMm = (v: number) =>
     up((u) => {
@@ -215,51 +239,42 @@ export default function UnitDesigner() {
           {tab === 'layout' && (
             <div className="space-y-3">
               <Card
-                title={s ? `Bay ${s.bay + 1} · compartment ${s.section + 1}` : 'Select a compartment'}
+                title={s ? `Bay ${s.bay + 1} · compartment ${s.section + 1}${s.path?.length ? `.${s.path.map((x) => x + 1).join('.')}` : ''}` : 'Select a compartment'}
                 actions={
-                  <div className="flex gap-1">
-                    <button
-                      className="btn-secondary px-2.5 py-1.5 text-xs"
-                      onClick={() =>
-                        up((u) => {
-                          const i = s ? s.bay : u.bays.length - 1;
-                          elev.bays.forEach((b, k) => (u.bays[k].size = b.w));
-                          const half = u.bays[i].size / 2;
-                          u.bays[i].size = half;
-                          u.bays.splice(i + 1, 0, { id: uid('b'), size: half, sections: [sec({ front: 'door', opening: 'right' })] });
-                        })
-                      }
-                    >
-                      <Columns2 size={14} /> Split bay
-                    </button>
-                    <button
-                      className="btn-secondary px-2.5 py-1.5 text-xs"
-                      disabled={!s}
-                      onClick={() =>
-                        up((u) => {
-                          if (!s) return;
-                          const b = u.bays[s.bay];
-                          elev.bays[s.bay].sections.forEach((x, k) => (b.sections[k].size = x.h));
-                          const half = b.sections[s.section].size / 2;
-                          b.sections[s.section].size = half;
-                          const src = b.sections[s.section];
-                          b.sections.splice(s.section + 1, 0, sec({ front: src.front === 'appliance' ? 'door' : src.front, doorMaterial: src.doorMaterial, fit: src.fit, opening: src.opening, size: half }));
-                        })
-                      }
-                    >
-                      <Rows2 size={14} /> Split
-                    </button>
-                  </div>
+                  <button
+                    className="btn-secondary px-2.5 py-1.5 text-xs"
+                    title="Add a full-height bay next to the selected one"
+                    onClick={() =>
+                      up((u) => {
+                        const i = s ? s.bay : u.bays.length - 1;
+                        elev.bays.forEach((b, k) => (u.bays[k].size = b.w));
+                        const half = u.bays[i].size / 2;
+                        u.bays[i].size = half;
+                        u.bays.splice(i + 1, 0, { id: uid('b'), size: half, sections: [sec({ front: 'door', opening: 'right' })] });
+                      })
+                    }
+                  >
+                    <Columns2 size={14} /> Add bay
+                  </button>
                 }
               >
                 {s && curSec && curBay ? (
                   <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button className="btn-secondary px-2 py-2 text-xs" onClick={() => { let r: SectionRef | null = null; up((u) => (r = splitSection(u, s, 'cols'))); if (r) setSel(r); }}>
+                        <Columns2 size={14} /> Split side by side
+                      </button>
+                      <button className="btn-secondary px-2 py-2 text-xs" onClick={() => { let r: SectionRef | null = null; up((u) => (r = splitSection(u, s, 'rows'))); if (r) setSel(r); }}>
+                        <Rows2 size={14} /> Split top / bottom
+                      </button>
+                    </div>
+                    <p className="-mt-2 text-[11px] text-stone-500">Splitting only divides this compartment — the rest of the cupboard is not changed.</p>
                     <div className="grid grid-cols-2 gap-3">
-                      <Field label="Bay width (clear)">
-                        <NumInput value={bayMm} suffix="mm" onChange={setBayMm} />
+                      <Field label={cell?.parentDir === 'cols' ? 'Compartment width' : 'Bay width (clear)'}>
+                        {cell?.parentDir === 'rows' ? <div className="input bg-stone-50">{Math.round(cell.w)}</div> : <NumInput value={cell?.parentDir === 'cols' ? Math.round(cell.w) : bayMm} suffix="mm" onChange={(v) => (cell?.parentDir === 'cols' ? setNestedMm('w', v) : setBayMm(v))} />}
                       </Field>
                       <Field label="Compartment height">
-                        <NumInput value={secMm} suffix="mm" onChange={setSecMm} />
+                        {cell?.parentDir === 'cols' ? <div className="input bg-stone-50">{Math.round(cell.h)}</div> : <NumInput value={cell?.parentDir === 'rows' ? Math.round(cell.h) : secMm} suffix="mm" onChange={(v) => (cell?.parentDir === 'rows' ? setNestedMm('h', v) : setSecMm(v))} />}
                       </Field>
                     </div>
                     <div>
@@ -321,14 +336,11 @@ export default function UnitDesigner() {
                     <div className="flex flex-wrap gap-2 border-t pt-3">
                       <button
                         className="btn-danger px-3 py-1.5 text-xs"
-                        disabled={curBay.sections.length < 2}
+                        disabled={!s.path?.length && curBay.sections.length < 2}
                         onClick={() => {
-                          up((u) => {
-                            const b = u.bays[s.bay];
-                            const removed = b.sections.splice(s.section, 1)[0];
-                            b.sections[Math.min(s.section, b.sections.length - 1)].size += removed.size;
-                          });
-                          setSel({ bay: s.bay, section: Math.max(0, s.section - 1) });
+                          let r: SectionRef | null = null;
+                          up((u) => (r = mergeSection(u, s)));
+                          setSel(r ?? { bay: s.bay, section: 0 });
                         }}
                       >
                         <Trash2 size={14} /> Merge compartment
@@ -827,18 +839,16 @@ export default function UnitDesigner() {
               <Card title="In compartments">
                 <p className="mb-2 text-sm text-stone-600">Ovens, microwaves, integrated fridges, dishwashers, washers and wine coolers go into a compartment: select it, then choose the <b>Appliance</b> front.</p>
                 <ul className="space-y-1 text-sm">
-                  {unit.bays.flatMap((b, bi) =>
-                    b.sections
-                      .map((x, si) => ({ x, si }))
-                      .filter(({ x }) => x.front === 'appliance')
-                      .map(({ x, si }) => (
-                        <li key={x.id}>
-                          <button className="text-left font-medium text-brand-700" onClick={() => (setSel({ bay: bi, section: si }), setTab('layout'))}>
-                            Bay {bi + 1}, compartment {si + 1}: {catalog.appliances.find((a) => a.id === x.applianceId)?.name ?? 'not chosen'}
-                          </button>
-                        </li>
-                      )),
-                  )}
+                  {cells
+                    .filter((c) => c.leaf && c.sec.front === 'appliance')
+                    .map((c) => (
+                      <li key={c.sec.id + (c.ref.path ?? []).join('.')}>
+                        <button className="text-left font-medium text-brand-700" onClick={() => (setSel(c.ref), setTab('layout'))}>
+                          Bay {c.ref.bay + 1}, compartment {c.ref.section + 1}
+                          {c.ref.path?.length ? `.${c.ref.path.map((x) => x + 1).join('.')}` : ''}: {catalog.appliances.find((a) => a.id === c.sec.applianceId)?.name ?? 'not chosen'}
+                        </button>
+                      </li>
+                    ))}
                 </ul>
                 <p className="mt-3 text-xs text-stone-500">Choose in the quotation's Pricing tab whether appliance prices are included (supplied by you) or supplied by the client.</p>
               </Card>

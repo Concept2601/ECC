@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { elevation, unitExtents } from '../lib/generate';
+import { unitExtents } from '../lib/generate';
+import { cellRects, sameRef } from '../lib/sections';
 import type { ItemPrice } from '../lib/pricing';
-import { itemBounds, wallPieces } from '../lib/room';
+import { inwardNormal, itemBounds, orientation, roomExtents, vertices, wallPieces } from '../lib/room';
 import { activeLegs, legLength, legTransform, type RunBuild } from '../lib/runs';
-import type { Appliance, Box3 as PartBox, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild, WallSide } from '../lib/types';
+import type { Appliance, Box3 as PartBox, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
 
 /* ---------------------------------------------------- procedural textures */
 
@@ -455,12 +456,10 @@ export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt:
   }
 
   if (opt.highlight) {
-    const e = elevation(unit, cat);
-    const bay = e.bays[opt.highlight.bay];
-    const s = bay?.sections[opt.highlight.section];
-    if (bay && s) {
+    const c = cellRects(unit, cat).find((x) => sameRef(x.ref, opt.highlight));
+    if (c) {
       const yo = unit.mount === 'wall' ? unit.mountHeight : 0;
-      const hb: PartBox = { x: bay.x, y: s.y + yo, z: 0, w: bay.w, h: s.h, d: unit.depth + 4 };
+      const hb: PartBox = { x: c.x, y: c.y + yo, z: 0, w: c.w, h: c.h, d: unit.depth + 4 };
       const hm = new THREE.Mesh(boxGeo(hb), new THREE.MeshBasicMaterial({ color: '#f97316', transparent: true, opacity: 0.16, depthWrite: false }));
       hm.position.set(hb.x + hb.w / 2, hb.y + hb.h / 2, hb.z + hb.d / 2);
       root.add(hm);
@@ -734,7 +733,8 @@ export { addUnitRoom };
 
 export function roomBounds(room: Room): Bounds {
   const T = room.wallThickness;
-  return { x0: -T, x1: room.width + T, y0: 0, y1: Math.max(...room.wallHeights), z0: -T, z1: room.depth + T };
+  const e = roomExtents(room);
+  return { x0: e.x0 - T, x1: e.x1 + T, y0: 0, y1: e.h, z0: e.z0 - T, z1: e.z1 + T };
 }
 
 export const ROOM_VIEW_DIR: [number, number, number] = [0.45, 1.05, 1];
@@ -742,10 +742,18 @@ export const ROOM_VIEW_DIR: [number, number, number] = [0.45, 1.05, 1];
 export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, opt: SceneOptions & { selectedItemId?: string | null }): THREE.Group {
   const root = new THREE.Group();
   const T = room.wallThickness;
-  const W = room.width;
-  const D = room.depth;
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 2 * T, 20, D + 2 * T), surfaceMaterial(room.floorColor, 'satin', woodTexture(room.floorColor, false)));
-  floor.position.set(W / 2, -10, D / 2);
+  const verts = vertices(room);
+  const sgn = orientation(room);
+  // floor follows the outline of the walls
+  const shape = new THREE.Shape();
+  verts.slice(0, room.walls.length).forEach(([x, z], i) => (i === 0 ? shape.moveTo(x, -z) : shape.lineTo(x, -z)));
+  shape.closePath();
+  const floorTex = woodTexture(room.floorColor, false).clone();
+  floorTex.repeat.set(0.0008, 0.0008);
+  floorTex.needsUpdate = true;
+  const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), surfaceMaterial(room.floorColor, 'satin', floorTex));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0.5;
   floor.receiveShadow = true;
   root.add(floor);
   const wallMat = new THREE.MeshStandardMaterial({ color: room.wallColor, roughness: 0.95 });
@@ -753,34 +761,27 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
   const frameMat = new THREE.MeshStandardMaterial({ color: '#f5f5f4', roughness: 0.5 });
   const glassMat = new THREE.MeshPhysicalMaterial({ color: '#cfe8ef', transparent: true, opacity: 0.28, roughness: 0.05, envMapIntensity: 1.4 });
   const doorMat = surfaceMaterial('#8b6b4a', 'satin', woodTexture('#8b6b4a', true));
-  // wall coordinates (u along the wall, v across its thickness) → world box
-  const toBox = (wall: WallSide, u0: number, u1: number, y0: number, y1: number, v0 = 0, v1 = T): PartBox => {
-    switch (wall) {
-      case 0:
-        return { x: u0, y: y0, z: -v1, w: u1 - u0, h: y1 - y0, d: v1 - v0 };
-      case 1:
-        return { x: W + v0, y: y0, z: u0, w: v1 - v0, h: y1 - y0, d: u1 - u0 };
-      case 2:
-        return { x: u0, y: y0, z: D + v0, w: u1 - u0, h: y1 - y0, d: v1 - v0 };
-      default:
-        return { x: -v1, y: y0, z: u0, w: v1 - v0, h: y1 - y0, d: u1 - u0 };
-    }
-  };
-  for (const wall of [0, 1, 2, 3] as WallSide[]) {
-    const { pieces, openings, H } = wallPieces(room, wall);
-    const visible = room.showWalls[wall];
+
+  room.walls.forEach((wall, wi) => {
+    // wall frame: local x along the wall, local z into the room (−z = outside)
+    const g = new THREE.Group();
+    g.position.set(verts[wi][0], 0, verts[wi][1]);
+    g.rotation.y = (-wall.angle * Math.PI) / 180;
+    if (sgn < 0) g.scale.z = -1;
+    root.add(g);
+    // v = depth into the wall from the room side (0 = room face, T = outside face)
+    const box = (u0: number, u1: number, y0: number, y1: number, v0 = 0, v1 = T): PartBox => ({ x: u0, y: y0, z: -v1, w: u1 - u0, h: y1 - y0, d: v1 - v0 });
+    const { pieces, openings, H } = wallPieces(room, wi);
     for (const p of pieces) {
-      const y1 = visible ? p.y1 : Math.min(p.y1, 120);
-      if (y1 <= p.y0) continue;
-      const m = boxMesh(toBox(wall, p.u0, p.u1, p.y0, y1), p.kind === 'beam' ? beamMat : wallMat, false);
-      root.add(m);
+      const y1 = wall.visible ? p.y1 : Math.min(p.y1, 120);
+      if (y1 > p.y0) g.add(boxMesh(box(p.u0, p.u1, p.y0, y1), p.kind === 'beam' ? beamMat : wallMat, false));
     }
-    if (!visible) continue;
+    if (!wall.visible) return;
     for (const o of openings) {
       const a = o.offset;
       const b = o.offset + o.width;
       if (o.kind === 'window') {
-        root.add(boxMesh(toBox(wall, a, b, o.sill, o.height, T / 2 - 4, T / 2 + 4), glassMat, false));
+        g.add(boxMesh(box(a, b, o.sill, o.height, T / 2 - 4, T / 2 + 4), glassMat, false));
         for (const [u0, u1, y0, y1] of [
           [a, a + 50, o.sill, o.height],
           [b - 50, b, o.sill, o.height],
@@ -788,40 +789,34 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
           [a, b, o.height - 50, o.height],
           [(a + b) / 2 - 25, (a + b) / 2 + 25, o.sill, o.height],
         ])
-          root.add(boxMesh(toBox(wall, u0, u1, y0, y1, T / 2 - 30, T / 2 + 30), frameMat, false));
+          g.add(boxMesh(box(u0, u1, y0, y1, T / 2 - 30, T / 2 + 30), frameMat, false));
       } else if (o.kind === 'door') {
         for (const [u0, u1, y0, y1] of [
           [a - 40, a, 0, o.height + 40],
           [b, b + 40, 0, o.height + 40],
           [a, b, o.height, o.height + 40],
         ])
-          root.add(boxMesh(toBox(wall, u0, u1, y0, y1, -20, T + 20), frameMat, false));
-        // door leaf, slightly open into the room
+          g.add(boxMesh(box(u0, u1, y0, y1, -20, T + 20), frameMat, false));
         const leaf = new THREE.Group();
         leaf.add(boxMesh({ x: 0, y: 0, z: 0, w: o.width - 10, h: o.height - 10, d: 40 }, doorMat));
-        const hinge = toBox(wall, a + 5, a + 6, 0, 1, 0, 1);
-        leaf.position.set(hinge.x, 0, hinge.z);
-        leaf.rotation.y = [0, -Math.PI / 2, Math.PI, Math.PI / 2][wall] + (wall === 0 || wall === 3 ? 0.5 : -0.5);
-        root.add(leaf);
-      }
-      if (o.kind === 'opening' && o.beam) {
-        const bb = toBox(wall, a, b, H - o.beamDepth, H, -40, T + 40);
-        root.add(boxMesh(bb, beamMat));
+        leaf.position.set(a + 5, 0, 0);
+        leaf.rotation.y = -0.6; // ajar, swinging into the room
+        g.add(leaf);
+      } else if (o.kind === 'opening' && o.beam) {
+        g.add(boxMesh(box(a, b, H - o.beamDepth, H, -40, T + 40), beamMat));
       }
     }
-  }
-  // corner posts
-  const maxH = Math.max(...room.wallHeights);
-  for (const [x, z, w0, w1] of [
-    [-T, -T, 0, 3],
-    [W, -T, 0, 1],
-    [W, D, 1, 2],
-    [-T, D, 2, 3],
-  ]) {
-    const vis = room.showWalls[w0] && room.showWalls[w1];
-    const h = vis ? Math.min(room.wallHeights[w0], room.wallHeights[w1]) : 120;
-    root.add(boxMesh({ x, y: 0, z, w: T, h: Math.min(h, maxH), d: T }, wallMat, false));
-  }
+  });
+  // corner posts fill the joints between walls
+  room.walls.forEach((w, i) => {
+    const prev = room.walls[(i - 1 + room.walls.length) % room.walls.length];
+    const vis = w.visible && prev.visible;
+    const h = vis ? Math.min(w.height, prev.height) : 120;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(T * 0.72, T * 0.72, h, 12), wallMat);
+    const [nx, nz] = inwardNormal(room, i);
+    post.position.set(verts[i][0] - (nx * T) / 2, h / 2, verts[i][1] - (nz * T) / 2);
+    root.add(post);
+  });
   // the quoted items
   for (const p of room.placements) {
     const it = items.find((i) => i.id === p.itemId);
@@ -837,8 +832,8 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
     g.userData.itemId = it.id;
     g.traverse((c) => (c.userData.itemId = it.id));
     if (opt.selectedItemId === it.id) {
-      const b = itemBounds(it, cat);
-      const hb: PartBox = { x: b.x0, y: 0, z: b.z0, w: b.x1 - b.x0, h: b.h, d: b.z1 - b.z0 };
+      const bb = itemBounds(it, cat);
+      const hb: PartBox = { x: bb.x0, y: 0, z: bb.z0, w: bb.x1 - bb.x0, h: bb.h, d: bb.z1 - bb.z0 };
       const ln = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(hb)), new THREE.LineBasicMaterial({ color: '#ea580c' }));
       ln.position.set(hb.x + hb.w / 2, hb.h / 2, hb.z + hb.d / 2);
       g.add(ln);

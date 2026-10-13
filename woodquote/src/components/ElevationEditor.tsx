@@ -1,11 +1,9 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { elevation, topThickness } from '../lib/generate';
-import type { Catalog, PanelStyle, Unit, UnitBuild } from '../lib/types';
+import { cellRects, sameRef } from '../lib/sections';
+import type { Catalog, PanelStyle, SectionRef, Unit, UnitBuild } from '../lib/types';
 
-export interface Sel {
-  bay: number;
-  section: number;
-}
+export type Sel = SectionRef;
 
 export type EditorView = 'front' | 'left' | 'right' | 'back' | 'top';
 export type SidePick = 'left' | 'right' | 'back' | 'top' | 'base';
@@ -45,6 +43,7 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const e = elevation(unit, catalog);
+  const cells = cellRects(unit, catalog);
   const W = unit.width;
   const H = unit.height;
   const D = unit.depth;
@@ -263,11 +262,12 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
           const bay = unit.bays[b.index];
           return (
             <g key={bay.id}>
-              {b.sections.map((s) => {
-                const sec = bay.sections[s.index];
-                const selected = sel?.bay === b.index && sel?.section === s.index;
+              {cells.filter((c) => c.leaf && c.ref.bay === b.index).map((c) => {
+                const sec = c.sec;
+                const s = { y: c.y, h: c.h };
+                const selected = sameRef(sel, c.ref);
                 const kind = unit.sliding.enabled && sec.front !== 'drawer' ? 'open' : sec.front;
-                const x0 = b.x;
+                const x0 = c.x;
                 const y0 = Y(yo + s.y + s.h);
                 const glassy = (kind === 'door' || kind === 'sliding') && sec.doorMaterial !== 'wood';
                 const appliance = kind === 'appliance' ? catalog.appliances.find((a) => a.id === sec.applianceId) : null;
@@ -275,24 +275,24 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
                 const fill = kind === 'open' ? '#fbfaf8' : glassy ? '#d5ebf2' : kind === 'appliance' && !integrated ? '#26262a' : front;
                 const ins = sec.insertId ? catalog.accessories.find((a) => a.id === sec.insertId) : null;
                 return (
-                  <g key={sec.id} onClick={(ev) => { ev.stopPropagation(); onSelect({ bay: b.index, section: s.index }); }} className="cursor-pointer">
-                    <rect x={x0} y={y0} width={b.w} height={s.h} fill={fill} opacity={background ? 0.6 : 1} stroke={selected ? '#c2410c' : '#555'} strokeWidth={selected ? 10 : 2} />
-                    {kind === 'open' && Array.from({ length: sec.shelves }).map((_, k) => <rect key={k} x={x0} y={Y(yo + s.y + (s.h * (k + 1)) / (sec.shelves + 1)) - e.t / 2} width={b.w} height={e.t} fill="#b9a68f" />)}
-                    {sec.hangingRail && (kind === 'open' || unit.sliding.enabled) && <line x1={x0 + 10} x2={x0 + b.w - 10} y1={y0 + 70} y2={y0 + 70} stroke="#777" strokeWidth={14} strokeLinecap="round" />}
+                  <g key={(c.ref.path ?? []).join('.') + sec.id} onClick={(ev) => { ev.stopPropagation(); onSelect(c.ref); }} className="cursor-pointer">
+                    <rect x={x0} y={y0} width={c.w} height={s.h} fill={fill} opacity={background ? 0.6 : 1} stroke={selected ? '#c2410c' : '#555'} strokeWidth={selected ? 10 : 2} />
+                    {kind === 'open' && Array.from({ length: sec.shelves }).map((_, k) => <rect key={k} x={x0} y={Y(yo + s.y + (s.h * (k + 1)) / (sec.shelves + 1)) - e.t / 2} width={c.w} height={e.t} fill="#b9a68f" />)}
+                    {sec.hangingRail && (kind === 'open' || unit.sliding.enabled) && <line x1={x0 + 10} x2={x0 + c.w - 10} y1={y0 + 70} y2={y0 + 70} stroke="#777" strokeWidth={14} strokeLinecap="round" />}
                     {kind === 'drawer' &&
                       Array.from({ length: sec.drawerCount }).map((_, k) => {
                         const dh = s.h / sec.drawerCount;
                         const yy = y0 + k * dh;
                         return (
                           <g key={k}>
-                            <rect x={x0 + 4} y={yy + 4} width={b.w - 8} height={dh - 8} fill="none" stroke="#444" strokeWidth={3} />
-                            <line x1={x0 + b.w / 2 - Math.min(80, b.w / 5)} x2={x0 + b.w / 2 + Math.min(80, b.w / 5)} y1={yy + Math.min(40, dh / 4)} y2={yy + Math.min(40, dh / 4)} stroke="#222" strokeWidth={8} strokeLinecap="round" />
+                            <rect x={x0 + 4} y={yy + 4} width={c.w - 8} height={dh - 8} fill="none" stroke="#444" strokeWidth={3} />
+                            <line x1={x0 + c.w / 2 - Math.min(80, c.w / 5)} x2={x0 + c.w / 2 + Math.min(80, c.w / 5)} y1={yy + Math.min(40, dh / 4)} y2={yy + Math.min(40, dh / 4)} stroke="#222" strokeWidth={8} strokeLinecap="round" />
                           </g>
                         );
                       })}
                     {kind === 'door' &&
                       (sec.opening === 'pair' ? (['left', 'right'] as const) : [sec.opening]).map((op, k, arr) => {
-                        const dw = b.w / arr.length;
+                        const dw = c.w / arr.length;
                         const dx = x0 + k * dw;
                         const yMid = y0 + s.h / 2;
                         const path =
@@ -318,35 +318,40 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
                       <g>
                         {sec.slide === 'bypass' ? (
                           <>
-                            <rect x={x0 + 4} y={y0 + 4} width={b.w / 2 + 10} height={s.h - 8} fill="none" stroke="#444" strokeWidth={3} />
-                            <rect x={x0 + b.w / 2 - 10} y={y0 + 10} width={b.w / 2 + 6} height={s.h - 16} fill="none" stroke="#444" strokeWidth={3} strokeDasharray="14 8" />
+                            <rect x={x0 + 4} y={y0 + 4} width={c.w / 2 + 10} height={s.h - 8} fill="none" stroke="#444" strokeWidth={3} />
+                            <rect x={x0 + c.w / 2 - 10} y={y0 + 10} width={c.w / 2 + 6} height={s.h - 16} fill="none" stroke="#444" strokeWidth={3} strokeDasharray="14 8" />
                           </>
                         ) : (
-                          <rect x={x0 + 4} y={y0 + 4} width={b.w - 8} height={s.h - 8} fill="none" stroke="#444" strokeWidth={3} />
+                          <rect x={x0 + 4} y={y0 + 4} width={c.w - 8} height={s.h - 8} fill="none" stroke="#444" strokeWidth={3} />
                         )}
-                        <text x={x0 + b.w / 2} y={y0 + s.h / 2} fontSize={fs * 1.4} textAnchor="middle" dominantBaseline="middle" fill="#333">
+                        <text x={x0 + c.w / 2} y={y0 + s.h / 2} fontSize={fs * 1.4} textAnchor="middle" dominantBaseline="middle" fill="#333">
                           {sec.slide === 'left' ? '⟵' : sec.slide === 'right' ? '⟶' : '⟷'}
                         </text>
                       </g>
                     )}
                     {kind === 'appliance' && (
-                      <text x={x0 + b.w / 2} y={y0 + s.h / 2} fontSize={fs * 0.85} textAnchor="middle" dominantBaseline="middle" fill={integrated ? '#333' : '#e5e5e5'} fontWeight={600}>
+                      <text x={x0 + c.w / 2} y={y0 + s.h / 2} fontSize={fs * 0.85} textAnchor="middle" dominantBaseline="middle" fill={integrated ? '#333' : '#e5e5e5'} fontWeight={600}>
                         {appliance ? appliance.name.replace(/built-in /i, '') : 'choose appliance'}
                       </text>
                     )}
                     {ins && (
-                      <text x={x0 + b.w / 2} y={y0 + s.h - fs * 0.6} fontSize={fs * 0.7} textAnchor="middle" fill="#1e3a8a" fontWeight={600}>
+                      <text x={x0 + c.w / 2} y={y0 + s.h - fs * 0.6} fontSize={fs * 0.7} textAnchor="middle" fill="#1e3a8a" fontWeight={600}>
                         ▣ {ins.name.split(' ').slice(0, 2).join(' ')}
                       </text>
                     )}
                     {kind !== 'open' && kind !== 'appliance' && sec.shelves > 0 && (
-                      <text x={x0 + b.w / 2} y={y0 + s.h - fs * (ins ? 1.6 : 0.6)} fontSize={fs * 0.75} textAnchor="middle" fill="#555">
+                      <text x={x0 + c.w / 2} y={y0 + s.h - fs * (ins ? 1.6 : 0.6)} fontSize={fs * 0.75} textAnchor="middle" fill="#555">
                         {sec.shelves} shel{sec.shelves > 1 ? 'ves' : 'f'}
                       </text>
                     )}
-                    <text x={x0 + b.w - 12} y={y0 + fs * 1.2} fontSize={fs * 0.8} textAnchor="end" fill="#7c2d12" fontWeight={600}>
+                    <text x={x0 + c.w - 12} y={y0 + fs * 1.2} fontSize={fs * 0.8} textAnchor="end" fill="#7c2d12" fontWeight={600}>
                       {Math.round(s.h)}
                     </text>
+                    {c.parentDir === 'cols' && (
+                      <text x={x0 + c.w / 2} y={y0 + s.h - fs * 0.4} fontSize={fs * 0.75} textAnchor="middle" fill="#1d4ed8" fontWeight={600}>
+                        ↔ {Math.round(c.w)}
+                      </text>
+                    )}
                   </g>
                 );
               })}

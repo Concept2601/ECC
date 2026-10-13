@@ -11,7 +11,8 @@ import { activeLegs, LEG_LABELS, legLength } from '../lib/runs';
 import type { Catalog, Invoice, Payment, Quote, Room, Run, Settings, Unit } from '../lib/types';
 import { addDaysISO, fmtDate, money } from '../lib/util';
 import { renderRoomImage, renderRunImage, renderUnitImage } from '../render/scene';
-import { footprints } from '../lib/room';
+import { footprints, inwardNormal, roomExtents, vertices, wallDir } from '../lib/room';
+import { cellRects } from '../lib/sections';
 
 export const usePdfExport = create<{ doc: jsPDF | null; filename: string; result: string | null }>(() => ({ doc: null, filename: '', result: null }));
 
@@ -279,17 +280,18 @@ export function drawUnitFront(doc: Doc, u: Unit, cat: Catalog, X0: number, Yfloo
     doc.setFillColor(60, 60, 60);
     for (const lx of [40, W - 40]) doc.rect(X(lx) - 0.5, Y(e.baseH), 1, e.baseH * sc, 'F');
   }
-  for (const b of e.bays) {
-    const bay = u.bays[b.index];
-    if (b.index > 0) doc.line(X(b.x - e.t / 2), Y(e.baseH), X(b.x - e.t / 2), Y(e.topY));
-    for (const sct of b.sections) {
-      const s = bay.sections[sct.index];
-      if (sct.index > 0) doc.line(X(b.x), Y(sct.y - e.t / 2), X(b.x + b.w), Y(sct.y - e.t / 2));
+  for (const b of e.bays) if (b.index > 0) doc.line(X(b.x - e.t / 2), Y(e.baseH), X(b.x - e.t / 2), Y(e.topY));
+  for (const c of cellRects(u, cat)) {
+    if (!c.leaf) continue;
+    {
+      const s = c.sec;
+      doc.setDrawColor(150);
+      doc.rect(X(c.x), Y(c.y + c.h), c.w * sc, c.h * sc);
       const front = u.sliding.enabled && s.front !== 'drawer' ? 'open' : s.front;
-      const x0 = X(b.x);
-      const x1 = X(b.x + b.w);
-      const y0 = Y(sct.y);
-      const y1 = Y(sct.y + sct.h);
+      const x0 = X(c.x);
+      const x1 = X(c.x + c.w);
+      const y0 = Y(c.y);
+      const y1 = Y(c.y + c.h);
       doc.setDrawColor(110);
       if (front === 'drawer') {
         for (let k = 1; k < s.drawerCount; k++) {
@@ -576,7 +578,8 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(110);
-    doc.text(`${q.room.width} × ${q.room.depth} mm · wall height ${Math.max(...q.room.wallHeights)} mm`, PAGE_W - M, y + 2, { align: 'right' });
+    const ext = roomExtents(q.room);
+    doc.text(`${Math.round(ext.x1 - ext.x0)} × ${Math.round(ext.z1 - ext.z0)} mm · ${q.room.walls.length} walls · up to ${ext.h} mm high`, PAGE_W - M, y + 2, { align: 'right' });
     doc.setTextColor(0);
     y += 6;
     const img = renderRoomImage(q.room, calc.items, cat, 1500, 950, 'image/jpeg');
@@ -628,66 +631,92 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
 /** Dimensioned plan of the room with openings and item footprints. */
 export function drawRoomPlan(doc: Doc, room: Room, items: ItemPrice[], cat: Catalog, x: number, y: number, w: number, h: number) {
   const T = room.wallThickness;
-  const pad = 10;
-  const sc = Math.min((w - 2 * pad) / (room.width + 2 * T), (h - 2 * pad) / (room.depth + 2 * T));
-  const ox = x + (w - (room.width + 2 * T) * sc) / 2 + T * sc;
-  const oy = y + pad + T * sc;
-  const X = (mm: number) => ox + mm * sc;
-  const Y = (mm: number) => oy + mm * sc;
+  // fit the walls and every placed item (items may sit outside the walls)
+  const e = { ...roomExtents(room) };
+  for (const pl of room.placements) {
+    const it = items.find((i) => i.id === pl.itemId);
+    if (!it) continue;
+    for (const [px, pz] of footprints(it, cat, pl).flat()) {
+      e.x0 = Math.min(e.x0, px);
+      e.x1 = Math.max(e.x1, px);
+      e.z0 = Math.min(e.z0, pz);
+      e.z1 = Math.max(e.z1, pz);
+    }
+  }
+  const pad = 12;
+  const sc = Math.min((w - 2 * pad) / (e.x1 - e.x0 + 2 * T), (h - 2 * pad) / (e.z1 - e.z0 + 2 * T));
+  const ox = x + (w - (e.x1 - e.x0) * sc) / 2 - e.x0 * sc;
+  const oy = y + (h - (e.z1 - e.z0) * sc) / 2 - e.z0 * sc;
+  const P = (px: number, pz: number): [number, number] => [ox + px * sc, oy + pz * sc];
   doc.setDrawColor(225);
   doc.roundedRect(x, y, w, h, 2, 2, 'S');
-  doc.setFillColor(87, 83, 78);
-  doc.rect(X(-T), Y(-T), (room.width + 2 * T) * sc, T * sc, 'F');
-  doc.rect(X(-T), Y(room.depth), (room.width + 2 * T) * sc, T * sc, 'F');
-  doc.rect(X(-T), Y(-T), T * sc, (room.depth + 2 * T) * sc, 'F');
-  doc.rect(X(room.width), Y(-T), T * sc, (room.depth + 2 * T) * sc, 'F');
-  doc.setFontSize(6);
-  for (const o of room.openings) {
-    const horiz = o.wall === 0 || o.wall === 2;
-    const wx = horiz ? X(o.offset) : o.wall === 1 ? X(room.width) : X(-T);
-    const wy = horiz ? (o.wall === 0 ? Y(-T) : Y(room.depth)) : Y(o.offset);
-    const ww = horiz ? o.width * sc : T * sc;
-    const wh = horiz ? T * sc : o.width * sc;
-    doc.setFillColor(255, 255, 255);
-    doc.rect(wx, wy, ww, wh, 'F');
-    if (o.kind === 'window') {
-      doc.setDrawColor(56, 189, 248);
-      doc.setLineWidth(0.5);
-      if (horiz) doc.line(wx, wy + wh / 2, wx + ww, wy + wh / 2);
-      else doc.line(wx + ww / 2, wy, wx + ww / 2, wy + wh);
-      doc.setLineWidth(0.2);
+  const verts = vertices(room);
+  const quad = (pts: [number, number][], style: 'F' | 'FD' | 'S') => {
+    const q = pts.map(([a, b]) => P(a, b));
+    doc.lines(q.slice(1).map((pt, i) => [pt[0] - q[i][0], pt[1] - q[i][1]]), q[0][0], q[0][1], [1, 1], style, true);
+  };
+  room.walls.forEach((wall, i) => {
+    const [dx, dz] = wallDir(wall);
+    const [nx, nz] = inwardNormal(room, i);
+    const [sx, sz] = verts[i];
+    const seg = (u0: number, u1: number, v0 = 0, v1 = T): [number, number][] => [
+      [sx + dx * u0 - nx * v0, sz + dz * u0 - nz * v0],
+      [sx + dx * u1 - nx * v0, sz + dz * u1 - nz * v0],
+      [sx + dx * u1 - nx * v1, sz + dz * u1 - nz * v1],
+      [sx + dx * u0 - nx * v1, sz + dz * u0 - nz * v1],
+    ];
+    if (wall.visible) doc.setFillColor(87, 83, 78);
+    else doc.setFillColor(200, 196, 190);
+    quad(seg(0, wall.length), 'F');
+    for (const o of room.openings.filter((op) => op.wall === i)) {
+      doc.setFillColor(255, 255, 255);
+      quad(seg(o.offset, o.offset + o.width), 'F');
+      if (o.kind === 'window') {
+        doc.setDrawColor(56, 189, 248);
+        doc.setLineWidth(0.5);
+        const [a1, b1] = P(sx + dx * o.offset - (nx * T) / 2, sz + dz * o.offset - (nz * T) / 2);
+        const [a2, b2] = P(sx + dx * (o.offset + o.width) - (nx * T) / 2, sz + dz * (o.offset + o.width) - (nz * T) / 2);
+        doc.line(a1, b1, a2, b2);
+        doc.setLineWidth(0.2);
+      }
+      if (o.kind === 'opening' && o.beam) {
+        doc.setDrawColor(120);
+        doc.setLineDashPattern([1, 1], 0);
+        quad(seg(o.offset, o.offset + o.width, -300, 0), 'S');
+        doc.setLineDashPattern([], 0);
+      }
+      doc.setFontSize(6);
+      doc.setTextColor(90);
+      const [lx, lz] = P(sx + dx * (o.offset + o.width / 2) - nx * (T + 120), sz + dz * (o.offset + o.width / 2) - nz * (T + 120));
+      doc.text(`${o.label || o.kind} ${o.width}${o.kind === 'opening' && o.beam ? ' (RC beam)' : ''}`, lx, lz, { align: 'center' });
     }
-    if (o.kind === 'opening' && o.beam) {
-      doc.setDrawColor(120);
-      doc.setLineDashPattern([1, 1], 0);
-      doc.rect(wx, wy, ww, wh);
-      doc.setLineDashPattern([], 0);
-    }
-    doc.setTextColor(90);
-    const label = `${o.label || o.kind} ${o.width}${o.kind === 'opening' && o.beam ? ' (RC beam)' : ''}`;
-    if (horiz) doc.text(label, wx + ww / 2, o.wall === 0 ? wy - 1 : wy + wh + 2.5, { align: 'center' });
-    else doc.text(label, o.wall === 3 ? wx - 1 : wx + ww + 1, wy + wh / 2, { align: o.wall === 3 ? 'right' : 'left' });
-  }
+  });
   doc.setTextColor(30);
   doc.setDrawColor(87, 83, 78);
+  doc.setFontSize(6);
   for (const p of room.placements) {
     const it = items.find((i) => i.id === p.itemId);
     if (!it) continue;
-    let pts: [number, number][] = [];
-    for (const poly of footprints(it, cat, p)) {
-      pts = poly.map(([a, b]) => [X(a), Y(b)] as [number, number]);
+    const polys = footprints(it, cat, p);
+    for (const poly of polys) {
       if (it.kind === 'run') doc.setFillColor(221, 214, 254);
       else doc.setFillColor(233, 201, 159);
-      const lines = pts.map((pt, i) => [pts[(i + 1) % 4][0] - pt[0], pts[(i + 1) % 4][1] - pt[1]]);
-      doc.lines(lines.slice(0, 3), pts[0][0], pts[0][1], [1, 1], 'FD', true);
+      quad(poly, 'FD');
     }
-    pts = footprints(it, cat, p)[0].map(([a, b]) => [X(a), Y(b)] as [number, number]);
-    doc.text(it.name.slice(0, 28), pts.reduce((a, q) => a + q[0], 0) / 4, pts.reduce((a, q) => a + q[1], 0) / 4, { align: 'center' });
+    const c = polys[0].reduce((acc, q) => [acc[0] + q[0] / 4, acc[1] + q[1] / 4], [0, 0]);
+    const [cx, cz] = P(c[0], c[1]);
+    doc.text(it.name.slice(0, 28), cx, cz, { align: 'center' });
   }
+  // wall length labels outside each wall, drawn last so items never hide them
   doc.setFontSize(7);
   doc.setTextColor(60);
-  doc.text(`${room.width} mm`, X(room.width / 2), Y(-T) - 2, { align: 'center' });
-  doc.text(`${room.depth} mm`, X(-T) - 2, Y(room.depth / 2), { angle: 90, align: 'center' });
+  room.walls.forEach((wall, i) => {
+    const [dx, dz] = wallDir(wall);
+    const [nx, nz] = inwardNormal(room, i);
+    const [sx, sz] = verts[i];
+    const [tx, tz] = P(sx + (dx * wall.length) / 2 - nx * (T + 330), sz + (dz * wall.length) / 2 - nz * (T + 330));
+    doc.text(`W${i + 1} · ${wall.length}`, tx, tz, { align: 'center' });
+  });
   doc.setTextColor(0);
 }
 

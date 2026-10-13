@@ -38,6 +38,30 @@ It is a React + TypeScript app packaged for Android with Capacitor. All data sta
   ```
   You need JDK 21 and the Android SDK (API 36).
 
+## Windows PC (64-bit)
+
+The same app runs as a Windows desktop program (Electron, in `desktop/`).
+
+* **GitHub Actions:** `.github/workflows/woodquote-windows.yml` builds `WoodQuote-Windows-x64` with two files:
+  * `WoodQuote-Setup-<version>-x64.exe`: installer with Start-menu and desktop shortcuts.
+  * `WoodQuote-Portable-<version>-x64.exe`: runs without installing (e.g. from a USB stick).
+* Quotes are stored on the PC. **Save to this PC** asks where to save PDFs (starting in `Documents\WoodQuote`); **Open to print or email** opens the PDF in the default viewer.
+* The exe is not code-signed yet, so Windows SmartScreen shows "Windows protected your PC" the first time: click **More info → Run anyway**. Add a code-signing certificate as the secrets `WIN_CSC_LINK` (base64 .pfx) and `WIN_CSC_KEY_PASSWORD` to sign it.
+* Locally: `npm run desktop:start` (run) or `npm run desktop:win` (build the .exe; on Windows).
+
+## iPhone / iPad
+
+The iOS project is in `ios/` (Capacitor, Swift Package Manager). Building needs a Mac with Xcode, so `.github/workflows/woodquote-ios.yml` builds it on a GitHub macOS runner.
+
+* **Without an Apple Developer account:** the run uploads `WoodQuote-iOS-unsigned` (`WoodQuote-unsigned.ipa`). Install it from a Windows PC or Mac with a sideloading tool such as Sideloadly or AltStore, using your Apple ID. With a free Apple ID the app must be re-installed every 7 days.
+* **With an Apple Developer account (US$99/year):** add these repository secrets and the run also produces a signed App Store build and, with the API key, uploads it to TestFlight:
+  * `IOS_TEAM_ID`: your 10-character team ID
+  * `IOS_P12_BASE64`, `IOS_P12_PASSWORD`: an *Apple Distribution* certificate exported as .p12 (base64)
+  * `IOS_PROFILE_BASE64`: an *App Store* provisioning profile for `zw.co.zuslyprojects.woodquote` (base64)
+  * `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`: an App Store Connect API key (for TestFlight upload)
+* PDFs saved with **Download** appear in the Files app under *On My iPhone › WoodQuote*.
+* On a Mac: `npm run ios:sync` then `npm run ios:open` and press Run in Xcode.
+
 ## Development
 
 ```bash
@@ -53,6 +77,8 @@ npm run build
 * `src/lib/presets.ts`: templates for each product type, plus the upgrade step for older saved data
 * `src/lib/room.ts`: room layout (walls, openings, placing items)
 * `src/pages/RoomDesigner.tsx`: the room planner
+* `desktop/`: Windows desktop shell (Electron)
+* `ios/`, `android/`: native iPhone and Android projects (Capacitor)
 * `src/lib/runs.ts`: kitchen runs (straight, L and U shapes, modules, worktops, layout)
 * `src/lib/generate.ts`: turns a unit into parts, hardware, aluminium cuts and 3D boxes
 * `src/lib/optimizer.ts`: sheet packing (guillotine and MaxRects) and 1D bar packing

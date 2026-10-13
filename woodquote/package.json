@@ -10,7 +10,11 @@
     "preview": "vite preview",
     "test": "vitest run",
     "android:sync": "npm run build && cap sync android",
-    "android:open": "cap open android"
+    "android:open": "cap open android",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios",
+    "desktop:start": "npm run build && npm --prefix desktop start",
+    "desktop:win": "npm run build && npm --prefix desktop run dist:win"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
@@ -18,6 +22,7 @@
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.3",
     "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/ios": "^8.5.3",
     "@capacitor/share": "^8.0.3",
     "idb-keyval": "^6.3.0",
     "jspdf": "^4.2.1",

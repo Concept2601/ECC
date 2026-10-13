@@ -960,13 +960,18 @@ export async function saveOrShare(doc: jsPDF, filename: string): Promise<void> {
   usePdfExport.setState({ doc, filename: filename.replace(/[^\w.-]+/g, '_'), result: null });
 }
 
-/** Save a PDF to the device: Documents/WoodQuote on Android, the Downloads folder in a browser. */
+/** Save a PDF to the device: Documents/WoodQuote on Android, Files on iPhone, a save dialog on Windows, Downloads in a browser. */
 export async function downloadPdf(doc: jsPDF, filename: string): Promise<string> {
   if (!Capacitor.isNativePlatform()) {
     doc.save(filename);
-    return `Downloaded ${filename}`;
+    return window.woodquoteDesktop ? `Choose where to save ${filename} (starts in Documents\\WoodQuote)` : `Downloaded ${filename}`;
   }
   const data = doc.output('datauristring').split(',')[1];
+  if (Capacitor.getPlatform() === 'ios') {
+    // the app's Documents folder shows in the Files app
+    await Filesystem.writeFile({ path: filename, data, directory: Directory.Documents, recursive: true });
+    return `Saved to Files › On My iPhone › WoodQuote › ${filename}`;
+  }
   try {
     await Filesystem.requestPermissions().catch(() => undefined);
     await Filesystem.writeFile({ path: `WoodQuote/${filename}`, data, directory: Directory.Documents, recursive: true });
@@ -982,6 +987,11 @@ export async function sharePdf(doc: jsPDF, filename: string): Promise<void> {
     const data = doc.output('datauristring').split(',')[1];
     const res = await Filesystem.writeFile({ path: filename, data, directory: Directory.Cache });
     await Share.share({ title: filename, url: res.uri, dialogTitle: 'Share PDF' });
+    return;
+  }
+  if (window.woodquoteDesktop) {
+    // Windows app: open in the default PDF viewer to print or email it
+    await window.woodquoteDesktop.openFile(filename, doc.output('arraybuffer'));
     return;
   }
   const file = new File([doc.output('blob')], filename, { type: 'application/pdf' });

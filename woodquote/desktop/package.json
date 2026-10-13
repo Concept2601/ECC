@@ -1,0 +1,42 @@
+{
+  "name": "woodquote-desktop",
+  "productName": "WoodQuote by 2601",
+  "version": "1.0.0",
+  "description": "Wood joinery quotations, 3D designs, invoices and receipts",
+  "author": "Zusly Projects",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "copy-web": "node -e \"const fs=require('fs');fs.rmSync('app',{recursive:true,force:true});fs.cpSync('../dist','app',{recursive:true})\"",
+    "start": "npm run copy-web && electron .",
+    "dist:win": "npm run copy-web && electron-builder --win --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "zw.co.zuslyprojects.woodquote",
+    "productName": "WoodQuote by 2601",
+    "copyright": "© Zusly Projects",
+    "directories": { "output": "release", "buildResources": "build" },
+    "files": ["main.cjs", "preload.cjs", "app/**/*", "package.json"],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WoodQuote by 2601",
+      "artifactName": "WoodQuote-Setup-${version}-x64.${ext}"
+    },
+    "portable": { "artifactName": "WoodQuote-Portable-${version}-x64.${ext}" }
+  }
+}

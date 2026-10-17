@@ -1,4 +1,5 @@
-import { FilePlus2, FileText, Receipt, ScanLine } from 'lucide-react';
+import { FilePlus2, FileText, Map as MapIcon, Receipt, Ruler, ScanLine } from 'lucide-react';
+import EditTools from '../components/EditTools';
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { STATUS_STYLE, useMoney } from '../hooks';
@@ -32,6 +33,9 @@ export default function Home() {
               <div className="text-xs uppercase tracking-widest text-brand-100">WoodQuote by 2601</div>
               <div className="text-xl font-bold">{settings.company.name}</div>
             </div>
+            <div className="ml-auto">
+              <EditTools light />
+            </div>
           </div>
         </div>
       </div>
@@ -43,12 +47,22 @@ export default function Home() {
           <Stat label="Outstanding" value={fmt(stats.outstanding)} tone={stats.outstanding > 0 ? 'warn' : undefined} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <button className="card flex flex-col items-start gap-2 p-4 text-left hover:border-brand-300" onClick={() => nav(`/quotes/${createQuote()}`)}>
             <FilePlus2 className="text-brand-600" />
             <span className="font-bold">New quotation</span>
             <span className="text-xs text-stone-500">Design units & price them</span>
           </button>
+          <Link to="/fit" className="card flex flex-col items-start gap-2 p-4 hover:border-brand-300">
+            <Ruler className="text-brand-600" />
+            <span className="font-bold">Measure a space</span>
+            <span className="text-xs text-stone-500">Quick quote: what fits W × H × D</span>
+          </Link>
+          <Link to="/plan" className="card flex flex-col items-start gap-2 p-4 hover:border-brand-300">
+            <MapIcon className="text-brand-600" />
+            <span className="font-bold">Plan reader</span>
+            <span className="text-xs text-stone-500">PDF plan → room, kitchen & BIC layout</span>
+          </Link>
           <Link to="/reader" className="card flex flex-col items-start gap-2 p-4 hover:border-brand-300">
             <ScanLine className="text-brand-600" />
             <span className="font-bold">Diagram reader</span>

@@ -544,6 +544,16 @@ export default function UnitDesigner() {
                             <span className="label">Design</span>
                             <IconChoice value={p.style} onChange={(v) => up((u) => (u.finishPanels[side].style = v))} options={choices(PANEL_ICONS, PANEL_LABELS)} />
                           </div>
+                          {p.style === 'slatted' && (
+                            <div className="grid grid-cols-2 gap-2">
+                              <Field label="Slat width">
+                                <NumInput value={p.slatWidth || 40} min={5} suffix="mm" onChange={(v) => up((u) => (u.finishPanels[side].slatWidth = Math.max(5, v)))} />
+                              </Field>
+                              <Field label="Gap between slats">
+                                <NumInput value={p.slatGap ?? 15} min={0} suffix="mm" onChange={(v) => up((u) => (u.finishPanels[side].slatGap = Math.max(0, v)))} />
+                              </Field>
+                            </div>
+                          )}
                           {unit.mount === 'floor' && <Toggle label="Run down to the floor (covers base)" checked={p.toFloor} onChange={(v) => up((u) => (u.finishPanels[side].toFloor = v))} />}
                         </>
                       )}

@@ -238,6 +238,10 @@ export interface DocTemplate {
 export interface AISettings {
   apiKey: string;
   model: string;
+  /** Plan reader: which AI service reads plans automatically. */
+  provider?: 'anthropic' | 'openai';
+  openaiKey?: string;
+  openaiModel?: string;
 }
 
 export interface Settings {
@@ -329,6 +333,8 @@ export interface FinishPanel {
   materialId: ID;
   style: PanelStyle;
   toFloor: boolean; // run down past the plinth / legs to the floor
+  slatWidth?: number; // slatted: width of each slat (mm), default 40
+  slatGap?: number; // slatted: gap between slats (mm), default 15
 }
 
 export type LightLocation = 'underCabinet' | 'insideTop' | 'shelves' | 'plinth' | 'top' | 'backPanel' | 'custom';
@@ -419,8 +425,14 @@ export type RunShape = 'straight' | 'L' | 'U';
 /** One slot along a wall: floor unit (+ optional wall unit above), a tall unit, or a gap. */
 export interface RunModule {
   id: ID;
-  kind: 'base' | 'tall' | 'gap';
+  kind: 'base' | 'tall' | 'gap' | 'filler';
   width: number;
+  /** Custom sizes for this position only (null / missing = the kitchen's sizes). */
+  height?: number | null; // base / tall cabinet height, space or filler height
+  depth?: number | null; // base / tall cabinet depth
+  wallHeight?: number | null; // wall cabinet above
+  wallBottom?: number | null;
+  wallDepth?: number | null;
   base: Unit | null; // base or tall unit
   wall: Unit | null; // hanging unit above a base unit
   hoodId: ID | null; // chimney hood above (instead of / under the wall unit)
@@ -434,6 +446,8 @@ export interface Run {
   qty: number;
   shape: RunShape;
   legs: RunModule[][]; // [back wall, right wall, left wall]
+  /** Measured wall / space length for each leg (mm); the designer shows what is left to fill. */
+  targets?: (number | null)[];
   counterHeight: number; // floor to top of worktop
   baseDepth: number;
   plinthHeight: number;
@@ -463,6 +477,8 @@ export interface BoxMeta {
   drawer?: boolean;
   handle?: boolean; // attach a handle to this front
   style?: PanelStyle;
+  slatWidth?: number;
+  slatGap?: number;
 }
 
 export interface Box3 {
@@ -636,6 +652,20 @@ export interface RoomPlacement {
   rot: number; // degrees
 }
 
+/** Something read from a plan (or drawn in): a built-in cupboard, kitchen run, island, sink… */
+export type FixtureKind = 'bic' | 'baseRun' | 'wallRun' | 'tall' | 'island' | 'sink' | 'stove' | 'hob' | 'fridge' | 'other';
+export interface RoomFixture {
+  id: ID;
+  kind: FixtureKind;
+  label: string;
+  x: number; // back-left corner on the plan (mm)
+  z: number;
+  w: number; // along its back
+  d: number; // depth out from its back
+  rot: number; // degrees, same convention as placements
+  height?: number | null;
+}
+
 export interface Room {
   walls: RoomWall[];
   wallThickness: number;
@@ -643,6 +673,8 @@ export interface Room {
   floorColor: string;
   openings: RoomOpening[];
   placements: RoomPlacement[];
+  /** Outlines read from a plan (BICs, kitchen, island…) for reference. */
+  fixtures?: RoomFixture[];
 }
 
 /* ----------------------------------------------------- invoices / receipts */

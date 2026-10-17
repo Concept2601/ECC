@@ -171,6 +171,10 @@ export const defaultCatalog = (): Catalog => ({
     acc({ id: 'fx-bracket', category: 'fixing', name: 'Wall fixing bracket (built-in)', size: 'L-bracket', price: 0.6 }),
     acc({ id: 'sv-cutout', category: 'service', name: 'Countertop cut-out (sink / hob)', size: 'per cut-out', price: 25 }),
     acc({ id: 'sv-notch', category: 'service', name: 'Handle notch machining', size: 'per door', price: 2 }),
+    acc({ id: 'jn-dowel', category: 'fixing', name: 'Beech dowels 8x35 (panel joints)', size: 'pack of 100', packQty: 100, price: 4 }),
+    acc({ id: 'jn-biscuit', category: 'fixing', name: 'Jointing biscuits No.20', size: 'pack of 100', packQty: 100, price: 6 }),
+    acc({ id: 'jn-connector', category: 'fixing', name: 'Panel / worktop connector bolt', size: '150mm', price: 1.5 }),
+    acc({ id: 'jn-domino', category: 'fixing', name: 'Domino tenons 8x40', size: 'pack of 50', packQty: 50, price: 12 }),
   ],
 });
 

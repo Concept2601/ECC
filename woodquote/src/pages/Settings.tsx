@@ -7,8 +7,9 @@ import type { Quote } from '../lib/types';
 import { todayISO } from '../lib/util';
 import { quotePdf, saveOrShare, shareTextFile } from '../pdf/pdf';
 import { exportData, useStore, type AppData } from '../store';
+import { PerformanceCard, SavingCard, ShortcutsCard } from '../components/SettingsExtras';
 
-type Tab = 'company' | 'documents' | 'pricing' | 'ai' | 'backup';
+type Tab = 'company' | 'documents' | 'pricing' | 'ai' | 'saving' | 'keys' | 'performance' | 'backup';
 
 async function fileToDataUrl(file: File, maxSide = 1600, type = 'image/png', quality = 0.9): Promise<string> {
   const url = URL.createObjectURL(file);
@@ -84,7 +85,10 @@ export default function SettingsPage() {
             { value: 'company', label: 'Business' },
             { value: 'documents', label: 'Documents' },
             { value: 'pricing', label: 'Pricing & cutting' },
-            { value: 'ai', label: 'Diagram reader (AI)' },
+            { value: 'ai', label: 'AI readers' },
+            { value: 'saving', label: 'Saving & undo' },
+            { value: 'keys', label: 'Keyboard' },
+            { value: 'performance', label: 'Performance' },
             { value: 'backup', label: 'Backup' },
           ]}
         />
@@ -301,7 +305,7 @@ export default function SettingsPage() {
           <Card title="Diagram reader">
             <div className="space-y-3 text-sm">
               <p className="text-stone-600">
-                The diagram reader uses Claude to read plans, sketches, photos and 3D renders, then builds units with dimensions automatically. Add your Anthropic API key from{' '}
+                The diagram reader and plan reader use Claude to read plans, sketches, photos and 3D renders, then builds units with dimensions automatically. Add your Anthropic API key from{' '}
                 <a className="font-semibold text-brand-700" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
                   console.anthropic.com
                 </a>
@@ -313,9 +317,34 @@ export default function SettingsPage() {
               <Field label="Model">
                 <TextInput value={settings.ai.model} onChange={(v) => updateSettings((s) => (s.ai.model = v.trim()))} />
               </Field>
+              <hr className="border-stone-200" />
+              <p className="font-semibold">Plan reader</p>
+              <p className="text-stone-600">
+                The plan reader can use the Anthropic key above or an OpenAI API key from{' '}
+                <a className="font-semibold text-brand-700" href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">
+                  platform.openai.com
+                </a>
+                . A ChatGPT Plus / Pro subscription does not include API access — to use your subscription, choose “With my ChatGPT” in the plan reader and paste the answer back.
+              </p>
+              <Field label="Plan reader uses">
+                <select className="input" value={settings.ai.provider ?? 'anthropic'} onChange={(e) => updateSettings((s) => (s.ai.provider = e.target.value as 'anthropic' | 'openai'))}>
+                  <option value="anthropic">Anthropic (Claude)</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+              </Field>
+              <Field label="OpenAI API key">
+                <input className="input font-mono" type="password" autoComplete="off" placeholder="sk-…" value={settings.ai.openaiKey ?? ''} onChange={(e) => updateSettings((s) => (s.ai.openaiKey = e.target.value.trim()))} />
+              </Field>
+              <Field label="OpenAI model">
+                <TextInput value={settings.ai.openaiModel ?? 'gpt-5'} onChange={(v) => updateSettings((s) => (s.ai.openaiModel = v.trim()))} />
+              </Field>
             </div>
           </Card>
         )}
+
+        {tab === 'saving' && <SavingCard />}
+        {tab === 'keys' && <ShortcutsCard />}
+        {tab === 'performance' && <PerformanceCard />}
 
         {tab === 'backup' && (
           <Card title="Backup & restore">
@@ -340,7 +369,9 @@ export default function SettingsPage() {
                   e.target.value = '';
                   if (!f) return;
                   try {
-                    const data = JSON.parse(await f.text()) as AppData;
+                    const raw = JSON.parse(await f.text()) as AppData & { data?: AppData };
+                    // save points and Windows backup files wrap the data
+                    const data = raw.data ?? raw;
                     if (!data.settings || !data.catalog || !Array.isArray(data.quotes)) throw new Error('Not a WoodQuote backup');
                     if (confirmAction('Replace all data on this device with the backup?')) importData(data);
                   } catch (err) {

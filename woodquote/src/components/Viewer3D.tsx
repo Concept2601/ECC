@@ -6,6 +6,7 @@ import type { RunBuild } from '../lib/runs';
 import type { Box3, Catalog, Room, Run, SectionRef, Unit, UnitBuild } from '../lib/types';
 import { addUnitRoom, buildRoomObject, buildRunObject, buildUnitObject, createStage, ROOM_VIEW_DIR, roomBounds, runBounds, runViewDir, unitBounds, type ViewName } from '../render/scene';
 import type { ItemPrice } from '../lib/pricing';
+import { RENDER_QUALITY, usePrefs } from '../app/prefs';
 import { unitExtents } from '../lib/generate';
 
 export interface Pick {
@@ -42,10 +43,30 @@ const VIEWS: { v: ViewName; label: string }[] = [
 ];
 
 /** Interactive orbitable 3D render. Tap a compartment to select it. */
-export default function Viewer3D({ catalog, unit, build, run, runBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes, room, roomItems, selectedItemId }: Props) {
+export default function Viewer3D(props: Props) {
+  // a new quality setting needs a new WebGL renderer
+  const quality = usePrefs((s) => s.renderQuality);
+  const [gen, setGen] = useState(0);
+  const [lost, setLost] = useState(false);
+  return (
+    <div className={`relative min-w-0 ${props.className ?? 'h-72 w-full'}`}>
+      <ViewerInner key={`${quality}|${gen}`} {...props} className="h-full w-full" onLost={() => setLost(true)} />
+      {lost && (
+        <button className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-stone-100/95 text-sm font-semibold text-stone-700" onClick={() => (setLost(false), setGen((g) => g + 1))}>
+          3D view paused to save memory
+          <span className="text-xs font-normal text-stone-500">Tap to show it again</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ViewerInner({ onLost, catalog, unit, build, run, runBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes, room, roomItems, selectedItemId }: Props & { onLost?: () => void }) {
   const host = useRef<HTMLDivElement>(null);
-  const ctx = useRef<{ renderer: THREE.WebGLRenderer; stage: ReturnType<typeof createStage>; controls: OrbitControls; key: string } | null>(null);
+  const ctx = useRef<{ renderer: THREE.WebGLRenderer; stage: ReturnType<typeof createStage>; controls: OrbitControls; key: string; invalidate: () => void } | null>(null);
   const pickRef = useRef(onPick);
+  const onLostRef = useRef(onLost);
+  onLostRef.current = onLost;
   useEffect(() => {
     pickRef.current = onPick;
   }, [onPick]);
@@ -56,21 +77,37 @@ export default function Viewer3D({ catalog, unit, build, run, runBuild, highligh
 
   useEffect(() => {
     const el = host.current!;
+    const q = RENDER_QUALITY[usePrefs.getState().renderQuality] ?? RENDER_QUALITY.balanced;
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      renderer = new THREE.WebGLRenderer({ antialias: q.antialias, preserveDrawingBuffer: false, powerPreference: q.gpu });
     } catch {
       el.innerHTML = '<div class="p-6 text-sm text-stone-500">3D preview is not supported on this device.</div>';
       return;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatio));
     el.appendChild(renderer.domElement);
     Object.assign(renderer.domElement.style, { touchAction: 'none', display: 'block', width: '100%', height: '100%' });
-    const stage = createStage(renderer);
+    const stage = createStage(renderer, q.shadows);
     const controls = new OrbitControls(stage.camera, renderer.domElement);
     controls.enableDamping = true;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
-    ctx.current = { renderer, stage, controls, key: '' };
+    // draw only when something changed, so an idle 3D view costs nothing
+    let dirty = true;
+    let visible = true;
+    const invalidate = () => (dirty = true);
+    controls.addEventListener('change', invalidate);
+    ctx.current = { renderer, stage, controls, key: '', invalidate };
+    // if the phone takes the graphics memory back, pause instead of crashing
+    let raf = 0;
+    const onLostCtx = (e: Event) => {
+      e.preventDefault();
+      cancelAnimationFrame(raf);
+      onLostRef.current?.();
+    };
+    renderer.domElement.addEventListener('webglcontextlost', onLostCtx);
+    const io = new IntersectionObserver(([e]) => ((visible = e.isIntersecting), invalidate()));
+    io.observe(el);
 
     // tap (not drag) → pick the compartment / unit under the finger
     let down: { x: number; y: number } | null = null;
@@ -101,10 +138,12 @@ export default function Viewer3D({ catalog, unit, build, run, runBuild, highligh
     renderer.domElement.addEventListener('pointerdown', onDown);
     renderer.domElement.addEventListener('pointerup', onUp);
 
-    let raf = 0;
     const loop = () => {
-      controls.update();
-      renderer.render(stage.scene, stage.camera);
+      const moving = controls.update();
+      if ((dirty || moving) && visible) {
+        renderer.render(stage.scene, stage.camera);
+        dirty = false;
+      }
       raf = requestAnimationFrame(loop);
     };
     const resize = () => {
@@ -113,6 +152,7 @@ export default function Viewer3D({ catalog, unit, build, run, runBuild, highligh
       renderer.setSize(w, h, false);
       stage.camera.aspect = w / h;
       stage.camera.updateProjectionMatrix();
+      invalidate();
     };
     const ro = new ResizeObserver(resize);
     ro.observe(el);
@@ -121,6 +161,10 @@ export default function Viewer3D({ catalog, unit, build, run, runBuild, highligh
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      io.disconnect();
+      renderer.domElement.removeEventListener('webglcontextlost', onLostCtx);
+      stage.dispose();
+      controls.removeEventListener('change', invalidate);
       renderer.domElement.removeEventListener('pointerdown', onDown);
       renderer.domElement.removeEventListener('pointerup', onUp);
       controls.dispose();
@@ -164,6 +208,8 @@ export default function Viewer3D({ catalog, unit, build, run, runBuild, highligh
       c.controls.target.copy(target);
       c.key = key;
     }
+    c.controls.update();
+    c.invalidate();
   }, [unit, build, run, runBuild, catalog, fronts, open, lights, highlight, selectedUnitId, view, extraBoxes, room, roomItems, selectedItemId]);
 
   const chip = (active: boolean) => `rounded-lg px-2 py-1 text-[11px] font-semibold ${active ? 'bg-brand-600 text-white' : 'bg-white/90 text-stone-700'}`;

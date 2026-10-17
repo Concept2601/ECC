@@ -14,6 +14,7 @@ import { COST_GROUPS } from '../lib/pricing';
 import type { Quote, QuoteStatus } from '../lib/types';
 import { deepClone, uid } from '../lib/util';
 import { quotePdf, saveOrShare, workshopPdf } from '../pdf/pdf';
+import { usePageShortcuts } from '../app/shortcuts';
 import { useStore } from '../store';
 
 type Tab = 'units' | 'client' | 'pricing' | 'cut' | 'materials' | 'attachments';
@@ -31,6 +32,7 @@ export default function QuoteEditor() {
   const attachRef = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState('');
+  const keys = usePageShortcuts();
 
   if (!quote || !calc) return <PageHeader title="Quotation not found" back="/quotes" />;
   const up = (fn: (q: Quote) => void) => updateQuote(quote.id, fn);
@@ -44,6 +46,17 @@ export default function QuoteEditor() {
     } finally {
       setBusy('');
     }
+  };
+
+  keys.current = {
+    pdf: () => void exportPdf('quote'),
+    duplicate: () => {
+      const nid = duplicateQuote(quote.id);
+      if (nid) nav(`/quotes/${nid}`);
+    },
+    addUnit: () => setAdding(true),
+    addKitchen: () => setAddingRun(true),
+    room: () => nav(`/quotes/${quote.id}/room`),
   };
 
   const captureViews = async () => {
@@ -390,6 +403,25 @@ export default function QuoteEditor() {
               Mode: <b>{settings.pricing.cutMode === 'guillotine' ? 'Guillotine (panel saw)' : 'Nested (CNC)'}</b> · kerf {settings.pricing.kerf}mm · trim {settings.pricing.sheetTrim}mm · offcuts under {settings.pricing.minOffcut}mm are waste · charging{' '}
               <b>{settings.pricing.boardCharging === 'fullSheets' ? 'full sheets' : 'full sheets minus reusable offcuts'}</b>. Change in Settings → Pricing.
             </p>
+            {calc.joins.length > 0 && (
+              <div className="card space-y-2 p-4">
+                <h3 className="text-sm font-bold uppercase tracking-wide text-stone-600">Joined parts ({calc.joins.length})</h3>
+                <p className="text-xs text-stone-500">These parts are bigger than the board or plank, so they are cut in equal pieces (joins in the middle, not at the ends) and joined. Fixings and cleats are already in the cut list and costs.</p>
+                {calc.joins.map((j, k) => (
+                  <div key={k} className="rounded-xl border border-stone-200 p-2 text-xs">
+                    <div className="font-semibold">
+                      {j.qty > 1 ? `${j.qty}× ` : ''}
+                      {j.item} – {j.part}: {j.original.length} × {j.original.width} mm in {j.material}
+                    </div>
+                    <div className="text-stone-600">
+                      → {j.pieces.length} pieces ({j.pieces.map((p) => `${p.length}×${p.width}`).join(' + ')}) · {j.joints} joint{j.joints === 1 ? '' : 's'}
+                      {j.cleats.length ? ` · ${j.cleats.length} cleat/batten${j.cleats.length === 1 ? '' : 's'}` : ''}
+                    </div>
+                    <div className="text-stone-500">{j.method}</div>
+                  </div>
+                ))}
+              </div>
+            )}
             {calc.boardPlans.map((p) => (
               <BoardPlanCard key={p.material.id} plan={p} />
             ))}
@@ -397,7 +429,7 @@ export default function QuoteEditor() {
               <BarPlanCard key={p.profile.id} plan={p} />
             ))}
             {!calc.boardPlans.length && <p className="p-6 text-center text-sm text-stone-500">Add units to see the cutting plan.</p>}
-            <button className="btn-secondary w-full" disabled={!!busy || !quote.units.length} onClick={() => exportPdf('workshop')}>
+            <button className="btn-secondary w-full" disabled={!!busy || !calc.items.length} onClick={() => exportPdf('workshop')}>
               <Hammer size={16} /> {busy === 'workshop' ? 'Building…' : 'Workshop cut list PDF'}
             </button>
           </div>

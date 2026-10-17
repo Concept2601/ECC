@@ -123,6 +123,67 @@ export function gapModule(tpl: GapTemplate, run: Run): RunModule {
   const width = tpl === 'fridge' ? 750 : 600;
   return { id: uid('m'), kind: 'gap', width, base: null, wall: null, hoodId: tpl === 'stove' ? 'ap-hood-chimney' : null, gapApplianceId: appliance, gapLabel: GAP_TEMPLATES[tpl] };
 }
+export type CustomKind = 'base' | 'tall' | 'wall' | 'space' | 'filler' | 'appliance';
+export const CUSTOM_KINDS: Record<CustomKind, string> = {
+  base: 'Base cabinet (any size)',
+  tall: 'Tall cabinet (any size)',
+  wall: 'Wall cabinet only (space below)',
+  space: 'Open space / gap',
+  filler: 'Filler panel',
+  appliance: 'Free-standing appliance space',
+};
+
+export interface CustomSpec {
+  kind: CustomKind;
+  width: number;
+  height: number | null;
+  depth: number | null;
+  /** Wall cabinet height / underside (wall kind or above a base / space). */
+  wallHeight?: number | null;
+  wallBottom?: number | null;
+  front?: 'doors' | 'door' | 'drawers' | 'open';
+  label?: string;
+  applianceId?: string | null;
+}
+
+/** A cabinet, space or filler of any size, for slotting in anywhere along a wall. */
+export function customModule(spec: CustomSpec, run: Run): RunModule {
+  const w = Math.max(1, Math.round(spec.width));
+  const front = spec.front ?? 'doors';
+  const base: RunModule = { id: uid('m'), kind: 'gap', width: w, base: null, wall: null, hoodId: null, gapApplianceId: null, gapLabel: spec.label || '', height: spec.height || null, depth: spec.depth || null, wallHeight: spec.wallHeight || null, wallBottom: spec.wallBottom ?? null };
+  const bays = front === 'drawers' ? [bay(1, [sec({ front: 'drawer', drawerCount: 3 })])] : front === 'open' ? [bay(1, [sec({ front: 'open', shelves: 1 })])] : [bay(1, [sec({ front: 'door', opening: front === 'door' ? 'left' : 'pair', shelves: 1 })])];
+  switch (spec.kind) {
+    case 'base': {
+      const u = baseUnit('kitchen_base', { name: spec.label || `Base – custom ${w}mm`, width: w, installType: run.installType });
+      u.bays = bays;
+      return { ...base, kind: 'base', base: u, gapLabel: '' };
+    }
+    case 'tall': {
+      const u = baseUnit('kitchen_tall', { name: spec.label || `Tall – custom ${w}mm`, width: w, installType: run.installType });
+      u.bays = front === 'open' ? bays : [bay(1, [sec({ front: 'door', opening: front === 'door' ? 'left' : 'pair', shelves: 4, size: 4 }), sec({ front: 'door', opening: 'up', size: 1 })])];
+      return { ...base, kind: 'tall', base: u, gapLabel: '' };
+    }
+    case 'wall': {
+      const m: RunModule = { ...base, gapLabel: spec.label || 'Space under wall cabinet' };
+      m.wall = makeWall(front === 'open' ? 'open' : front === 'door' ? 'door' : 'doors', w, run);
+      if (m.wall && spec.label) m.wall.name = `Wall – ${spec.label}`;
+      return m;
+    }
+    case 'filler':
+      return { ...base, kind: 'filler', gapLabel: spec.label || 'Filler' };
+    case 'appliance':
+      return { ...base, gapApplianceId: spec.applianceId ?? null, gapLabel: spec.label || 'Appliance space' };
+    default:
+      return { ...base, gapLabel: spec.label || 'Open space' };
+  }
+}
+
+/** Mm still free on each leg when a target length was measured (negative = too long). */
+export const legRemaining = (run: Run, leg: number): number | null => {
+  const t = run.targets?.[leg];
+  return t ? t - legLength(run.legs[leg]) : null;
+};
+
 export function setWallTemplate(m: RunModule, tpl: WallTemplate, run: Run) {
   m.wall = makeWall(tpl, m.width, run);
   m.hoodId = tpl === 'hood' ? 'ap-hood-chimney' : null;
@@ -166,6 +227,9 @@ export function ensureLegs(run: Run) {
   if (run.shape === 'U' && !run.legs[2].length) run.legs[2] = [baseModule('doors', run, 'doors'), baseModule('drawers', run, 'open'), gapModule('fridge', run)];
 }
 
+/** Height of a filler panel: custom, else up to the worktop underside. */
+export const fillerHeight = (m: RunModule, run: Run, counterT: number) => m.height || run.counterHeight - counterT;
+
 export const activeLegs = (run: Run): number => (run.shape === 'straight' ? 1 : run.shape === 'L' ? 2 : 3);
 export const legLength = (mods: RunModule[]) => sum(mods.map((m) => m.width));
 
@@ -177,7 +241,6 @@ export function syncRun(run: Run, cat?: Catalog) {
       if (m.base) {
         const b = m.base;
         b.width = m.width;
-        b.depth = run.baseDepth;
         b.mount = 'floor';
         b.base = run.plinthHeight > 0 ? 'plinth' : 'none';
         b.baseHeight = run.plinthHeight;
@@ -185,22 +248,24 @@ export function syncRun(run: Run, cat?: Catalog) {
         b.countertopId = null;
         b.topBoardId = null;
         b.overhang = { front: 0, back: 0, left: 0, right: 0 };
-        b.height = m.kind === 'tall' ? run.tallHeight : run.counterHeight - counterT;
+        b.depth = m.depth || run.baseDepth;
+        b.height = m.height || (m.kind === 'tall' ? run.tallHeight : run.counterHeight - counterT);
         b.qty = 1;
       }
       if (m.wall) {
         const w = m.wall;
         w.width = m.width;
-        w.depth = run.wallDepth;
-        w.height = run.wallHeight;
+        w.depth = m.wallDepth || run.wallDepth;
+        w.height = m.wallHeight || run.wallHeight;
         w.mount = 'wall';
-        w.mountHeight = run.wallBottom;
+        w.mountHeight = m.wallBottom ?? run.wallBottom;
         w.base = 'none';
         w.installType = run.installType;
         w.countertopId = null;
         w.qty = 1;
       }
-      if (m.kind !== 'base') m.wall = null;
+      // a wall cabinet can sit above a base cabinet or an open space
+      if (m.kind === 'tall' || m.kind === 'filler') m.wall = null;
     }
 }
 
@@ -232,7 +297,7 @@ export interface RunPiece {
 export interface RunBuild {
   pieces: RunPiece[];
   extra: UnitBuild; // worktop, free-standing appliances, hoods (leg-local boxes)
-  extraPlacements: { place: Placement; box: Box3; kind: 'counter' | 'appliance'; applianceId?: string }[];
+  extraPlacements: { place: Placement; box: Box3; kind: 'counter' | 'appliance' | 'panel'; applianceId?: string; materialId?: string }[];
   size: { w: number; d: number; h: number };
 }
 
@@ -266,10 +331,20 @@ export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunB
     };
     for (const m of run.legs[li]) {
       const place = { leg: li, s, w: m.width };
-      if (m.kind === 'base' && m.base) {
+      // custom-height cabinets and tall fillers break the worktop; base fillers sit under it
+      const underTop = (m.kind === 'base' && !m.height) || (m.kind === 'filler' && fillerHeight(m, run, counter?.thickness ?? 0) <= run.counterHeight);
+      if (underTop) {
         if (segStart == null) segStart = s;
-        pieces.push({ module: m, place, unit: m.base, role: 'base', build: buildUnit(m.base, cat, pricing, ctx) });
       } else closeSeg(s);
+      if (m.kind === 'base' && m.base) pieces.push({ module: m, place, unit: m.base, role: 'base', build: buildUnit(m.base, cat, pricing, m.height ? undefined : ctx) });
+      if (m.kind === 'filler') {
+        const h = fillerHeight(m, run, counter?.thickness ?? 0);
+        const mat = runUnits(run)[0]?.frontMaterialId ?? cat.boards[0]?.id ?? null;
+        const t = cat.boards.find((b) => b.id === mat)?.thickness ?? 18;
+        const box: Box3 = { x: 0, y: run.plinthHeight > 0 && h <= run.counterHeight ? run.plinthHeight : 0, z: (m.depth || run.baseDepth) - t, w: m.width, h: h - (run.plinthHeight > 0 && h <= run.counterHeight ? run.plinthHeight : 0), d: t };
+        extra.parts.push({ key: `filler-${m.id}`, name: `Filler panel ${m.width}mm`, role: 'finish', kind: 'board', materialId: mat, length: Math.round(box.h), width: m.width, thickness: t, qty: 1, edgeLength: (2 * (box.h + m.width)) / 1000, edgingId: null, boxes: [] });
+        extraPlacements.push({ place, box, kind: 'panel', materialId: mat ?? undefined });
+      }
       if (m.kind === 'tall' && m.base) pieces.push({ module: m, place, unit: m.base, role: 'tall', build: buildUnit(m.base, cat, pricing) });
       if (m.wall) pieces.push({ module: m, place, unit: m.wall, role: 'wall', build: buildUnit(m.wall, cat, pricing) });
       if (m.kind === 'gap' && m.gapApplianceId) {
@@ -284,7 +359,7 @@ export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunB
         const a = cat.appliances.find((x) => x.id === m.hoodId);
         if (a) {
           applCount.set(a.id, (applCount.get(a.id) ?? 0) + 1);
-          const y = run.wallBottom + (m.wall ? 0 : run.wallHeight - a.height);
+          const y = (m.wallBottom ?? run.wallBottom) + (m.wall ? 0 : (m.wallHeight || run.wallHeight) - a.height);
           extraPlacements.push({ place, box: { x: (m.width - a.width) / 2, y: Math.max(run.counterHeight + 550, y), z: 0, w: Math.min(a.width, m.width), h: a.height, d: a.depth }, kind: 'appliance', applianceId: a.id });
         }
       }
@@ -292,14 +367,15 @@ export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunB
     }
     closeSeg(s);
   }
-  extra.parts = [...counterParts.values()];
+  extra.parts = [...extra.parts, ...counterParts.values()];
   extra.applianceList = [...applCount.entries()].map(([applianceId, qty]) => ({ applianceId, qty }));
   if (!counter) extra.warnings.push('No worktop selected for this kitchen.');
   const LA = legLength(run.legs[0]);
   const LB = nLegs > 1 ? legLength(run.legs[1]) : 0;
   const LC = nLegs > 2 ? legLength(run.legs[2]) : 0;
   const d = Math.max(run.baseDepth + run.counterOverhang, run.baseDepth + Math.max(LB, LC));
-  return { pieces, extra, extraPlacements, size: { w: LA, d, h: Math.max(run.tallHeight, run.wallBottom + run.wallHeight) } };
+  const tops = run.legs.slice(0, nLegs).flat().map((m) => Math.max(m.height ?? 0, m.wall ? (m.wallBottom ?? run.wallBottom) + (m.wallHeight || run.wallHeight) : 0));
+  return { pieces, extra, extraPlacements, size: { w: LA, d, h: Math.max(run.tallHeight, run.wallBottom + run.wallHeight, ...tops) } };
 }
 
 /** All units in a run (for lookups by id). */

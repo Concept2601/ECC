@@ -11,7 +11,7 @@ import { activeLegs, LEG_LABELS, legLength } from '../lib/runs';
 import type { Catalog, Invoice, Payment, Quote, Room, Run, Settings, Unit } from '../lib/types';
 import { addDaysISO, fmtDate, money } from '../lib/util';
 import { renderRoomImage, renderRunImage, renderUnitImage } from '../render/scene';
-import { footprints, inwardNormal, roomExtents, vertices, wallDir } from '../lib/room';
+import { footprints, inwardNormal, placeXZ, roomExtents, vertices, wallDir } from '../lib/room';
 import { cellRects } from '../lib/sections';
 
 export const usePdfExport = create<{ doc: jsPDF | null; filename: string; result: string | null }>(() => ({ doc: null, filename: '', result: null }));
@@ -691,6 +691,24 @@ export function drawRoomPlan(doc: Doc, room: Room, items: ItemPrice[], cat: Cata
       doc.text(`${o.label || o.kind} ${o.width}${o.kind === 'opening' && o.beam ? ' (RC beam)' : ''}`, lx, lz, { align: 'center' });
     }
   });
+  // joinery outlines read from the client's plan
+  doc.setDrawColor(124, 58, 237);
+  doc.setLineDashPattern([1, 0.8], 0);
+  doc.setFontSize(5.5);
+  doc.setTextColor(109, 40, 217);
+  for (const f of room.fixtures ?? []) {
+    const poly = [
+      [0, 0],
+      [f.w, 0],
+      [f.w, f.d],
+      [0, f.d],
+    ].map(([a, b]) => placeXZ(a, b, { itemId: '', x: f.x, z: f.z, rot: f.rot }));
+    quad(poly, 'S');
+    const c = poly.reduce((acc, q) => [acc[0] + q[0] / 4, acc[1] + q[1] / 4], [0, 0]);
+    const [cx, cz] = P(c[0], c[1]);
+    doc.text(`plan: ${f.label}`.slice(0, 30), cx, cz + 3, { align: 'center' });
+  }
+  doc.setLineDashPattern([], 0);
   doc.setTextColor(30);
   doc.setDrawColor(87, 83, 78);
   doc.setFontSize(6);
@@ -814,6 +832,26 @@ export function workshopPdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog
     margin: { left: M, right: M, top: 18, bottom: 24 },
   });
   y = lastY(doc, y) + 6;
+
+  // parts too big for the stock: how they are split and joined
+  if (calc.joins.length) {
+    y = ensureSpace(doc, y, 20, s);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Joined parts (bigger than the board)', M, y);
+    y += 2;
+    autoTable(doc, {
+      startY: y,
+      head: [['Qty', 'Part', 'Size', 'Cut as', 'Joint method']],
+      body: calc.joins.map((j) => [String(j.qty), `${j.item} – ${j.part} (${j.material})`, `${j.original.length} × ${j.original.width}`, `${j.pieces.map((p) => `${p.length}×${p.width}`).join(' + ')}${j.cleats.length ? ` + ${j.cleats.length} cleat(s)` : ''}`, j.method]),
+      theme: 'striped',
+      headStyles: { fillColor: hexToRgb(s.doc.accentColor), fontSize: 8 },
+      styles: { fontSize: 7, cellPadding: 1.2 },
+      columnStyles: { 4: { cellWidth: 70 } },
+      margin: { left: M, right: M, top: 18, bottom: 24 },
+    });
+    y = lastY(doc, y) + 6;
+  }
 
   // sheet layouts
   for (const plan of calc.boardPlans) {

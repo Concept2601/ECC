@@ -5,7 +5,7 @@ import { Card, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } fr
 import Viewer3D from '../components/Viewer3D';
 import { useQuoteCalc } from '../hooks';
 import type { ItemPrice } from '../lib/pricing';
-import { autoPlace, closeRoom, defaultRoom, footprints, inwardNormal, isClosed, newOpening, newWall, OPENING_LABELS, ROOM_SHAPES, roomExtents, roomShape, roomWarnings, snapToWall, vertices, wallDir, wallName, type RoomShape } from '../lib/room';
+import { autoPlace, placeXZ, closeRoom, defaultRoom, footprints, inwardNormal, isClosed, newOpening, newWall, OPENING_LABELS, ROOM_SHAPES, roomExtents, roomShape, roomWarnings, snapToWall, vertices, wallDir, wallName, type RoomShape } from '../lib/room';
 import type { Catalog, Room, RoomOpening, RoomPlacement } from '../lib/types';
 import { useStore } from '../store';
 
@@ -116,6 +116,24 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
                 </text>
               );
             })()}
+          </g>
+        );
+      })}
+      {(room.fixtures ?? []).map((f) => {
+        const poly = [
+          [0, 0],
+          [f.w, 0],
+          [f.w, f.d],
+          [0, f.d],
+        ].map(([a, b]) => placeXZ(a, b, { itemId: '', x: f.x, z: f.z, rot: f.rot }));
+        const cx = poly.reduce((a, q) => a + q[0], 0) / 4;
+        const cz = poly.reduce((a, q) => a + q[1], 0) / 4;
+        return (
+          <g key={f.id} pointerEvents="none">
+            <polygon points={pts(poly)} fill="#a78bfa" fillOpacity={0.12} stroke="#7c3aed" strokeWidth={fs / 10} strokeDasharray={`${fs / 2} ${fs / 3}`} />
+            <text x={cx} y={cz + fs} fontSize={fs * 0.6} textAnchor="middle" fill="#6d28d9">
+              plan: {f.label}
+            </text>
           </g>
         );
       })}

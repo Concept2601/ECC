@@ -5,7 +5,8 @@ import { describeUnit } from './describe';
 import { buildUnit } from './generate';
 import { packBars, packSheets, priceBoardPlan, type BarPlan, type BoardPlan, type Piece } from './optimizer';
 import { buildRun, describeRun, type RunBuild } from './runs';
-import type { Accessory, Catalog, Invoice, Quote, Run, Settings, Unit, UnitBuild } from './types';
+import { splitForStock, type JoinPlan } from './joinery';
+import type { Accessory, Catalog, Invoice, PricingSettings, Quote, Run, Settings, Unit, UnitBuild } from './types';
 import { round2, sum } from './util';
 
 export type CostGroup = 'Boards' | 'Edge banding' | 'Glass' | 'Aluminium' | 'Countertops' | 'Hardware' | 'Appliances';
@@ -58,6 +59,8 @@ export interface QuoteCalc {
   entries: Entry[];
   boardPlans: BoardPlan[];
   barPlans: BarPlan[];
+  /** Parts bigger than the stock that are cut in pieces and joined. */
+  joins: (JoinPlan & { qty: number })[];
   costLines: CostLine[];
   materialsCost: number; // incl. appliances
   appliancesCost: number;
@@ -77,18 +80,46 @@ export interface QuoteCalc {
 
 export const accessoryPacks = (a: Accessory, qty: number): number => (a.unit === 'm' ? qty : Math.ceil(qty / Math.max(1, a.packQty)));
 
+/* Builds are pure functions of (unit or run, catalog, pricing), so unchanged
+   cabinets are reused between recalculations instead of rebuilt each keystroke. */
+const buildCache = new WeakMap<Catalog, WeakMap<PricingSettings, Map<string, unknown>>>();
+function cached<T>(cat: Catalog, pr: PricingSettings, key: string, make: () => T): T {
+  let byPr = buildCache.get(cat);
+  if (!byPr) buildCache.set(cat, (byPr = new WeakMap()));
+  let m = byPr.get(pr);
+  if (!m) byPr.set(pr, (m = new Map()));
+  const hit = m.get(key);
+  if (hit) return hit as T;
+  const v = make();
+  m.set(key, v);
+  if (m.size > 400) m.delete(m.keys().next().value as string);
+  return v;
+}
+
+/** Sheet packing is the slowest step; the same cut list always gives the same plan. */
+const packCache = new Map<string, ReturnType<typeof packSheets>>();
+function cachedPack(...args: Parameters<typeof packSheets>): ReturnType<typeof packSheets> {
+  const key = JSON.stringify(args);
+  const hit = packCache.get(key);
+  if (hit) return hit;
+  const v = packSheets(...args);
+  packCache.set(key, v);
+  if (packCache.size > 60) packCache.delete(packCache.keys().next().value as string);
+  return v;
+}
+
 export function quoteItems(q: Quote, cat: Catalog, settings: Settings): { items: Omit<ItemPrice, 'materials' | 'appliances' | 'labour' | 'installation' | 'cost' | 'sell' | 'sellEach'>[]; entries: Entry[] } {
   const pr = settings.pricing;
   const items: ReturnType<typeof quoteItems>['items'] = [];
   const entries: Entry[] = [];
   for (const u of q.units) {
-    const build = buildUnit(u, cat, pr);
+    const build = cached(cat, pr, `u${JSON.stringify(u)}`, () => buildUnit(u, cat, pr));
     const e: Entry = { key: u.id, itemId: u.id, name: u.name, qty: u.qty, build, unit: u, labourOverride: u.labourOverride };
     entries.push(e);
     items.push({ kind: 'unit', id: u.id, name: u.name, qty: u.qty, unit: u, build, entries: [e], lines: describeUnit(u, cat) });
   }
   for (const r of q.runs ?? []) {
-    const rb = buildRun(r, cat, pr);
+    const rb = cached(cat, pr, `r${JSON.stringify(r)}`, () => buildRun(r, cat, pr));
     const es: Entry[] = rb.pieces.map((p) => ({ key: `${r.id}:${p.unit.id}`, itemId: r.id, name: `${r.name} – ${p.unit.name}`, qty: r.qty, build: p.build, unit: p.unit, labourOverride: p.unit.labourOverride }));
     es.push({ key: `${r.id}:extra`, itemId: r.id, name: `${r.name} – worktop & appliances`, qty: r.qty, build: rb.extra, unit: null, labourOverride: null });
     entries.push(...es);
@@ -115,6 +146,7 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
 
   /* ---------------------------------------------------------- boards */
   const piecesByBoard = new Map<string, Piece[]>();
+  const joins: (JoinPlan & { qty: number })[] = [];
   entries.forEach((e, ei) => {
     for (const p of e.build.parts) {
       if (p.kind !== 'board' || !p.materialId) continue;
@@ -123,16 +155,25 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
       const n = p.qty * e.qty;
       use(`board:${mat.id}`, ei, p.length * p.width * n);
       const list = piecesByBoard.get(mat.id) ?? [];
-      for (let k = 0; k < n; k++) list.push({ id: `${e.key}:${p.key}:${k}`, label: `${e.name} – ${p.name}`, length: p.length, width: p.width, canRotate: !mat.grain });
+      // too big for the sheet / plank → cut in equal pieces and joined
+      const jp = splitForStock(p, mat, pr, e.name);
+      if (jp) {
+        joins.push({ ...jp, qty: n });
+        for (const [id, q] of Object.entries(jp.fixings)) use(`hw:${id}`, ei, q * n);
+        for (let k = 0; k < n; k++) {
+          jp.pieces.forEach((pc, j) => list.push({ id: `${e.key}:${p.key}:${k}:${j}`, label: `${e.name} – ${p.name} (${j + 1}/${jp.pieces.length})`, length: pc.length, width: pc.width, canRotate: !mat.grain }));
+          jp.cleats.forEach((c, j) => list.push({ id: `${e.key}:${p.key}:${k}:c${j}`, label: `${e.name} – ${c.label}`, length: c.length, width: c.width, canRotate: !mat.grain }));
+        }
+      } else for (let k = 0; k < n; k++) list.push({ id: `${e.key}:${p.key}:${k}`, label: `${e.name} – ${p.name}`, length: p.length, width: p.width, canRotate: !mat.grain });
       piecesByBoard.set(mat.id, list);
     }
   });
   const boardPlans: BoardPlan[] = [];
   for (const [id, pieces] of piecesByBoard) {
     const mat = cat.boards.find((b) => b.id === id)!;
-    const plan = priceBoardPlan(mat, packSheets(pieces, mat.sheetLength, mat.sheetWidth, { kerf: pr.kerf, trim: pr.sheetTrim, minOffcut: pr.minOffcut, mode: pr.cutMode }), pr.boardCharging);
+    const plan = priceBoardPlan(mat, cachedPack(pieces, mat.sheetLength, mat.sheetWidth, { kerf: pr.kerf, trim: pr.sheetTrim, minOffcut: pr.minOffcut, mode: pr.cutMode }), pr.boardCharging);
     boardPlans.push(plan);
-    if (plan.oversize.length) warnings.push(`${plan.oversize.length} part(s) are larger than a ${mat.name} sheet — they need joining or a bigger board.`);
+    if (plan.oversize.length) warnings.push(`${plan.oversize.length} part(s) could not be placed on a ${mat.name} sheet.`);
     charged.set(`board:${id}`, plan.chargedCost);
     costLines.push({ key: `board:${id}`, group: 'Boards', description: mat.name, qty: plan.sheets.length, unit: 'sheet', unitPrice: mat.pricePerSheet, total: plan.chargedCost, note: `${Math.round(plan.utilisation * 100)}% used${pr.boardCharging === 'usedArea' && plan.offcutValue > 0 ? ', reusable offcuts credited' : ''}` });
   }
@@ -244,7 +285,7 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
   const discount = round2(q.discountType === 'percent' ? (subtotal * q.discountValue) / 100 : Math.min(q.discountValue, subtotal));
   const taxable = subtotal - discount;
   const tax = q.applyTax ? round2((taxable * pr.taxRate) / 100) : 0;
-  return { items, entries, boardPlans, barPlans, costLines, materialsCost, appliancesCost, labour, installation, markup, unitsSell, transport, extras, subtotal, discount, taxable, tax, total: round2(taxable + tax), warnings: [...new Set(warnings)] };
+  return { items, entries, boardPlans, barPlans, joins, costLines, materialsCost, appliancesCost, labour, installation, markup, unitsSell, transport, extras, subtotal, discount, taxable, tax, total: round2(taxable + tax), warnings: [...new Set(warnings)] };
 }
 
 /* --------------------------------------------------------------- invoices */

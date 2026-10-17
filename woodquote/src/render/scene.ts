@@ -495,8 +495,12 @@ function panelDecoration(b: PartBox, mat: THREE.Material, unit: Unit): THREE.Obj
   } else if (style === 'fluted') {
     for (let u = 25; u < faceLen - 10; u += 30) place(u, 20, 4, b.h - 40, 0.8, dark);
   } else if (style === 'slatted') {
+    const sw = b.meta?.slatWidth ?? 40;
+    const sg = b.meta?.slatGap ?? 15;
+    const n = Math.max(1, Math.floor((faceLen + sg) / (sw + sg)));
+    const start = (faceLen - (n * sw + (n - 1) * sg)) / 2;
     place(0, 0, faceLen, b.h, 1, dark);
-    for (let u = 7; u + 40 <= faceLen; u += 55) place(u, 0, 40, b.h, 16, mat);
+    for (let k = 0; k < n; k++) place(start + k * (sw + sg), 0, sw, b.h, 16, mat);
   }
   return g;
 }
@@ -525,7 +529,10 @@ export function buildRunObject(run: Run, rb: RunBuild, cat: Catalog, opt: SceneO
   for (const ep of rb.extraPlacements) {
     const g = new THREE.Group();
     if (ep.kind === 'counter') g.add(boxMesh(ep.box, surfaceMaterial(counter?.color ?? '#999', counter?.finish ?? 'satin')));
-    else {
+    else if (ep.kind === 'panel') {
+      const b = cat.boards.find((x) => x.id === ep.materialId);
+      g.add(boxMesh(ep.box, surfaceMaterial(b?.color ?? '#ddd', b?.finish ?? 'matte')));
+    } else {
       const a = cat.appliances.find((x) => x.id === ep.applianceId);
       if (a) g.add(applianceObject(a, ep.box));
     }
@@ -596,8 +603,8 @@ const VIEW_DIRS: Record<ViewName, [number, number, number]> = {
 
 const envCache = new WeakMap<THREE.WebGLRenderer, THREE.Texture>();
 
-export function createStage(renderer: THREE.WebGLRenderer) {
-  renderer.shadowMap.enabled = true;
+export function createStage(renderer: THREE.WebGLRenderer, shadowSize = 2048) {
+  renderer.shadowMap.enabled = shadowSize > 0;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -618,7 +625,7 @@ export function createStage(renderer: THREE.WebGLRenderer) {
   scene.add(hemi);
   const sun = new THREE.DirectionalLight('#ffffff', 2.2);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(shadowSize || 512, shadowSize || 512);
   sun.shadow.bias = -0.0005;
   scene.add(sun);
   scene.add(sun.target);
@@ -633,13 +640,29 @@ export function createStage(renderer: THREE.WebGLRenderer) {
   let content: THREE.Object3D | null = null;
   let center = new THREE.Vector3();
   let radius = 1000;
+  /** Free the GPU memory of the current model (shared wood textures stay cached). */
+  const clear = () => {
+    if (!content) return;
+    scene.remove(content);
+    content.traverse((o) => {
+      if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments || o instanceof THREE.Points) {
+        o.geometry.dispose();
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) m.dispose();
+      }
+    });
+    content = null;
+  };
+  /** Release everything (lights' shadow maps included) when a view closes. */
+  const dispose = () => {
+    clear();
+    scene.traverse((o) => {
+      const sh = (o as THREE.Light & { shadow?: THREE.LightShadow }).shadow;
+      if (sh?.map) sh.map.dispose();
+    });
+  };
   const setContent = (obj: THREE.Object3D, b: Bounds) => {
-    if (content) {
-      scene.remove(content);
-      content.traverse((o) => {
-        if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) o.geometry.dispose();
-      });
-    }
+    clear();
     const cx = (b.x0 + b.x1) / 2;
     const cz = (b.z0 + b.z1) / 2;
     obj.position.set(-cx, 0, -cz);
@@ -678,7 +701,7 @@ export function createStage(renderer: THREE.WebGLRenderer) {
     scene.background = new THREE.Color(night ? '#1d2027' : '#eef0f3');
   };
 
-  return { scene, camera, setContent, frame, setNight };
+  return { scene, camera, setContent, frame, setNight, clear, dispose };
 }
 
 export function unitBounds(u: Unit, cat: Catalog): Bounds {
@@ -697,19 +720,38 @@ let stillRenderer: THREE.WebGLRenderer | null = null;
 /** Look into the corner of L / U kitchens so the side walls' fronts are visible. */
 export const runViewDir = (run: Run): [number, number, number] | undefined => (run.shape === 'L' ? [-0.75, 0.6, 1] : run.shape === 'U' ? [0, 0.85, 1] : undefined);
 
+// One renderer and one stage are reused for every still picture (thumbnails,
+// PDF images); the model is freed straight after each picture so phones do not
+// run out of graphics memory.
+let stillStage: ReturnType<typeof createStage> | null = null;
+const lowMemory = () => {
+  const n = navigator as Navigator & { deviceMemory?: number };
+  return /Android|iPhone|iPad/i.test(navigator.userAgent) || (n.deviceMemory ?? 8) <= 4;
+};
+
 function still(obj: THREE.Object3D, bounds: Bounds, width: number, height: number, mime: string, view: ViewName, night = false, dir?: [number, number, number]): string | null {
   try {
-    if (!stillRenderer) stillRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    if (!stillRenderer) {
+      stillRenderer = new THREE.WebGLRenderer({ antialias: !lowMemory(), preserveDrawingBuffer: true, powerPreference: 'low-power' });
+      stillRenderer.domElement.addEventListener('webglcontextlost', (e) => {
+        e.preventDefault();
+        stillRenderer = null;
+        stillStage = null;
+      });
+    }
+    if (!stillStage) stillStage = createStage(stillRenderer, lowMemory() ? 1024 : 2048);
+    const stage = stillStage;
     stillRenderer.setPixelRatio(1);
     stillRenderer.setSize(width, height, false);
-    const stage = createStage(stillRenderer);
     stage.scene.background = new THREE.Color('#ffffff');
-    if (night) stage.setNight(true);
+    stage.setNight(night);
     stage.setContent(obj, bounds);
     stage.camera.aspect = width / height;
     stage.frame(width / height, view, dir);
     stillRenderer.render(stage.scene, stage.camera);
-    return stillRenderer.domElement.toDataURL(mime, 0.88);
+    const url = stillRenderer.domElement.toDataURL(mime, 0.88);
+    stage.clear();
+    return url;
   } catch {
     return null;
   }
@@ -817,6 +859,16 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
     post.position.set(verts[i][0] - (nx * T) / 2, h / 2, verts[i][1] - (nz * T) / 2);
     root.add(post);
   });
+  // outlines read from a plan: thin coloured footprints on the floor
+  for (const f of room.fixtures ?? []) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(f.w, 12, f.d), new THREE.MeshStandardMaterial({ color: '#8b5cf6', transparent: true, opacity: 0.35 }));
+    const g = new THREE.Group();
+    m.position.set(f.w / 2, 7, f.d / 2);
+    g.add(m);
+    g.position.set(f.x, 0, f.z);
+    g.rotation.y = (-f.rot * Math.PI) / 180;
+    root.add(g);
+  }
   // the quoted items
   for (const p of room.placements) {
     const it = items.find((i) => i.id === p.itemId);

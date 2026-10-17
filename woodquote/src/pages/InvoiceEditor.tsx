@@ -6,6 +6,7 @@ import { STATUS_STYLE, useInvoiceCalc, useMoney } from '../hooks';
 import type { Invoice } from '../lib/types';
 import { fmtDate, round2, todayISO, uid } from '../lib/util';
 import { invoicePdf, receiptPdf, saveOrShare } from '../pdf/pdf';
+import { usePageShortcuts } from '../app/shortcuts';
 import { useStore } from '../store';
 
 const METHODS = ['Cash', 'Bank transfer', 'EcoCash', 'Card', 'Cheque', 'Other'];
@@ -19,8 +20,10 @@ export default function InvoiceEditor() {
   const fmt = useMoney();
   const [payOpen, setPayOpen] = useState(false);
   const [pay, setPay] = useState({ date: todayISO(), amount: 0, method: 'Cash', reference: '' });
+  const keys = usePageShortcuts();
 
   if (!inv || !calc) return <PageHeader title="Invoice not found" back="/invoices" />;
+  keys.current = { pdf: () => saveOrShare(invoicePdf(inv, settings), `${inv.number}-invoice.pdf`) };
   const up = (fn: (i: Invoice) => void) => updateInvoice(inv.id, fn);
 
   const openPayment = (amount: number) => {

@@ -1,6 +1,7 @@
 import { ArrowLeft, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import EditTools from './EditTools';
 
 export function PageHeader({ title, subtitle, back, actions }: { title: string; subtitle?: string; back?: string | true; actions?: ReactNode }) {
   const nav = useNavigate();
@@ -16,7 +17,10 @@ export function PageHeader({ title, subtitle, back, actions }: { title: string; 
           <h1 className="truncate text-lg font-bold leading-tight">{title}</h1>
           {subtitle && <p className="truncate text-xs text-stone-500">{subtitle}</p>}
         </div>
-        <div className="flex shrink-0 items-center gap-1">{actions}</div>
+        <div className="flex shrink-0 items-center gap-1">
+          <EditTools />
+          {actions}
+        </div>
       </div>
     </header>
   );
@@ -131,9 +135,15 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { valu
 }
 
 export function Modal({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
+    <div data-modal className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
       <div className="safe-bottom flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-3xl bg-white sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
           <h3 className="font-bold">{title}</h3>

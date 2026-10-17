@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useDeferredValue, useMemo } from 'react';
 import { calculateInvoice, calculateQuote } from './lib/pricing';
 import type { Invoice, Quote } from './lib/types';
 import { money } from './lib/util';
@@ -12,7 +12,9 @@ export const useMoney = () => {
 export function useQuoteCalc(q: Quote | undefined) {
   const catalog = useStore((s) => s.catalog);
   const settings = useStore((s) => s.settings);
-  return useMemo(() => (q ? calculateQuote(q, catalog, settings) : null), [q, catalog, settings]);
+  // typing stays responsive: the totals catch up a moment later if needed
+  const dq = useDeferredValue(q);
+  return useMemo(() => (dq ? calculateQuote(dq, catalog, settings) : null), [dq, catalog, settings]);
 }
 
 export function useInvoiceCalc(i: Invoice | undefined) {

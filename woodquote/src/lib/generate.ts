@@ -229,7 +229,9 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
         : side === 'right'
           ? { x: W, y: y0, z: -fpT('back'), w: pt, h, d: D + fpT('back') }
           : { x: 0, y: y0, z: -pt, w: W, h, d: pt };
-    box.meta = { style: p.style };
+    const slatW = Math.max(5, p.slatWidth || 40);
+    const slatG = Math.max(0, p.slatGap ?? 15);
+    box.meta = { style: p.style, slatWidth: slatW, slatGap: slatG };
     const pw = side === 'back' ? W : D + fpT('back');
     addPart(`Finish panel (${name})`, 'finish', 'board', m.id, h, pw, pt, side === 'back' ? 0 : h + pw, eFront ?? eCar, box);
     if (p.style === 'shaker') {
@@ -237,8 +239,9 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
       addPart(`Shaker frame rail (${name})`, 'finish', 'board', m.id, pw - 140, 70, pt, 0, null, null, 2);
     }
     if (p.style === 'slatted') {
-      const n = Math.max(1, Math.floor(pw / 55));
-      addPart(`Slat 40mm (${name})`, 'finish', 'board', m.id, h, 40, pt, (h / 1000) * 2 * 1000, eFront ?? eCar, null, n);
+      // as many whole slats as fit, gaps shared out evenly
+      const n = Math.max(1, Math.floor((pw + slatG) / (slatW + slatG)));
+      addPart(`Slat ${slatW}mm (${name})`, 'finish', 'board', m.id, h, slatW, pt, (h / 1000) * 2 * 1000, eFront ?? eCar, null, n);
     }
     if (p.style === 'fluted') addHw(`flute-${side}`, 'sv-notch', Math.ceil(pw / 100), `Fluting machining (${name})`);
   };
@@ -523,7 +526,9 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
     const frontEdge = ctx.topFront ?? D + u.overhang.front;
     const backEdge = ctx.topY != null ? 0 : -fpT('back') - u.overhang.back;
     const x0 = ta.xOffset != null ? ta.xOffset : g.x + g.w / 2 - a.width / 2;
-    const z0 = ta.frontGap != null ? frontEdge - ta.frontGap - a.depth : (frontEdge + backEdge) / 2 - a.depth / 2 + 20;
+    // centred on the worktop, but kept 50 mm clear of the front edge where the worktop allows it
+    const centred = (frontEdge + backEdge) / 2 - a.depth / 2;
+    const z0 = ta.frontGap != null ? frontEdge - ta.frontGap - a.depth : Math.max(backEdge + 20, Math.min(centred, frontEdge - 50 - a.depth));
     applR.push({ applianceId: a.id, box: { x: x0, y: surfaceY, z: z0, w: a.width, h: a.height, d: a.depth } });
     const toFront = Math.round(frontEdge - (z0 + a.depth));
     if (toFront < 50) warnings.push(`${a.name} is only ${toFront}mm from the worktop front edge (50mm minimum).`);

@@ -1,7 +1,7 @@
 // WoodQuote desktop (Windows) shell: serves the built web app from the
 // app:// scheme so storage, PDF export and the AI reader behave like the
 // mobile app, and opens outside links in the normal browser.
-const { app, BrowserWindow, ipcMain, net, protocol, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -9,6 +9,16 @@ const { pathToFileURL } = require('node:url');
 
 const ROOT = path.join(__dirname, 'app');
 const START = 'app://woodquote/index.html';
+
+// Use the machine properly: the main graphics card, GPU drawing and plenty of memory
+const ramMb = Math.round(os.totalmem() / 1048576);
+// Chromium caps one page's JavaScript memory at 4 GB, so ask for up to that
+const heapMb = Math.max(2048, Math.min(4096, Math.round(ramMb / 2)));
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('force_high_performance_gpu');
+app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${heapMb}`);
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 
@@ -23,11 +33,19 @@ function createWindow() {
     minWidth: 380,
     minHeight: 600,
     show: false,
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
     title: 'WoodQuote by 2601',
     backgroundColor: '#f5f5f4',
     icon: path.join(__dirname, 'app', 'icon-512.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true },
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, backgroundThrottling: false },
+  });
+  // never leave the user stuck on a frozen window
+  win.on('unresponsive', async () => {
+    const { response } = await dialog.showMessageBox(win, { type: 'warning', title: 'WoodQuote is busy', message: 'WoodQuote is not responding.', detail: 'Your work is saved as you go. Reload to carry on, or wait a little longer.', buttons: ['Reload', 'Wait'], defaultId: 0, cancelId: 1 });
+    if (response === 0) win.webContents.reloadIgnoringCache();
+  });
+  win.webContents.on('render-process-gone', (_e, d) => {
+    if (d.reason !== 'clean-exit') win.webContents.reload();
   });
   win.once('ready-to-show', () => {
     win.maximize();
@@ -55,6 +73,38 @@ function createWindow() {
   win.loadURL(START);
 }
 
+/* ---------------------------------------------------------------- menu */
+
+// The page sends its commands and current shortcut keys; menu clicks are sent
+// back as commands. Keys themselves are handled by the page (so custom keys
+// and text boxes behave), the menu only shows them.
+let menuItems = [];
+function send(id) {
+  if (win) win.webContents.send('woodquote:command', id);
+}
+function buildMenu() {
+  const item = (id) => {
+    const a = menuItems.find((m) => m.id === id);
+    if (!a) return null;
+    return { label: a.label, accelerator: a.accelerator, registerAccelerator: false, click: () => send(id) };
+  };
+  const list = (...ids) => ids.map((id) => (id === '-' ? { type: 'separator' } : item(id))).filter(Boolean);
+  const template = [
+    { label: '&File', submenu: [...list('newQuote', 'newInvoice', 'spaceFit', '-', 'save', 'pdf', '-'), { role: 'quit', label: 'Exit' }] },
+    {
+      label: '&Edit',
+      submenu: [...list('undo', 'redo', '-'), { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }, ...list('-', 'duplicate', 'delete', 'insert')],
+    },
+    {
+      label: '&View',
+      submenu: [...list('refresh', '-', 'goHome', 'goQuotes', 'goInvoices', 'goPrices', 'goSettings', 'goReader', '-', 'back', '-'), { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' }, { role: 'togglefullscreen' }, { type: 'separator' }, { role: 'toggleDevTools' }],
+    },
+    { label: '&Design', submenu: list('addUnit', 'addKitchen', 'room', '-', 'prev', 'next', 'moveLeft', 'moveRight', 'edit') },
+    { label: '&Help', submenu: [...list('help'), { label: 'About WoodQuote', click: () => dialog.showMessageBox(win, { type: 'info', title: 'WoodQuote by 2601', message: `WoodQuote by 2601\nVersion ${app.getVersion()}` }) }] },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.on('second-instance', () => {
   if (!win) return;
   if (win.isMinimized()) win.restore();
@@ -80,6 +130,35 @@ app.whenReady().then(() => {
     return err || file;
   });
 
+  ipcMain.on('woodquote:set-menu', (_e, items) => {
+    menuItems = Array.isArray(items) ? items : [];
+    buildMenu();
+  });
+
+  // Save points also written as files: Documents\WoodQuote\Backups (newest 30 kept)
+  ipcMain.handle('woodquote:save-backup', async (_e, name, json) => {
+    const dir = path.join(app.getPath('documents'), 'WoodQuote', 'Backups');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, String(name).replace(/[^\w.-]+/g, '_'));
+    fs.writeFileSync(file, String(json));
+    const old = fs.readdirSync(dir).filter((f) => f.startsWith('WoodQuote-') && f.endsWith('.json')).sort().reverse().slice(30);
+    for (const f of old) fs.rmSync(path.join(dir, f), { force: true });
+    return file;
+  });
+
+  ipcMain.handle('woodquote:system-info', async () => {
+    const cpus = os.cpus();
+    let gpu = null;
+    try {
+      const info = await app.getGPUInfo('basic');
+      gpu = (info.gpuDevice || []).map((g) => g.deviceString || `${g.vendorId}:${g.deviceId}`).filter(Boolean);
+    } catch {
+      gpu = null;
+    }
+    return { os: `${os.type()} ${os.release()} (${os.arch()})`, cpu: cpus[0]?.model ?? 'unknown', cores: cpus.length, ramMb, heapMb, gpu, gpuStatus: app.getGPUFeatureStatus(), electron: process.versions.electron, chrome: process.versions.chrome };
+  });
+
+  buildMenu();
   createWindow();
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });

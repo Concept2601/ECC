@@ -1,11 +1,13 @@
-import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Copy, Pencil, Plus, Ruler, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { uid } from '../lib/util';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Card, confirmAction, Field, NumInput, PageHeader, Select, Tabs, TextInput } from '../components/ui';
+import { Card, confirmAction, Field, Modal, NumInput, PageHeader, Select, Tabs, TextInput } from '../components/ui';
+import { usePageShortcuts } from '../app/shortcuts';
 import Viewer3D from '../components/Viewer3D';
 import ApplianceSelect from '../components/ApplianceSelect';
 import { useMoney, useQuoteCalc } from '../hooks';
-import { activeLegs, applyRunMaterials, ensureLegs, BASE_TEMPLATES, baseModule, GAP_TEMPLATES, gapModule, LEG_LABELS, legLength, RUN_SHAPE_LABELS, runUnits, setWallTemplate, syncRun, TALL_TEMPLATES, tallModule, WALL_TEMPLATES, type BaseTemplate, type GapTemplate, type TallTemplate, type WallTemplate } from '../lib/runs';
+import { activeLegs, applyRunMaterials, CUSTOM_KINDS, customModule, ensureLegs, fillerHeight, legRemaining, BASE_TEMPLATES, type CustomKind, type CustomSpec, baseModule, GAP_TEMPLATES, gapModule, LEG_LABELS, legLength, RUN_SHAPE_LABELS, runUnits, setWallTemplate, syncRun, TALL_TEMPLATES, tallModule, WALL_TEMPLATES, type BaseTemplate, type GapTemplate, type TallTemplate, type WallTemplate } from '../lib/runs';
 import type { Catalog, Run, RunModule, RunShape } from '../lib/types';
 import { useStore } from '../store';
 
@@ -14,8 +16,10 @@ type Tab = 'layout' | 'module' | 'settings';
 /** Front elevation strip of one wall of the kitchen. */
 function LegStrip({ run, leg, catalog, selected, onSelect }: { run: Run; leg: number; catalog: Catalog; selected: string | null; onSelect: (id: string) => void }) {
   const mods = run.legs[leg];
-  const L = Math.max(600, legLength(mods));
-  const H = Math.max(run.tallHeight, run.wallBottom + run.wallHeight) + 100;
+  const target = run.targets?.[leg] ?? 0;
+  const L = Math.max(600, legLength(mods), target);
+  const H = Math.max(run.tallHeight, run.wallBottom + run.wallHeight, ...mods.map((m) => Math.max(m.height ?? 0, m.wall ? (m.wallBottom ?? run.wallBottom) + (m.wallHeight || run.wallHeight) : 0))) + 100;
+  const firstFront = run.legs.flat().find((m) => m.base)?.base?.frontMaterialId;
   const Y = (y: number) => H - y;
   const front = (id: string | null | undefined) => catalog.boards.find((b) => b.id === id)?.color ?? '#ddd';
   const fs = 70;
@@ -32,25 +36,134 @@ function LegStrip({ run, leg, catalog, selected, onSelect }: { run: Run; leg: nu
           <g key={m.id} onClick={() => onSelect(m.id)} className="cursor-pointer">
             {m.kind === 'base' && m.base && (
               <>
-                <rect x={x0} y={Y(run.counterHeight)} width={m.width} height={run.counterHeight - run.plinthHeight} fill={front(m.base.frontMaterialId)} stroke={stroke} strokeWidth={sw} />
+                <rect x={x0} y={Y(m.height || run.counterHeight)} width={m.width} height={(m.height || run.counterHeight) - run.plinthHeight} fill={front(m.base.frontMaterialId)} stroke={stroke} strokeWidth={sw} />
                 <rect x={x0} y={Y(run.plinthHeight)} width={m.width} height={run.plinthHeight} fill="#8f8a83" />
               </>
             )}
-            {m.kind === 'tall' && m.base && <rect x={x0} y={Y(run.tallHeight)} width={m.width} height={run.tallHeight} fill={front(m.base.frontMaterialId)} stroke={stroke} strokeWidth={sw} />}
-            {m.kind === 'gap' && <rect x={x0} y={Y(run.counterHeight + 900)} width={m.width} height={run.counterHeight + 900} fill="#f5f5f4" stroke={stroke} strokeWidth={sw} strokeDasharray="40 20" />}
-            {m.wall && <rect x={x0} y={Y(run.wallBottom + run.wallHeight)} width={m.width} height={run.wallHeight} fill={front(m.wall.frontMaterialId)} stroke={stroke} strokeWidth={sw} />}
-            {m.hoodId && <path d={`M${x0 + m.width * 0.15} ${Y(run.wallBottom + 100)} h${m.width * 0.7} l-${m.width * 0.2} -${300} h-${m.width * 0.3} z`} fill="#b5b9be" stroke="#555" strokeWidth={4} />}
+            {m.kind === 'tall' && m.base && <rect x={x0} y={Y(m.height || run.tallHeight)} width={m.width} height={m.height || run.tallHeight} fill={front(m.base.frontMaterialId)} stroke={stroke} strokeWidth={sw} />}
+            {m.kind === 'gap' && <rect x={x0} y={Y(m.height || run.counterHeight + 900)} width={m.width} height={m.height || run.counterHeight + 900} fill="#f5f5f4" stroke={stroke} strokeWidth={sw} strokeDasharray="40 20" />}
+            {m.kind === 'filler' && <rect x={x0} y={Y(fillerHeight(m, run, 30))} width={m.width} height={fillerHeight(m, run, 30)} fill={front(firstFront)} stroke={stroke} strokeWidth={sw} />}
+            {m.wall && <rect x={x0} y={Y((m.wallBottom ?? run.wallBottom) + (m.wallHeight || run.wallHeight))} width={m.width} height={m.wallHeight || run.wallHeight} fill={front(m.wall.frontMaterialId)} stroke={stroke} strokeWidth={sw} />}
+            {m.hoodId && <path d={`M${x0 + m.width * 0.15} ${Y((m.wallBottom ?? run.wallBottom) + 100)} h${m.width * 0.7} l-${m.width * 0.2} -${300} h-${m.width * 0.3} z`} fill="#b5b9be" stroke="#555" strokeWidth={4} />}
             <text x={x0 + m.width / 2} y={Y(0) + fs * 1.4} fontSize={fs} textAnchor="middle" fill="#57534e">
               {m.width}
             </text>
             <text x={x0 + m.width / 2} y={Y(m.kind === 'tall' ? run.tallHeight / 2 : run.counterHeight / 2)} fontSize={fs * 0.9} textAnchor="middle" fill="#1c1917" fontWeight={700}>
-              {m.kind === 'gap' ? (m.gapLabel || 'Gap').split(' ').slice(-1)[0] : (m.base?.name ?? '').replace(/^(Base|Tall) – /, '').split(' ')[0]}
+              {m.kind === 'gap' || m.kind === 'filler' ? (m.gapLabel || 'Gap').split(' ').slice(-1)[0] : (m.base?.name ?? '').replace(/^(Base|Tall) – /, '').split(' ')[0]}
             </text>
           </g>
         );
       })}
-      {mods.length > 0 && <line x1={0} x2={L} y1={Y(run.counterHeight)} y2={Y(run.counterHeight)} stroke="#26262a" strokeWidth={14} />}
+      {mods.length > 0 && <line x1={0} x2={legLength(mods)} y1={Y(run.counterHeight)} y2={Y(run.counterHeight)} stroke="#26262a" strokeWidth={14} />}
+      {target > 0 && (
+        <g>
+          <rect x={0} y={Y(H - 100)} width={target} height={H - 100} fill="none" stroke={legLength(mods) > target ? '#dc2626' : '#16a34a'} strokeWidth={10} strokeDasharray="60 30" />
+          <text x={target} y={Y(H - 100) - 15} fontSize={fs} textAnchor="end" fill={legLength(mods) > target ? '#dc2626' : '#16a34a'} fontWeight={700}>
+            space {target} mm
+          </text>
+        </g>
+      )}
     </svg>
+  );
+}
+
+const modName = (m: RunModule) => (m.kind === 'gap' || m.kind === 'filler' ? m.gapLabel || (m.kind === 'filler' ? 'Filler' : 'Gap') : (m.base?.name ?? '').replace(/^(Base|Tall) – /, ''));
+
+/** Insert a cabinet, space or filler of any size at any position along a wall. */
+function InsertDialog({ run, leg, at, onClose, onInsert }: { run: Run; leg: number; at: number; onClose: () => void; onInsert: (leg: number, at: number, spec: CustomSpec) => void }) {
+  const remaining = legRemaining(run, leg);
+  const [spec, setSpec] = useState<CustomSpec>({ kind: 'base', width: remaining && remaining > 0 ? remaining : 600, height: null, depth: null, front: 'doors', label: '', wallHeight: null, wallBottom: null });
+  const [pos, setPos] = useState(at);
+  const [wallAbove, setWallAbove] = useState(false);
+  const mods = run.legs[leg];
+  const hDefault = spec.kind === 'tall' ? run.tallHeight : spec.kind === 'base' ? run.counterHeight : spec.kind === 'wall' ? run.wallHeight : run.counterHeight;
+  const set = (p: Partial<CustomSpec>) => setSpec({ ...spec, ...p });
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Insert a custom cabinet or space"
+      footer={
+        <button
+          className="btn-primary w-full"
+          onClick={() => {
+            onInsert(leg, pos, { ...spec, wallHeight: spec.kind === 'wall' ? spec.height : wallAbove ? spec.wallHeight || run.wallHeight : null, height: spec.kind === 'wall' ? null : spec.height, wallAbove } as CustomSpec & { wallAbove: boolean });
+            onClose();
+          }}
+        >
+          <Plus size={16} /> Insert {spec.width} mm {CUSTOM_KINDS[spec.kind].split(' (')[0].toLowerCase()}
+        </button>
+      }
+    >
+      <div className="space-y-3">
+        <Field label="What goes here">
+          <select className="input" value={spec.kind} onChange={(e) => set({ kind: e.target.value as CustomKind })}>
+            {(Object.keys(CUSTOM_KINDS) as CustomKind[]).map((k) => (
+              <option key={k} value={k}>
+                {CUSTOM_KINDS[k]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <div className="grid grid-cols-3 gap-2">
+          <Field label="Width">
+            <NumInput value={spec.width} min={1} suffix="mm" onChange={(v) => set({ width: v })} />
+          </Field>
+          <Field label={spec.kind === 'wall' ? 'Cabinet height' : 'Height'}>
+            <NumInput value={spec.height ?? hDefault} min={1} suffix="mm" onChange={(v) => set({ height: v === hDefault ? null : v })} />
+          </Field>
+          {spec.kind !== 'wall' && spec.kind !== 'space' && spec.kind !== 'appliance' && (
+            <Field label="Depth">
+              <NumInput value={spec.depth ?? run.baseDepth} min={1} suffix="mm" onChange={(v) => set({ depth: v === run.baseDepth ? null : v })} />
+            </Field>
+          )}
+          {spec.kind === 'wall' && (
+            <Field label="Underside height">
+              <NumInput value={spec.wallBottom ?? run.wallBottom} min={0} suffix="mm" onChange={(v) => set({ wallBottom: v })} />
+            </Field>
+          )}
+        </div>
+        {remaining != null && (
+          <button className="btn-secondary w-full text-xs" disabled={remaining <= 0} onClick={() => set({ width: Math.max(1, remaining) })}>
+            <Ruler size={14} /> Use the space left on this wall ({remaining} mm)
+          </button>
+        )}
+        {(spec.kind === 'base' || spec.kind === 'tall' || spec.kind === 'wall') && (
+          <Field label="Fronts">
+            <select className="input" value={spec.front} onChange={(e) => set({ front: e.target.value as CustomSpec['front'] })}>
+              <option value="doors">Double door</option>
+              <option value="door">Single door</option>
+              {spec.kind === 'base' && <option value="drawers">Drawers</option>}
+              <option value="open">Open shelves</option>
+            </select>
+          </Field>
+        )}
+        {(spec.kind === 'base' || spec.kind === 'space' || spec.kind === 'appliance') && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={wallAbove} onChange={(e) => setWallAbove(e.target.checked)} /> Wall cabinet above
+          </label>
+        )}
+        {spec.kind === 'appliance' && (
+          <Field label="Appliance">
+            <ApplianceSelect value={spec.applianceId ?? null} none="Choose later" onChange={(v) => set({ applianceId: v })} filter={(a) => a.placement === 'freestanding' && a.category !== 'hood'} />
+          </Field>
+        )}
+        <Field label="Label (optional)">
+          <TextInput value={spec.label ?? ''} onChange={(v) => set({ label: v })} />
+        </Field>
+        <Field label="Position">
+          <select className="input" value={pos} onChange={(e) => setPos(Number(e.target.value))}>
+            <option value={0}>At the start of the {LEG_LABELS[leg].toLowerCase()}</option>
+            {mods.map((m, i) => (
+              <option key={m.id} value={i + 1}>
+                After {i + 1}. {modName(m)} ({m.width} mm)
+              </option>
+            ))}
+          </select>
+        </Field>
+        <p className="text-xs text-stone-500">Any size is allowed. A base cabinet with a different height gets its own top instead of the shared worktop; a filler panel up to worktop height sits under the worktop.</p>
+      </div>
+    </Modal>
   );
 }
 
@@ -64,6 +177,8 @@ export default function RunDesigner() {
   const [tab, setTab] = useState<Tab>('layout');
   const [selected, setSelected] = useState<string | null>(null);
   const [addKind, setAddKind] = useState<Record<number, string>>({});
+  const [inserting, setInserting] = useState<{ leg: number; at: number } | null>(null);
+  const keys = usePageShortcuts();
 
   const run = quote?.runs.find((r) => r.id === rid);
   const item = calc?.items.find((i) => i.id === rid);
@@ -89,6 +204,47 @@ export default function RunDesigner() {
   };
   const nLegs = activeLegs(run);
   const first = runUnits(run)[0];
+  const insertCustom = (leg: number, at: number, spec: CustomSpec & { wallAbove?: boolean }) =>
+    up((r) => {
+      const m = customModule(spec, r);
+      if (spec.wallAbove && m.kind !== 'tall' && m.kind !== 'filler' && !m.wall) setWallTemplate(m, spec.front === 'open' ? 'open' : 'doors', r);
+      r.legs[leg].splice(Math.min(at, r.legs[leg].length), 0, m);
+      setSelected(m.id);
+    });
+  const flat = run.legs.slice(0, nLegs).flatMap((l, leg) => l.map((m, i) => ({ leg, i, m })));
+  const step = (d: number) => {
+    const k = flat.findIndex((f) => f.m.id === selected);
+    const n = flat[Math.max(0, Math.min(flat.length - 1, k < 0 ? 0 : k + d))];
+    if (n) setSelected(n.m.id);
+  };
+  const move = (d: number) => {
+    if (!sel) return false;
+    const j = sel.i + d;
+    if (j < 0 || j >= run.legs[sel.leg].length) return;
+    up((r) => {
+      const l = r.legs[sel.leg];
+      [l[j], l[sel.i]] = [l[sel.i], l[j]];
+    });
+  };
+  keys.current = {
+    prev: () => step(-1),
+    next: () => step(1),
+    moveLeft: () => move(-1),
+    moveRight: () => move(1),
+    delete: () => sel && confirmAction('Remove this cabinet from the kitchen?') && (up((r) => r.legs[sel.leg].splice(sel.i, 1)), setSelected(null)),
+    insert: () => setInserting({ leg: sel?.leg ?? 0, at: sel ? sel.i + 1 : run.legs[0].length }),
+    duplicate: () =>
+      sel &&
+      up((r) => {
+        const c = JSON.parse(JSON.stringify(r.legs[sel.leg][sel.i])) as RunModule;
+        c.id = uid('m');
+        if (c.base) c.base.id = uid('u');
+        if (c.wall) c.wall.id = uid('u');
+        r.legs[sel.leg].splice(sel.i + 1, 0, c);
+        setSelected(c.id);
+      }),
+    edit: () => (sel?.m.base ? nav(`/quotes/${quote.id}/units/${sel.m.base.id}`) : sel ? setTab('module') : false),
+  };
 
   return (
     <div className="flex h-[100dvh] flex-col">
@@ -128,21 +284,53 @@ export default function RunDesigner() {
         <div className="mx-auto max-w-5xl space-y-3 p-3">
           {tab === 'layout' &&
             run.legs.slice(0, nLegs).map((mods, leg) => (
-              <Card key={leg} title={`${LEG_LABELS[leg]} · ${legLength(mods)} mm`}>
+              <Card
+                key={leg}
+                title={`${LEG_LABELS[leg]} · ${legLength(mods)} mm`}
+                actions={
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="text-stone-500">Measured space</span>
+                    <NumInput className="w-28" value={run.targets?.[leg] ?? 0} min={0} suffix="mm" onChange={(v) => up((r) => { r.targets = [...(r.targets ?? [null, null, null])]; r.targets[leg] = v > 0 ? v : null; })} />
+                  </div>
+                }
+              >
+                {legRemaining(run, leg) != null && (
+                  <div className={`mb-2 flex items-center justify-between rounded-xl px-3 py-1.5 text-xs font-semibold ${legRemaining(run, leg)! < 0 ? 'bg-red-50 text-red-700' : legRemaining(run, leg) === 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
+                    <span>{legRemaining(run, leg)! < 0 ? `${-legRemaining(run, leg)!} mm too long for the space` : legRemaining(run, leg) === 0 ? 'Fills the space exactly' : `${legRemaining(run, leg)} mm left to fill`}</span>
+                    {legRemaining(run, leg)! > 0 && (
+                      <span className="flex gap-1">
+                        <button className="btn-secondary px-2 py-1 text-[11px]" onClick={() => setInserting({ leg, at: mods.length })}>
+                          Fill with…
+                        </button>
+                        <button className="btn-secondary px-2 py-1 text-[11px]" onClick={() => insertCustom(leg, mods.length, { kind: legRemaining(run, leg)! < 150 ? 'filler' : 'base', width: legRemaining(run, leg)!, height: null, depth: null, front: legRemaining(run, leg)! > 500 ? 'doors' : 'door' })}>
+                          Auto-fill
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                )}
                 <LegStrip run={run} leg={leg} catalog={catalog} selected={selected} onSelect={(mid) => setSelected(mid)} />
                 <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto pb-1">
                   {mods.map((m, i) => (
-                    <button key={m.id} onClick={() => (setSelected(m.id), setTab('module'))} className={`shrink-0 rounded-xl border px-3 py-2 text-left text-xs ${selected === m.id ? 'border-brand-600 bg-brand-50' : 'border-stone-300 bg-white'}`}>
-                      <div className="font-bold">
-                        {i + 1}. {m.kind === 'gap' ? m.gapLabel || 'Gap' : (m.base?.name ?? '').replace(/^(Base|Tall) – /, '')}
-                      </div>
-                      <div className="text-stone-500">
-                        {m.width}mm · {m.kind}
-                        {m.wall ? ' + wall' : ''}
-                        {m.hoodId ? ' + hood' : ''}
-                      </div>
-                    </button>
+                    <div key={m.id} className="flex shrink-0 items-stretch gap-1">
+                      <button className="rounded-lg border border-dashed border-stone-300 px-1 text-stone-400 hover:border-brand-500 hover:text-brand-700" title="Insert a custom cabinet or space here" aria-label={`Insert before ${i + 1}`} onClick={() => setInserting({ leg, at: i })}>
+                        <Plus size={12} />
+                      </button>
+                      <button onClick={() => (setSelected(m.id), setTab('module'))} className={`rounded-xl border px-3 py-2 text-left text-xs ${selected === m.id ? 'border-brand-600 bg-brand-50' : 'border-stone-300 bg-white'}`}>
+                        <div className="font-bold">
+                          {i + 1}. {modName(m)}
+                        </div>
+                        <div className="text-stone-500">
+                          {m.width}mm{m.height ? ` × ${m.height}h` : ''} · {m.kind === 'gap' ? 'space' : m.kind}
+                          {m.wall ? ' + wall' : ''}
+                          {m.hoodId ? ' + hood' : ''}
+                        </div>
+                      </button>
+                    </div>
                   ))}
+                  <button className="shrink-0 rounded-xl border border-dashed border-stone-300 px-3 text-xs font-semibold text-stone-500 hover:border-brand-500 hover:text-brand-700" onClick={() => setInserting({ leg, at: mods.length })}>
+                    <Plus size={14} className="inline" /> Custom
+                  </button>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
                   <select className="input w-auto flex-1" value={addKind[leg] ?? 'base:doors'} onChange={(e) => setAddKind({ ...addKind, [leg]: e.target.value })}>
@@ -199,6 +387,9 @@ export default function RunDesigner() {
                       <button className="btn-secondary px-2 py-1.5" disabled={sel.i === run.legs[sel.leg].length - 1} aria-label="Move right" onClick={() => up((r) => { const l = r.legs[sel.leg]; [l[sel.i + 1], l[sel.i]] = [l[sel.i], l[sel.i + 1]]; })}>
                         <ArrowRight size={14} />
                       </button>
+                      <button className="btn-secondary px-2 py-1.5" aria-label="Duplicate" title="Duplicate (Ctrl+D)" onClick={() => keys.current.duplicate?.()}>
+                        <Copy size={14} />
+                      </button>
                       <button className="btn-danger px-2 py-1.5" aria-label="Remove" onClick={() => confirmAction('Remove this cabinet from the kitchen?') && (up((r) => r.legs[sel.leg].splice(sel.i, 1)), setSelected(null))}>
                         <Trash2 size={14} />
                       </button>
@@ -206,9 +397,42 @@ export default function RunDesigner() {
                   }
                 >
                   <div className="space-y-3">
-                    <Field label="Width">
-                      <NumInput value={sel.m.width} min={150} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.width = v))} />
-                    </Field>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Field label="Width">
+                        <NumInput value={sel.m.width} min={1} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.width = Math.max(1, v)))} />
+                      </Field>
+                      <Field label={sel.m.kind === 'gap' ? 'Space height' : 'Height'}>
+                        <NumInput value={sel.m.height || (sel.m.kind === 'tall' ? run.tallHeight : sel.m.kind === 'gap' ? run.counterHeight + 900 : sel.m.kind === 'filler' ? fillerHeight(sel.m, run, 30) : run.counterHeight)} min={1} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.height = v))} />
+                      </Field>
+                      {(sel.m.kind === 'base' || sel.m.kind === 'tall' || sel.m.kind === 'filler') && (
+                        <Field label="Depth">
+                          <NumInput value={sel.m.depth || run.baseDepth} min={1} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.depth = v === r.baseDepth ? null : v))} />
+                        </Field>
+                      )}
+                    </div>
+                    {sel.m.wall && (
+                      <div className="grid grid-cols-3 gap-2">
+                        <Field label="Wall unit height">
+                          <NumInput value={sel.m.wallHeight || run.wallHeight} min={1} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.wallHeight = v === r.wallHeight ? null : v))} />
+                        </Field>
+                        <Field label="Wall unit underside">
+                          <NumInput value={sel.m.wallBottom ?? run.wallBottom} min={0} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.wallBottom = v === r.wallBottom ? null : v))} />
+                        </Field>
+                        <Field label="Wall unit depth">
+                          <NumInput value={sel.m.wallDepth || run.wallDepth} min={1} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.wallDepth = v === r.wallDepth ? null : v))} />
+                        </Field>
+                      </div>
+                    )}
+                    {(sel.m.height || sel.m.depth || sel.m.wallHeight || sel.m.wallBottom != null || sel.m.wallDepth) && (
+                      <button className="btn-ghost px-2 py-1 text-xs" onClick={() => up((r) => Object.assign(findMod(r, sel.m.id)!.m, { height: null, depth: null, wallHeight: null, wallBottom: null, wallDepth: null }))}>
+                        Use the kitchen's standard sizes again
+                      </button>
+                    )}
+                    {sel.m.kind === 'gap' && !sel.m.wall && (
+                      <button className="btn-secondary w-full text-xs" onClick={() => up((r) => setWallTemplate(findMod(r, sel.m.id)!.m, 'doors', r))}>
+                        <Plus size={14} /> Add a wall cabinet above this space
+                      </button>
+                    )}
                     {sel.m.kind === 'base' && (
                       <>
                         <Field label="Base design (replaces the cabinet)">
@@ -245,6 +469,11 @@ export default function RunDesigner() {
                         </select>
                       </Field>
                     )}
+                    {sel.m.kind === 'filler' && (
+                      <Field label="Label">
+                        <TextInput value={sel.m.gapLabel} onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.gapLabel = v))} />
+                      </Field>
+                    )}
                     {sel.m.kind === 'gap' && (
                       <>
                         <Field label="Label">
@@ -255,7 +484,7 @@ export default function RunDesigner() {
                         </Field>
                       </>
                     )}
-                    {sel.m.kind !== 'tall' && (
+                    {sel.m.kind !== 'tall' && sel.m.kind !== 'filler' && (
                       <Field label="Extractor hood above">
                         <ApplianceSelect value={sel.m.hoodId} none="No hood" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.hoodId = v))} filter={(a) => a.category === 'hood'} />
                       </Field>
@@ -355,6 +584,7 @@ export default function RunDesigner() {
           <div className="h-6" />
         </div>
       </div>
+      {inserting && <InsertDialog run={run} leg={inserting.leg} at={inserting.at} onClose={() => setInserting(null)} onInsert={insertCustom} />}
     </div>
   );
 }

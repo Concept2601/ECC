@@ -1,5 +1,6 @@
 import { FileText, Home as HomeIcon, Layers, Receipt, Settings as SettingsIcon } from 'lucide-react';
 import { HashRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import AppShell from './components/AppShell';
 import ExportSheet from './components/ExportSheet';
 import Home from './pages/Home';
 import InvoiceEditor from './pages/InvoiceEditor';
@@ -8,6 +9,8 @@ import Library from './pages/Library';
 import QuoteEditor from './pages/QuoteEditor';
 import Quotes from './pages/Quotes';
 import Reader from './pages/Reader';
+import SpaceFit from './pages/SpaceFit';
+import PlanReader from './pages/PlanReader';
 import RunDesigner from './pages/RunDesigner';
 import RoomDesigner from './pages/RoomDesigner';
 import SettingsPage from './pages/Settings';
@@ -56,6 +59,7 @@ export default function App() {
   if (!hydrated) return <div className="flex h-full items-center justify-center text-stone-400">Loading…</div>;
   return (
     <HashRouter>
+      <AppShell />
       <div className="min-h-full pb-24">
         <Routes>
           <Route path="/" element={<Home />} />
@@ -69,6 +73,8 @@ export default function App() {
           <Route path="/library" element={<Library />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/reader" element={<Reader />} />
+          <Route path="/fit" element={<SpaceFit />} />
+          <Route path="/plan" element={<PlanReader />} />
         </Routes>
       </div>
       <BottomNav />

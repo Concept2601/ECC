@@ -13,21 +13,32 @@ export const LEG_LABELS = ['Back wall', 'Right wall', 'Left wall'];
 
 /* ----------------------------------------------------------- templates */
 
-export type BaseTemplate = 'doors' | 'door' | 'drawers' | 'sink' | 'hob' | 'dishwasher' | 'bin' | 'spice' | 'corner' | 'open';
+export type BaseTemplate = 'doors' | 'door' | 'drawers' | 'sink' | 'hob' | 'dishwasher' | 'bin' | 'spice' | 'cornerL' | 'cornerDiag' | 'corner' | 'open';
 export type WallTemplate = 'none' | 'doors' | 'door' | 'glass' | 'flap' | 'open' | 'hood';
 export type TallTemplate = 'pantry' | 'ovenTower' | 'fridge' | 'broom';
 export type GapTemplate = 'fridge' | 'stove' | 'dishwasher' | 'empty';
 
 export const BASE_TEMPLATES: Record<BaseTemplate, string> = {
-  doors: 'Double door', door: 'Single door', drawers: 'Drawer pack', sink: 'Sink unit', hob: 'Hob + oven', dishwasher: 'Dishwasher (integrated)', bin: 'Bin pull-out', spice: 'Spice pull-out', corner: 'Corner (magic corner)', open: 'Open shelves',
+  doors: 'Double door', door: 'Single door', drawers: 'Drawer pack', sink: 'Sink unit', hob: 'Hob + oven', dishwasher: 'Dishwasher (integrated)', bin: 'Bin pull-out', spice: 'Spice pull-out', cornerL: 'Corner cupboard – L (both walls)', cornerDiag: 'Corner cupboard – diagonal (both walls)', corner: 'Blind corner (magic corner)', open: 'Open shelves',
 };
 export const WALL_TEMPLATES: Record<WallTemplate, string> = { none: 'Nothing above', doors: 'Double door', door: 'Single door', glass: 'Glass doors', flap: 'Lift-up flap', open: 'Open shelf', hood: 'Chimney hood' };
 export const TALL_TEMPLATES: Record<TallTemplate, string> = { pantry: 'Pantry pull-out', ovenTower: 'Oven + microwave tower', fridge: 'Integrated fridge housing', broom: 'Broom cupboard' };
 export const GAP_TEMPLATES: Record<GapTemplate, string> = { fridge: 'Free-standing fridge', stove: 'Free-standing stove', dishwasher: 'Free-standing dishwasher', empty: 'Empty space' };
 
-const DEFAULT_WIDTH: Record<BaseTemplate, number> = { doors: 800, door: 450, drawers: 600, sink: 900, hob: 600, dishwasher: 600, bin: 450, spice: 150, corner: 1000, open: 400 };
+const DEFAULT_WIDTH: Record<BaseTemplate, number> = { doors: 800, door: 450, drawers: 600, sink: 900, hob: 600, dishwasher: 600, bin: 450, spice: 150, cornerL: 900, cornerDiag: 900, corner: 1000, open: 400 };
 
 function makeBase(tpl: BaseTemplate, width: number, run: Run): Unit {
+  if (tpl === 'cornerL' || tpl === 'cornerDiag') {
+    const style = tpl === 'cornerL' ? 'L' : 'diagonal';
+    return baseUnit('corner_base', {
+      name: `Base – Corner ${style === 'L' ? 'L' : 'diagonal'}`,
+      width,
+      installType: run.installType,
+      hingeId: 'h-corner',
+      corner: { widthB: width, style, hand: 'right', shelves: 1, carousel: false },
+      bays: [bay(1, [sec({ front: 'door', opening: 'left', shelves: 1 })])],
+    });
+  }
   const u = baseUnit('kitchen_base', { name: `Base – ${BASE_TEMPLATES[tpl]}`, width, installType: run.installType });
   switch (tpl) {
     case 'doors':
@@ -112,7 +123,7 @@ function makeTall(tpl: TallTemplate, width: number, run: Run): Unit {
 }
 
 export function baseModule(tpl: BaseTemplate, run: Run, wallTpl: WallTemplate = 'doors', width = DEFAULT_WIDTH[tpl]): RunModule {
-  return { id: uid('m'), kind: 'base', width, base: makeBase(tpl, width, run), wall: makeWall(wallTpl, width, run), hoodId: wallTpl === 'hood' ? 'ap-hood-chimney' : null, gapApplianceId: null, gapLabel: '' };
+  return { id: uid('m'), kind: 'base', width, base: makeBase(tpl, width, run), wall: makeWall(wallTpl, width, run), hoodId: wallTpl === 'hood' ? 'ap-hood-chimney' : null, gapApplianceId: null, gapLabel: '', cornerB: tpl === 'cornerL' || tpl === 'cornerDiag' ? width : null };
 }
 export function tallModule(tpl: TallTemplate, run: Run, width = 600): RunModule {
   return { id: uid('m'), kind: 'tall', width, base: makeTall(tpl, width, run), wall: null, hoodId: null, gapApplianceId: null, gapLabel: '' };
@@ -210,11 +221,11 @@ export function createRun(shape: RunShape): Run {
   };
   run.legs[0] = [tallModule('fridge', run), baseModule('drawers', run), baseModule('hob', run, 'hood'), baseModule('doors', run), baseModule('sink', run, 'glass'), baseModule('dishwasher', run)];
   if (shape !== 'straight') {
-    run.legs[0][run.legs[0].length - 1] = baseModule('corner', run, 'doors');
+    run.legs[0][run.legs[0].length - 1] = baseModule('cornerL', run, 'doors');
     run.legs[1] = [baseModule('dishwasher', run, 'doors'), baseModule('bin', run, 'door'), baseModule('drawers', run, 'doors'), tallModule('pantry', run)];
   }
   if (shape === 'U') {
-    run.legs[0][0] = baseModule('corner', run, 'doors');
+    run.legs[0][0] = baseModule('cornerL', run, 'doors');
     run.legs[2] = [baseModule('doors', run, 'doors'), baseModule('spice', run, 'door'), baseModule('drawers', run, 'open'), gapModule('fridge', run)];
   }
   syncRun(run);
@@ -223,8 +234,21 @@ export function createRun(shape: RunShape): Run {
 
 /** Fill walls that a new shape needs but that are still empty. */
 export function ensureLegs(run: Run) {
-  if (run.shape !== 'straight' && !run.legs[1].length) run.legs[1] = [baseModule('corner', run, 'doors'), baseModule('drawers', run, 'doors'), tallModule('pantry', run)];
-  if (run.shape === 'U' && !run.legs[2].length) run.legs[2] = [baseModule('doors', run, 'doors'), baseModule('drawers', run, 'open'), gapModule('fridge', run)];
+  const isCorner = (m?: RunModule) => !!m?.base?.corner;
+  if (run.shape !== 'straight' && !run.legs[1].length) {
+    if (!isCorner(run.legs[0][run.legs[0].length - 1])) run.legs[0].push(baseModule('cornerL', run, 'doors'));
+    run.legs[1] = [baseModule('drawers', run, 'doors'), tallModule('pantry', run)];
+  }
+  if (run.shape === 'U' && !run.legs[2].length) {
+    if (!isCorner(run.legs[0][0])) run.legs[0].unshift(baseModule('cornerL', run, 'doors'));
+    run.legs[2] = [baseModule('doors', run, 'doors'), baseModule('drawers', run, 'open'), gapModule('fridge', run)];
+  }
+}
+
+/** Where a side wall's cabinets start, measured from the back wall: after the corner cupboard's Width B. */
+export function legStart(run: Run, leg: 1 | 2): number {
+  const m = leg === 1 ? run.legs[0][run.legs[0].length - 1] : run.legs[0][0];
+  return m?.base?.corner ? Math.max(run.baseDepth, m.cornerB || m.base.corner.widthB) : run.baseDepth;
 }
 
 /** Height of a filler panel: custom, else up to the worktop underside. */
@@ -252,7 +276,19 @@ export function syncRun(run: Run, cat?: Catalog) {
         b.height = m.height || (m.kind === 'tall' ? run.tallHeight : run.counterHeight - counterT);
         b.qty = 1;
       }
+      // corner cupboards: Width B and which way the return goes
+      const corner = m.base?.corner;
+      if (m.base && corner) {
+        corner.widthB = Math.max(1, m.cornerB || corner.widthB);
+        m.cornerB = corner.widthB;
+        const li = run.legs.indexOf(leg);
+        if (li === 0 && run.shape !== 'straight' && m === leg[leg.length - 1]) corner.hand = 'right';
+        else if (li === 0 && run.shape === 'U' && m === leg[0]) corner.hand = 'left';
+        m.base.type = 'corner_base';
+      }
       if (m.wall) {
+        if (corner) m.wall.corner = { widthB: corner.widthB, style: m.wall.corner?.style ?? corner.style, hand: corner.hand, shelves: m.wall.corner?.shelves ?? 2, carousel: false };
+        else if (m.wall.corner) m.wall.corner = null;
         const w = m.wall;
         w.width = m.width;
         w.depth = m.wallDepth || run.wallDepth;
@@ -280,10 +316,9 @@ export interface Placement {
 /** World transform for something spanning [s, s+w] along a leg (local x 0..w, z 0 = wall). */
 export function legTransform(run: Run, p: Placement): { x: number; z: number; rotY: number } {
   const LA = legLength(run.legs[0]);
-  const D = run.baseDepth;
   if (p.leg === 0) return { x: p.s, z: 0, rotY: 0 };
-  if (p.leg === 1) return { x: LA, z: D + p.s, rotY: -Math.PI / 2 };
-  return { x: 0, z: D + p.s + p.w, rotY: Math.PI / 2 };
+  if (p.leg === 1) return { x: LA, z: legStart(run, 1) + p.s, rotY: -Math.PI / 2 };
+  return { x: 0, z: legStart(run, 2) + p.s + p.w, rotY: Math.PI / 2 };
 }
 
 export interface RunPiece {
@@ -367,13 +402,29 @@ export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunB
     }
     closeSeg(s);
   }
+  // worktop over the side arm of each corner cupboard (between the back-wall worktop and the side wall's)
+  if (counter && nLegs > 1) {
+    const depth = run.baseDepth + run.counterOverhang;
+    for (const leg of [1, 2] as const) {
+      if (leg === 2 && nLegs < 3) continue;
+      const len = legStart(run, leg) - depth;
+      const m = leg === 1 ? run.legs[0][run.legs[0].length - 1] : run.legs[0][0];
+      if (!m?.base?.corner || m.height || len <= 0) continue;
+      const box: Box3 = { x: 0, y: run.counterHeight - counter.thickness, z: 0, w: len, h: counter.thickness, d: depth };
+      extraPlacements.push({ place: { leg, s: -len, w: len }, box, kind: 'counter' });
+      const key = `${counter.id}|${Math.round(len)}|${depth}|corner`;
+      const p = counterParts.get(key);
+      if (p) p.qty++;
+      else counterParts.set(key, { key, name: 'Worktop (corner return)', role: 'counter', kind: 'counter', materialId: counter.id, length: Math.round(len), width: depth, thickness: counter.thickness, qty: 1, edgeLength: 0, edgingId: null, boxes: [] });
+    }
+  }
   extra.parts = [...extra.parts, ...counterParts.values()];
   extra.applianceList = [...applCount.entries()].map(([applianceId, qty]) => ({ applianceId, qty }));
   if (!counter) extra.warnings.push('No worktop selected for this kitchen.');
   const LA = legLength(run.legs[0]);
   const LB = nLegs > 1 ? legLength(run.legs[1]) : 0;
   const LC = nLegs > 2 ? legLength(run.legs[2]) : 0;
-  const d = Math.max(run.baseDepth + run.counterOverhang, run.baseDepth + Math.max(LB, LC));
+  const d = Math.max(run.baseDepth + run.counterOverhang, nLegs > 1 ? legStart(run, 1) + LB : 0, nLegs > 2 ? legStart(run, 2) + LC : 0);
   const tops = run.legs.slice(0, nLegs).flat().map((m) => Math.max(m.height ?? 0, m.wall ? (m.wallBottom ?? run.wallBottom) + (m.wallHeight || run.wallHeight) : 0));
   return { pieces, extra, extraPlacements, size: { w: LA, d, h: Math.max(run.tallHeight, run.wallBottom + run.wallHeight, ...tops) } };
 }

@@ -12,10 +12,12 @@ export const PRODUCT_LABELS: Record<ProductType, string> = {
   sliding_wardrobe: 'Fitted Wardrobe (sliding)',
   bookshelf: 'Bookshelf / Display',
   vanity: 'Bathroom Vanity',
+  corner_base: 'Corner Base Cupboard',
+  corner_wall: 'Corner Wall Cupboard',
   custom: 'Custom Unit',
 };
 
-export const PRODUCT_ORDER: ProductType[] = ['tv_stand', 'kitchen_base', 'kitchen_wall', 'kitchen_tall', 'island', 'built_in', 'wardrobe', 'sliding_wardrobe', 'bookshelf', 'vanity', 'custom'];
+export const PRODUCT_ORDER: ProductType[] = ['tv_stand', 'kitchen_base', 'kitchen_wall', 'kitchen_tall', 'island', 'built_in', 'wardrobe', 'sliding_wardrobe', 'bookshelf', 'vanity', 'corner_base', 'corner_wall', 'custom'];
 
 export const sec = (spec: Partial<Omit<Section, 'id'>> = {}): Section => ({
   id: uid('s'),
@@ -252,6 +254,35 @@ export function createUnit(type: ProductType): Unit {
         carcassMaterialId: 'b-hmr18',
         topAppliances: [{ id: uid('ta'), applianceId: 'ap-sink-undermount', bay: 0 }],
         bays: [bay(1, [sec({ front: 'drawer', drawerCount: 2 })])],
+      });
+    case 'corner_base':
+      return baseUnit(type, {
+        name: 'Corner base cupboard',
+        width: 900,
+        height: 900,
+        depth: 560,
+        installType: 'builtIn',
+        base: 'plinth',
+        baseHeight: 120,
+        countertopId: 'c-granite',
+        carcassMaterialId: 'b-hmr18',
+        hingeId: 'h-corner',
+        corner: { widthB: 900, style: 'L', hand: 'right', shelves: 1, carousel: false },
+        bays: [bay(1, [sec({ front: 'door', opening: 'left', shelves: 1 })])],
+      });
+    case 'corner_wall':
+      return baseUnit(type, {
+        name: 'Corner wall cupboard',
+        width: 600,
+        height: 720,
+        depth: 320,
+        installType: 'builtIn',
+        mount: 'wall',
+        mountHeight: 1450,
+        overhang: sides(0, 0, 0, 0),
+        hingeId: 'h-corner',
+        corner: { widthB: 600, style: 'L', hand: 'right', shelves: 2, carousel: false },
+        bays: [bay(1, [sec({ front: 'door', opening: 'left', shelves: 2 })])],
       });
     case 'custom':
     default:

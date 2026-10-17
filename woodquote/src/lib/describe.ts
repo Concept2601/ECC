@@ -36,6 +36,19 @@ export function describeUnit(u: Unit, cat: Catalog): string[] {
     const a = cat.accessories.find((x) => x.id === id);
     return a ? `${a.name} ${a.size}`.trim() : undefined;
   };
+  if (u.corner) {
+    const k = u.corner;
+    const lines = [
+      `Corner ${u.mount === 'wall' ? 'wall' : 'base'} cupboard, ${k.style === 'L' ? 'L-shaped with two doors' : 'diagonal with one door'}: ${u.width} mm × ${k.widthB} mm along the walls, ${u.depth} D × ${u.height} H mm${u.mount === 'wall' ? `, wall hung at ${u.mountHeight}mm` : ''}`,
+      `Carcass: ${name(cat.boards, u.carcassMaterialId) ?? '-'} · Fronts: ${name(cat.boards, u.frontMaterialId) ?? '-'}`,
+    ];
+    const f = [k.shelves ? `${k.shelves} shel${k.shelves === 1 ? 'f' : 'ves'}` : '', k.carousel && u.mount !== 'wall' ? 'corner carousel' : ''].filter(Boolean);
+    if (f.length) lines.push(`Features: ${f.join(', ')}`);
+    if (u.countertopId) lines.push(`Top: ${name(cat.countertops, u.countertopId)}`);
+    if (u.hingeId || u.handleId) lines.push(`Hardware: ${[acc(u.hingeId), acc(u.handleId)].filter(Boolean).join(', ')}`);
+    if (u.notes) lines.push(u.notes);
+    return lines;
+  }
   const c = unitCounts(u);
   const feats: string[] = [];
   if (c.sliding) feats.push(`${c.sliding} sliding ${u.sliding.style === 'board' ? '' : u.sliding.style + ' '}doors`);

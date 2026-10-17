@@ -55,6 +55,94 @@ const LOCATION_LABELS: Record<LightLocation, string> = {
   custom: 'Custom position (set below)',
 };
 
+/** Corner cupboard: the two wall widths, style, side and fittings. */
+function CornerCard({ unit, inRun, onA, onB, up }: { unit: Unit; inRun: boolean; onA: (v: number) => void; onB: (v: number) => void; up: (fn: (u: Unit) => void) => void }) {
+  const c = unit.corner!;
+  const wall = unit.mount === 'wall';
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <Card title="Corner sizes">
+        <div className="space-y-3">
+          <svg viewBox="-60 -60 420 420" className="mx-auto h-40 w-40">
+            {(() => {
+              const sc = 300 / Math.max(unit.width, c.widthB);
+              const A = unit.width * sc;
+              const B = c.widthB * sc;
+              const D = unit.depth * sc;
+              const r = c.hand === 'right';
+              const X = (x: number) => (r ? x : A - x);
+              const pts = c.style === 'L' ? [[0, 0], [A, 0], [A, B], [A - D, B], [A - D, D], [0, D]] : [[0, 0], [A, 0], [A, B], [A - D, B], [0, D]];
+              return (
+                <>
+                  <polygon points={pts.map(([x, z]) => `${X(x)},${z}`).join(' ')} fill="#e9c99f" stroke="#57534e" strokeWidth={4} />
+                  <line x1={0} x2={A} y1={-25} y2={-25} stroke="#7c2d12" strokeWidth={3} />
+                  <text x={A / 2} y={-35} fontSize={28} textAnchor="middle" fill="#7c2d12" fontWeight={700}>A {unit.width}</text>
+                  <line x1={r ? A + 25 : -25} x2={r ? A + 25 : -25} y1={0} y2={B} stroke="#7c2d12" strokeWidth={3} />
+                  <text x={r ? A + 35 : -35} y={B / 2} fontSize={28} textAnchor="middle" fill="#7c2d12" fontWeight={700} transform={`rotate(${r ? 90 : -90} ${r ? A + 35 : -35} ${B / 2})`}>B {c.widthB}</text>
+                </>
+              );
+            })()}
+          </svg>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Width A (main wall)">
+              <NumInput value={unit.width} min={1} suffix="mm" onChange={onA} />
+            </Field>
+            <Field label="Width B (side wall)">
+              <NumInput value={c.widthB} min={1} suffix="mm" onChange={onB} />
+            </Field>
+            <Field label="Depth">
+              {inRun ? <div className="input bg-stone-50">{unit.depth}</div> : <NumInput value={unit.depth} min={100} suffix="mm" onChange={(v) => up((u) => (u.depth = v))} />}
+            </Field>
+            <Field label="Height">
+              {inRun ? <div className="input bg-stone-50">{unit.height}</div> : <NumInput value={unit.height} min={200} suffix="mm" onChange={(v) => up((u) => (u.height = v))} />}
+            </Field>
+          </div>
+          {inRun && <p className="text-xs text-stone-500">In a kitchen the next wall’s cabinets start after Width B. Depth and height come from the kitchen settings.</p>}
+        </div>
+      </Card>
+      <Card title="Corner design">
+        <div className="space-y-3">
+          <Field label="Style">
+            <select className="input" value={c.style} onChange={(e) => up((u) => (u.corner!.style = e.target.value as 'L' | 'diagonal'))}>
+              <option value="L">L-shaped – two doors meeting in the corner</option>
+              <option value="diagonal">Diagonal – one angled door across the corner</option>
+            </select>
+          </Field>
+          {!inRun && (
+            <Field label="Width B runs along the">
+              <select className="input" value={c.hand} onChange={(e) => up((u) => (u.corner!.hand = e.target.value as 'left' | 'right'))}>
+                <option value="right">Right-hand wall</option>
+                <option value="left">Left-hand wall</option>
+              </select>
+            </Field>
+          )}
+          <Field label="Shelves">
+            <NumInput value={c.shelves} min={0} max={8} onChange={(v) => up((u) => (u.corner!.shelves = Math.max(0, Math.min(8, Math.round(v)))))} />
+          </Field>
+          {!wall && <Toggle label="Corner carousel (lazy susan)" checked={c.carousel} onChange={(v) => up((u) => (u.corner!.carousel = v))} />}
+          {!inRun && (
+            <Field label="Mounting">
+              <select className="input" value={unit.mount} onChange={(e) =>
+                  up((u) => {
+                    u.mount = e.target.value as Unit['mount'];
+                    u.type = u.mount === 'wall' ? 'corner_wall' : 'corner_base';
+                    // typical sizes for each kind of corner cupboard
+                    if (u.mount === 'wall') Object.assign(u, { base: 'none', baseHeight: 0, countertopId: null, height: 720, depth: 320, mountHeight: 1450 });
+                    else Object.assign(u, { base: 'plinth', baseHeight: 120, height: 900, depth: 560 });
+                  })
+                }>
+                <option value="floor">Base (on the floor)</option>
+                <option value="wall">Wall hung</option>
+              </select>
+            </Field>
+          )}
+          <p className="text-xs text-stone-500">Hinges, handles and materials are set in the Hardware and Materials tabs. Corner (wide-angle) hinges are used by default.</p>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export default function UnitDesigner() {
   const { id = '', uid: unitId = '' } = useParams();
   const quote = useStore((s) => s.quotes.find((q) => q.id === id));
@@ -160,7 +248,9 @@ export default function UnitDesigner() {
   const onSidePick = (p: SidePick) => setTab(p === 'top' || p === 'base' ? 'top' : 'sides');
 
   const viewer = <Viewer3D unit={unit} build={build} catalog={catalog} extraBoxes={extraBoxes} highlight={s} onPick={(p) => p.ref && (setSel(p.ref), setTab('layout'))} className="h-full w-full" />;
-  const editor = (
+  const editor = unit.corner ? (
+    <div className="flex h-full w-full items-center justify-center bg-[#f7f5f2] p-6 text-center text-sm text-stone-500">Corner cupboards are set with Width A, Width B and the style below — the 3D view shows the result.</div>
+  ) : (
     <div className="relative h-full w-full bg-[#f7f5f2]">
       <ElevationEditor unit={unit} catalog={catalog} build={build} view={view2d} sel={s} onSelect={(x) => (setSel(x), x && setTab('layout'))} onChange={up} onSidePick={onSidePick} background={trace ? quote.sourceImage : null} />
       <div className="no-scrollbar absolute left-1.5 right-1.5 top-1.5 flex gap-1 overflow-x-auto">
@@ -236,7 +326,25 @@ export default function UnitDesigner() {
         </div>
 
         <div className="mx-auto w-full max-w-5xl space-y-3 p-3">
-          {tab === 'layout' && (
+          {tab === 'layout' && unit.corner && (
+            <CornerCard
+              unit={unit}
+              inRun={inRun}
+              onA={setWidth}
+              onB={(v) =>
+                updateQuote(quote.id, (q) => {
+                  const l = locateUnit(q, unitId);
+                  if (!l?.unit.corner) return;
+                  if (l.module && l.run) {
+                    l.module.cornerB = v;
+                    syncRun(l.run, catalog);
+                  } else l.unit.corner.widthB = v;
+                })
+              }
+              up={up}
+            />
+          )}
+          {tab === 'layout' && !unit.corner && (
             <div className="space-y-3">
               <Card
                 title={s ? `Bay ${s.bay + 1} · compartment ${s.section + 1}${s.path?.length ? `.${s.path.map((x) => x + 1).join('.')}` : ''}` : 'Select a compartment'}

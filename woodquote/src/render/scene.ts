@@ -4,7 +4,7 @@ import { unitExtents } from '../lib/generate';
 import { cellRects, sameRef } from '../lib/sections';
 import type { ItemPrice } from '../lib/pricing';
 import { inwardNormal, itemBounds, orientation, roomExtents, vertices, wallPieces } from '../lib/room';
-import { activeLegs, legLength, legTransform, type RunBuild } from '../lib/runs';
+import { activeLegs, legLength, legStart, legTransform, type RunBuild } from '../lib/runs';
 import type { Appliance, Box3 as PartBox, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
 
 /* ---------------------------------------------------- procedural textures */
@@ -76,6 +76,23 @@ function boxGeo(b: PartBox) {
 }
 
 function boxMesh(b: PartBox, mat: THREE.Material, edges = true): THREE.Object3D {
+  // shaped panels (diagonal corner cupboards): extrude the outline upwards
+  if (b.meta?.shape && b.meta.shape.length >= 3) {
+    const shape = new THREE.Shape(b.meta.shape.map(([x, z]) => new THREE.Vector2(x, -z)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(b.h, 0.5), bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.y = b.y;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    if (!edges) return mesh;
+    const group = new THREE.Group();
+    group.add(mesh);
+    const line = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#000000', transparent: true, opacity: 0.16 }));
+    line.position.copy(mesh.position);
+    group.add(line);
+    return group;
+  }
   const geo = boxGeo(b);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(b.x + b.w / 2, b.y + b.h / 2, b.z + b.d / 2);
@@ -316,15 +333,32 @@ export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt:
   };
   const isTall = unit.height > 1300;
   const handle = cat.accessories.find((a) => a.id === unit.handleId);
-  const doorGroups = new Map<string, { group: THREE.Group; boxes: PartBox[]; drawer: boolean }>();
+  const doorGroups = new Map<string, { group: THREE.Group; boxes: PartBox[]; drawer: boolean; parent: THREE.Object3D }>();
+  // parts drawn in their own frame (corner cupboard side arm, diagonal door)
+  const frames = new Map<string, THREE.Group>();
+  const frameOf = (b: PartBox): THREE.Object3D => {
+    const f = b.meta?.frame;
+    if (!f) return root;
+    const key = `${f.x}|${f.z}|${f.rot}`;
+    let g = frames.get(key);
+    if (!g) {
+      g = new THREE.Group();
+      g.position.set(f.x, 0, f.z);
+      g.rotation.y = (f.rot * Math.PI) / 180;
+      root.add(g);
+      frames.set(key, g);
+    }
+    return g;
+  };
   const target = (b: PartBox): THREE.Object3D => {
     const id = b.meta?.door;
-    if (!id) return root;
+    const parent = frameOf(b);
+    if (!id) return parent;
     let dg = doorGroups.get(id);
     if (!dg) {
-      dg = { group: new THREE.Group(), boxes: [], drawer: !!b.meta?.drawer };
+      dg = { group: new THREE.Group(), boxes: [], drawer: !!b.meta?.drawer, parent };
       doorGroups.set(id, dg);
-      root.add(dg.group);
+      parent.add(dg.group);
     }
     dg.boxes.push(b);
     return dg.group;
@@ -374,9 +408,9 @@ export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt:
     if (!opt.openDoors) continue;
     const pivot = new THREE.Group();
     const inner = dg.group;
-    root.remove(inner);
+    dg.parent.remove(inner);
     pivot.add(inner);
-    root.add(pivot);
+    dg.parent.add(pivot);
     if (meta.drawer) pivot.position.z = (bb.z1 - bb.z0) * 0.55;
     else if (meta.slide) pivot.position.x = (meta.slide === 'left' ? -1 : 1) * (bb.x1 - bb.x0) * 0.6;
     else if (meta.hinge === 'left' || meta.hinge === 'right') {
@@ -455,7 +489,7 @@ export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt:
       }
   }
 
-  if (opt.highlight) {
+  if (opt.highlight && !unit.corner) {
     const c = cellRects(unit, cat).find((x) => sameRef(x.ref, opt.highlight));
     if (c) {
       const yo = unit.mount === 'wall' ? unit.mountHeight : 0;
@@ -550,7 +584,7 @@ function addRoom(root: THREE.Group, run: Run) {
   const H = 2700;
   const LA = legLength(run.legs[0]);
   const n = activeLegs(run);
-  const depth = run.baseDepth + Math.max(n > 1 ? legLength(run.legs[1]) : 0, n > 2 ? legLength(run.legs[2]) : 0, 600) + 400;
+  const depth = Math.max(n > 1 ? legStart(run, 1) + legLength(run.legs[1]) : 0, n > 2 ? legStart(run, 2) + legLength(run.legs[2]) : 0, run.baseDepth + 600) + 400;
   const back = new THREE.Mesh(new THREE.PlaneGeometry(LA + 400, H), wallMat);
   back.position.set(LA / 2, H / 2, -2);
   back.receiveShadow = true;

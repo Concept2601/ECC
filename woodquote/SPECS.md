@@ -1,6 +1,6 @@
 # WoodQuote by 2601 — specification sheet
 
-**Version 2.0.0** · Developer **sir.2601**, Zimbabwe · *Made with passion and love by a crazy mind.*
+**Version 2.1.0** · Developer **sir.2601**, Zimbabwe · *Made with passion and love by a crazy mind.*
 
 Joinery quotation software for TV stands, kitchens, islands, built-in cupboards (BICs) and wardrobes. It covers 3D design, room layouts, AI plan reading, cutting optimisation, material schedules, quotations, invoices and receipts.
 
@@ -8,7 +8,7 @@ Joinery quotation software for TV stands, kitchens, islands, built-in cupboards 
 
 | Platform | Package | Built by |
 | --- | --- | --- |
-| Windows 10 / 11, 64-bit | Installer `WoodQuote-Setup-2.0.0-x64.exe` and portable `WoodQuote-Portable-2.0.0-x64.exe` | GitHub Actions › *WoodQuote Windows app* |
+| Windows 10 / 11, 64-bit | Installer `WoodQuote-Setup-2.1.0-x64.exe` and portable `WoodQuote-Portable-2.1.0-x64.exe` | GitHub Actions › *WoodQuote Windows app* |
 | Android 7.0+ | APK (`WoodQuote-debug-apk`); Play Store AAB once release signing is set up | GitHub Actions › *WoodQuote Android APK* |
 | iPhone / iPad, iOS 15+ | Unsigned `.ipa` (sideload); App Store / TestFlight build once Apple signing secrets are added | GitHub Actions › *WoodQuote iPhone app* |
 | Web browser | Same app, runs from any web host | `npm run build` |
@@ -68,7 +68,8 @@ Joinery quotation software for TV stands, kitchens, islands, built-in cupboards 
 ## Fabrication engine
 
 - Parametric units: bays, compartments with independent nested splits, doors (wood, framed glass, frameless glass), drawers, flaps, sliding doors, appliance housings, lighting.
-- Kitchens: straight, L and U runs. Cabinets, spaces, wall-only cabinets, fillers and appliance spaces of any size can go at any position. You can enter the measured wall length, and auto-fill adds a cabinet or filler for the space left.
+- Corner cupboards (base and wall-hung): Width A and Width B set separately; L-shaped (two doors) or diagonal (one door); left or right return; L-shaped or five-sided panels, two backs, worktop return, corner hinges, optional carousel.
+- Kitchens: straight, L and U runs, with corner cupboards at the junctions. Cabinets, spaces, wall-only cabinets, fillers and appliance spaces of any size can go at any position. You can enter the measured wall length, and auto-fill adds a cabinet or filler for the space left.
 - Cutting optimiser: guillotine (panel saw) or nested (CNC), with kerf, trim and grain. It shows used, reusable offcut and waste cost.
 - Oversize parts are split into equal pieces with the join in the middle, not at the end. A joint method is chosen for where the part goes:
   - carcass tops and bottoms over a partition, with dowels and connector bolts

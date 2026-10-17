@@ -11,6 +11,20 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '2.1.0',
+    date: '2026-10-17',
+    title: 'Corner cupboards',
+    added: [
+      'Corner base and corner wall cupboards with their own width on each wall (Width A and Width B), as standalone units or in kitchens',
+      'Two styles: L-shaped with two doors meeting in the corner, or diagonal with one angled door; return on the left- or right-hand wall',
+      'Corner cupboards build their full cut list: L-shaped or five-sided bottoms, tops and shelves, two backs, end panels, kick boards, L-shaped or diagonal worktop, corner hinges, bi-fold link and optional carousel',
+    ],
+    updated: [
+      'L and U kitchens now start with real corner cupboards (base and wall); the next wall’s cabinets start after the corner’s Width B, with a worktop return over the corner',
+      'Kitchen “Base design” list includes L and diagonal corner cupboards; the selected cabinet shows Width B and the corner style',
+    ],
+  },
+  {
     version: '2.0.0',
     date: '2026-10-17',
     title: 'Licensing and the new four-tab layout',

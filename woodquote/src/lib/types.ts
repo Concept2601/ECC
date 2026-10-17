@@ -264,7 +264,20 @@ export type ProductType =
   | 'sliding_wardrobe'
   | 'bookshelf'
   | 'vanity'
+  | 'corner_base'
+  | 'corner_wall'
   | 'custom';
+
+/** Corner cupboard: Width A (unit.width) along one wall, Width B along the other. */
+export interface CornerSpec {
+  widthB: number;
+  /** L = two doors meeting in the corner; diagonal = one angled door across the corner */
+  style: 'L' | 'diagonal';
+  /** which side the return (Width B) goes: right = along the right-hand wall */
+  hand: 'left' | 'right';
+  shelves: number;
+  carousel: boolean;
+}
 
 export type FrontKind = 'open' | 'door' | 'drawer' | 'sliding' | 'appliance';
 export type DoorMaterial = 'wood' | 'glass' | 'frameless';
@@ -393,6 +406,7 @@ export interface Unit {
   topBoardId: ID | null; // solid board top (when there is no countertop)
   overhang: Sides<number>; // countertop / board top overhang per side
   finishPanels: { left: FinishPanel; right: FinishPanel; back: FinishPanel };
+  corner?: CornerSpec | null;
   glassId: ID | null;
   aluminiumId: ID | null;
   hingeId: ID | null;
@@ -433,6 +447,8 @@ export interface RunModule {
   wallHeight?: number | null; // wall cabinet above
   wallBottom?: number | null;
   wallDepth?: number | null;
+  /** corner cupboard: length along the next wall (Width B) */
+  cornerB?: number | null;
   base: Unit | null; // base or tall unit
   wall: Unit | null; // hanging unit above a base unit
   hoodId: ID | null; // chimney hood above (instead of / under the wall unit)
@@ -479,6 +495,10 @@ export interface BoxMeta {
   style?: PanelStyle;
   slatWidth?: number;
   slatGap?: number;
+  /** drawn in its own frame: moved to (x, z) and turned rot degrees about the vertical (corner cupboards) */
+  frame?: { x: number; z: number; rot: number };
+  /** panel outline (x, z) instead of a rectangle, e.g. diagonal corner shelves */
+  shape?: [number, number][];
 }
 
 export interface Box3 {

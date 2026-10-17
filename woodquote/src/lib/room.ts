@@ -4,7 +4,7 @@
 // sees the design in context.
 import { unitExtents } from './generate';
 import type { ItemPrice } from './pricing';
-import { activeLegs, legLength } from './runs';
+import { activeLegs, legLength, legStart } from './runs';
 import type { Catalog, Room, RoomOpening, RoomPlacement, RoomWall, WallSide } from './types';
 import { uid } from './util';
 
@@ -151,8 +151,9 @@ export function footprints(it: ItemPrice, cat: Catalog, p: RoomPlacement): [numb
     const LA = legLength(r.legs[0]);
     const rects: [number, number, number, number][] = [[0, 0, LA, D]];
     const n = activeLegs(r);
-    if (n > 1) rects.push([LA - D, r.baseDepth, LA, r.baseDepth + legLength(r.legs[1])]);
-    if (n > 2) rects.push([0, r.baseDepth, D, r.baseDepth + legLength(r.legs[2])]);
+    // side walls start after a corner cupboard's Width B; the strip in between is the corner's return
+    if (n > 1) rects.push([LA - D, r.baseDepth, LA, legStart(r, 1) + legLength(r.legs[1])]);
+    if (n > 2) rects.push([0, r.baseDepth, D, legStart(r, 2) + legLength(r.legs[2])]);
     return rects.map(([x0, z0, x1, z1]) =>
       [
         [x0, z0],

@@ -433,10 +433,24 @@ export default function RunDesigner() {
                         <Plus size={14} /> Add a wall cabinet above this space
                       </button>
                     )}
+                    {sel.m.base?.corner && (
+                      <div className="grid grid-cols-2 gap-2 rounded-xl bg-brand-50 p-2">
+                        <Field label="Width B (along the next wall)">
+                          <NumInput value={sel.m.cornerB || sel.m.base.corner.widthB} min={1} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.cornerB = Math.max(1, v)))} />
+                        </Field>
+                        <Field label="Corner style">
+                          <select className="input" value={sel.m.base.corner.style} onChange={(e) => up((r) => { const m = findMod(r, sel.m.id)!.m; m.base!.corner!.style = e.target.value as 'L' | 'diagonal'; if (m.wall?.corner) m.wall.corner.style = m.base!.corner!.style; })}>
+                            <option value="L">L – two doors</option>
+                            <option value="diagonal">Diagonal – one door</option>
+                          </select>
+                        </Field>
+                        <p className="col-span-2 text-xs text-stone-600">Width above is Width A along this wall. The cupboard above becomes a matching corner wall cupboard.</p>
+                      </div>
+                    )}
                     {sel.m.kind === 'base' && (
                       <>
                         <Field label="Base design (replaces the cabinet)">
-                          <select className="input" value="" onChange={(e) => e.target.value && up((r) => { const f = findMod(r, sel.m.id)!; const nm = baseModule(e.target.value as BaseTemplate, r, 'none', f.m.width); f.m.base = nm.base; })}>
+                          <select className="input" value="" onChange={(e) => e.target.value && up((r) => { const f = findMod(r, sel.m.id)!; const nm = baseModule(e.target.value as BaseTemplate, r, 'none', f.m.width); f.m.base = nm.base; f.m.cornerB = nm.cornerB; })}>
                             <option value="">Choose a new layout…</option>
                             {(Object.keys(BASE_TEMPLATES) as BaseTemplate[]).map((k) => (
                               <option key={k} value={k}>

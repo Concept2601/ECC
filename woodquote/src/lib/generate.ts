@@ -23,6 +23,7 @@ import type {
   UnitBuild,
 } from './types';
 import { clamp, kelvinToHex, sum } from './util';
+import { buildCornerUnit } from './corner';
 
 const GAP = 3; // reveal between fronts
 const SLIDE_ZONE = 80; // depth reserved for sliding wardrobe door tracks
@@ -62,6 +63,7 @@ export function topThickness(u: Unit, cat: Catalog): number {
 }
 
 export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: BuildContext = {}): UnitBuild {
+  if (u.corner) return buildCornerUnit(u, cat, pricing);
   const board = (id: string | null) => cat.boards.find((b) => b.id === id) ?? null;
   const acc = (id: string | null) => cat.accessories.find((a) => a.id === id) ?? null;
   const appl = (id: string | null) => cat.appliances.find((a) => a.id === id) ?? null;
@@ -644,7 +646,7 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
 }
 
 /** Move every 3D box of a build up by dy (wall-hung units). */
-function shiftBuild(b: UnitBuild, dy: number) {
+export function shiftBuild(b: UnitBuild, dy: number) {
   const mv = (bx: Box3) => (bx.y += dy);
   b.parts.forEach((p) => p.boxes.forEach(mv));
   b.aluminium.forEach((a) => a.boxes.forEach(mv));
@@ -704,5 +706,7 @@ export function unitExtents(u: Unit, cat: Catalog) {
   const z0 = -th('back') - (hasTop ? u.overhang.back : 0);
   const z1 = u.depth + (hasTop ? u.overhang.front : 0);
   const y0 = u.mount === 'wall' ? u.mountHeight : 0;
+  // corner cupboards also run Width B along the side wall
+  if (u.corner) return { x0: Math.min(0, x0), x1: Math.max(u.width, x1), z0: Math.min(0, z0), z1: Math.max(z1, u.corner.widthB), y0, y1: y0 + u.height };
   return { x0, x1, z0, z1, y0, y1: y0 + u.height };
 }

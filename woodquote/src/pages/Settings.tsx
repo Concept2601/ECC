@@ -1,4 +1,7 @@
-import { Download, Eye, Plus, Trash2, Upload } from 'lucide-react';
+import { Building2, ChevronRight, DatabaseBackup, Download, Eye, Info, Layers, Palette, Plus, ScanLine, Trash2, Upload } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import Library from './Library';
+import DeveloperInfo from '../components/DeveloperInfo';
 import { useRef, useState } from 'react';
 import { Card, confirmAction, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import { createUnit } from '../lib/presets';
@@ -6,10 +9,18 @@ import { calculateQuote } from '../lib/pricing';
 import type { Quote } from '../lib/types';
 import { todayISO } from '../lib/util';
 import { quotePdf, saveOrShare, shareTextFile } from '../pdf/pdf';
-import { exportData, useStore, type AppData } from '../store';
+import { exportData, isWoodQuoteData, normalizeData, useStore } from '../store';
 import { PerformanceCard, SavingCard, ShortcutsCard } from '../components/SettingsExtras';
 
-type Tab = 'company' | 'documents' | 'pricing' | 'ai' | 'saving' | 'keys' | 'performance' | 'backup';
+type Tab = 'company' | 'documents' | 'keys' | 'performance' | 'library' | 'pricing' | 'ai' | 'saving' | 'backup' | 'developer';
+
+const SECTIONS: { id: string; title: string; text: string; icon: typeof Building2; tabs: { value: Tab; label: string }[] }[] = [
+  { id: 'customization', title: 'Customization', text: 'Business details, document header & footer, keyboard shortcuts, performance', icon: Palette, tabs: [{ value: 'company', label: 'Business' }, { value: 'documents', label: 'Documents' }, { value: 'keys', label: 'Keyboard' }, { value: 'performance', label: 'Performance' }] },
+  { id: 'materials', title: 'Material pricing hub', text: 'Boards, edging, glass, worktops, hardware, appliances, pricing & cutting', icon: Layers, tabs: [{ value: 'library', label: 'Material prices' }, { value: 'pricing', label: 'Pricing & cutting' }] },
+  { id: 'ai', title: 'Diagram (AI) reader', text: 'Keys and models for the diagram and plan readers', icon: ScanLine, tabs: [{ value: 'ai', label: 'AI reader configuration' }] },
+  { id: 'backup', title: 'Software backup', text: 'Save points, auto-save, undo history, backup & restore', icon: DatabaseBackup, tabs: [{ value: 'saving', label: 'Saving & versions' }, { value: 'backup', label: 'Backup & restore' }] },
+  { id: 'developer', title: 'Developer information', text: 'Developer, licence, version history, policies, documentation, hardware specs', icon: Info, tabs: [{ value: 'developer', label: 'About' }] },
+];
 
 async function fileToDataUrl(file: File, maxSide = 1600, type = 'image/png', quality = 0.9): Promise<string> {
   const url = URL.createObjectURL(file);
@@ -38,7 +49,10 @@ async function fileToDataUrl(file: File, maxSide = 1600, type = 'image/png', qua
 
 export default function SettingsPage() {
   const { settings, updateSettings, catalog, importData } = useStore();
-  const [tab, setTab] = useState<Tab>('company');
+  const { section = '' } = useParams();
+  const sec = SECTIONS.find((x) => x.id === section);
+  const [tabState, setTab] = useState<Tab>('company');
+  const tab: Tab = sec ? (sec.tabs.some((t) => t.value === tabState) ? tabState : sec.tabs[0].value) : tabState;
   const logoRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const c = settings.company;
@@ -76,23 +90,28 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Settings" />
+      <PageHeader title={sec?.title ?? 'Settings'} back={sec ? '/settings' : undefined} />
       <div className="mx-auto max-w-5xl space-y-3 p-3">
-        <Tabs<Tab>
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { value: 'company', label: 'Business' },
-            { value: 'documents', label: 'Documents' },
-            { value: 'pricing', label: 'Pricing & cutting' },
-            { value: 'ai', label: 'AI readers' },
-            { value: 'saving', label: 'Saving & undo' },
-            { value: 'keys', label: 'Keyboard' },
-            { value: 'performance', label: 'Performance' },
-            { value: 'backup', label: 'Backup' },
-          ]}
-        />
-
+        {!sec && (
+          <div className="grid gap-3 md:grid-cols-2">
+            {SECTIONS.map((x) => (
+              <Link key={x.id} to={`/settings/${x.id}`} className="card flex items-center gap-3 p-4 hover:border-brand-300">
+                <span className="rounded-xl bg-brand-100 p-3 text-brand-700">
+                  <x.icon size={20} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-bold">{x.title}</span>
+                  <span className="block text-xs text-stone-500">{x.text}</span>
+                </span>
+                <ChevronRight size={18} className="text-stone-400" />
+              </Link>
+            ))}
+          </div>
+        )}
+        {sec && sec.tabs.length > 1 && <Tabs<Tab> value={tab} onChange={setTab} tabs={sec.tabs} />}
+      </div>
+      {sec && (
+      <div className="mx-auto max-w-5xl space-y-3 p-3 pt-0">
         {tab === 'company' && (
           <Card title="Business details (document header)">
             <div className="space-y-3">
@@ -345,6 +364,8 @@ export default function SettingsPage() {
         {tab === 'saving' && <SavingCard />}
         {tab === 'keys' && <ShortcutsCard />}
         {tab === 'performance' && <PerformanceCard />}
+        {tab === 'library' && <Library embedded />}
+        {tab === 'developer' && <DeveloperInfo />}
 
         {tab === 'backup' && (
           <Card title="Backup & restore">
@@ -369,11 +390,11 @@ export default function SettingsPage() {
                   e.target.value = '';
                   if (!f) return;
                   try {
-                    const raw = JSON.parse(await f.text()) as AppData & { data?: AppData };
-                    // save points and Windows backup files wrap the data
-                    const data = raw.data ?? raw;
-                    if (!data.settings || !data.catalog || !Array.isArray(data.quotes)) throw new Error('Not a WoodQuote backup');
-                    if (confirmAction('Replace all data on this device with the backup?')) importData(data);
+                    const raw = JSON.parse(await f.text());
+                    // backups from any version: plain exports, save points and Windows backup files
+                    if (!isWoodQuoteData(raw)) throw new Error('Not a WoodQuote backup');
+                    const data = normalizeData(raw);
+                    if (confirmAction(`Replace all data on this device with this backup (${data.quotes.length} quotations, ${data.invoices.length} invoices)? You can undo this.`)) importData(data);
                   } catch (err) {
                     alert(`Could not restore: ${(err as Error).message}`);
                   }
@@ -383,6 +404,7 @@ export default function SettingsPage() {
           </Card>
         )}
       </div>
+      )}
     </div>
   );
 }

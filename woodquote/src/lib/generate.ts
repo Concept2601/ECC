@@ -528,7 +528,7 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
     const x0 = ta.xOffset != null ? ta.xOffset : g.x + g.w / 2 - a.width / 2;
     // centred on the worktop, but kept 50 mm clear of the front edge where the worktop allows it
     const centred = (frontEdge + backEdge) / 2 - a.depth / 2;
-    const z0 = ta.frontGap != null ? frontEdge - ta.frontGap - a.depth : Math.max(backEdge + 20, Math.min(centred, frontEdge - 50 - a.depth));
+    const z0 = ta.frontGap != null ? frontEdge - ta.frontGap - a.depth : Math.max(backEdge, Math.min(centred, frontEdge - 50 - a.depth));
     applR.push({ applianceId: a.id, box: { x: x0, y: surfaceY, z: z0, w: a.width, h: a.height, d: a.depth } });
     const toFront = Math.round(frontEdge - (z0 + a.depth));
     if (toFront < 50) warnings.push(`${a.name} is only ${toFront}mm from the worktop front edge (50mm minimum).`);

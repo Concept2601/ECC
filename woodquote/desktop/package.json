@@ -1,7 +1,7 @@
 {
   "name": "woodquote-desktop",
   "productName": "WoodQuote by 2601",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Wood joinery quotations, 3D designs, invoices and receipts",
   "author": "Zusly Projects",
   "private": true,
@@ -18,13 +18,31 @@
   "build": {
     "appId": "zw.co.zuslyprojects.woodquote",
     "productName": "WoodQuote by 2601",
-    "copyright": "© Zusly Projects",
-    "directories": { "output": "release", "buildResources": "build" },
-    "files": ["main.cjs", "preload.cjs", "app/**/*", "package.json"],
+    "copyright": "\u00a9 Zusly Projects",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "app/**/*",
+      "package.json"
+    ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.png"
     },
@@ -37,6 +55,8 @@
       "shortcutName": "WoodQuote by 2601",
       "artifactName": "WoodQuote-Setup-${version}-x64.${ext}"
     },
-    "portable": { "artifactName": "WoodQuote-Portable-${version}-x64.${ext}" }
+    "portable": {
+      "artifactName": "WoodQuote-Portable-${version}-x64.${ext}"
+    }
   }
 }

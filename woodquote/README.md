@@ -26,6 +26,10 @@ It is a React + TypeScript app packaged for Android with Capacitor. All data sta
 | **Diagram reader** | Claude reads a plan, sketch, photo, 3D render or PDF and returns units with fronts, opening directions, appliances, hobs and sinks. |
 | **Backup & upgrades** | Export or restore all data. Quotes and price libraries saved by older versions are upgraded automatically, and new catalogue items are added without overwriting your prices. |
 
+## Licensing
+
+The app opens only with a licence: the customer's email plus a 6-digit code from the developer's authenticator app. Each code unlocks 30 days. See [LICENSING.md](LICENSING.md) for how to issue codes and set your own master key. The version history is in [CHANGELOG.md](CHANGELOG.md) and inside the app under Settings › Developer information.
+
 ## Getting the APK
 
 * **GitHub Actions:** every push that changes `woodquote/` runs `.github/workflows/woodquote-android.yml`. That workflow runs the tests, builds the web app, syncs Capacitor and produces `WoodQuote-debug-apk`. Download it from the run's *Artifacts* section and install it on your phone (allow "install unknown apps").

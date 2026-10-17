@@ -1,4 +1,4 @@
-import { FileText, Home as HomeIcon, Layers, Receipt, Settings as SettingsIcon } from 'lucide-react';
+import { FileText, LayoutDashboard, Receipt, Settings as SettingsIcon } from 'lucide-react';
 import { HashRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import AppShell from './components/AppShell';
 import ExportSheet from './components/ExportSheet';
@@ -18,10 +18,9 @@ import UnitDesigner from './pages/UnitDesigner';
 import { useStore } from './store';
 
 const NAV = [
-  { to: '/', label: 'Home', icon: HomeIcon },
-  { to: '/quotes', label: 'Quotes', icon: FileText },
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/quotes', label: 'Quotation', icon: FileText },
   { to: '/invoices', label: 'Invoices', icon: Receipt },
-  { to: '/library', label: 'Prices', icon: Layers },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -31,7 +30,7 @@ function BottomNav() {
   if (/\/(units|runs)\/|\/room$/.test(loc.pathname)) return null;
   return (
     <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto grid max-w-5xl grid-cols-5">
+      <div className="mx-auto grid max-w-5xl grid-cols-4">
         {NAV.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -72,6 +71,7 @@ export default function App() {
           <Route path="/invoices/:id" element={<InvoiceEditor />} />
           <Route path="/library" element={<Library />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/:section" element={<SettingsPage />} />
           <Route path="/reader" element={<Reader />} />
           <Route path="/fit" element={<SpaceFit />} />
           <Route path="/plan" element={<PlanReader />} />

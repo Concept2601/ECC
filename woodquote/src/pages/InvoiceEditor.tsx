@@ -47,7 +47,7 @@ export default function InvoiceEditor() {
         <div className="space-y-3">
           <Card title="Line items" actions={<button className="btn-secondary px-3 py-1.5" onClick={() => up((i) => i.lines.push({ id: uid('l'), description: '', qty: 1, unitPrice: 0 }))}><Plus size={14} /> Line</button>}>
             <div className="space-y-2">
-              {inv.lines.map((l, k) => (
+              {inv.lines.map((l, k) => l.kind === 'deviation' ? null : (
                 <div key={l.id} className="grid grid-cols-[1fr_auto] gap-2 rounded-xl border border-stone-200 p-2">
                   <input className="input" placeholder="Description" value={l.description} onChange={(e) => up((i) => (i.lines[k].description = e.target.value))} />
                   <button className="btn-ghost px-2 text-red-600" onClick={() => up((i) => i.lines.splice(k, 1))} aria-label="Remove">
@@ -63,7 +63,41 @@ export default function InvoiceEditor() {
             </div>
           </Card>
 
-          <Card title="Adjustments, deposit & tax">
+          <Card
+            title="Deviations from the quotation"
+            actions={
+              <button className="btn-secondary px-3 py-1.5" onClick={() => up((i) => i.lines.push({ id: uid('l'), description: '', qty: 1, unitPrice: 0, kind: 'deviation', reason: '' }))}>
+                <Plus size={14} /> Deviation
+              </button>
+            }
+          >
+            <p className="mb-2 text-xs text-stone-500">Work that changed after quoting: extras the client asked for, or credits for things left out. They show on the invoice with their reason.</p>
+            <div className="space-y-2">
+              {inv.lines.map((l, k) =>
+                l.kind !== 'deviation' ? null : (
+                  <div key={l.id} className="grid grid-cols-[1fr_auto] gap-2 rounded-xl border border-amber-200 bg-amber-50/40 p-2">
+                    <input className="input" placeholder="What changed (e.g. extra shelf, changed handles)" value={l.description} onChange={(e) => up((i) => (i.lines[k].description = e.target.value))} />
+                    <button className="btn-ghost px-2 text-red-600" onClick={() => up((i) => i.lines.splice(k, 1))} aria-label="Remove deviation">
+                      <Trash2 size={16} />
+                    </button>
+                    <input className="input col-span-2" placeholder="Reason (client request, site condition…)" value={l.reason ?? ''} onChange={(e) => up((i) => (i.lines[k].reason = e.target.value))} />
+                    <div className="col-span-2 grid grid-cols-4 items-center gap-2">
+                      <select className="input" value={l.credit || l.unitPrice < 0 ? 'credit' : 'extra'} onChange={(e) => up((i) => { const ln = i.lines[k]; ln.credit = e.target.value === 'credit'; ln.unitPrice = (ln.credit ? -1 : 1) * Math.abs(ln.unitPrice); })}>
+                        <option value="extra">Extra (+)</option>
+                        <option value="credit">Credit (−)</option>
+                      </select>
+                      <NumInput value={l.qty} min={0} suffix="qty" onChange={(v) => up((i) => (i.lines[k].qty = v))} />
+                      <NumInput value={Math.abs(l.unitPrice)} min={0} suffix="each" onChange={(v) => up((i) => (i.lines[k].unitPrice = (i.lines[k].credit || i.lines[k].unitPrice < 0 ? -1 : 1) * Math.abs(v)))} />
+                      <div className={`text-right font-semibold tabular-nums ${l.unitPrice < 0 ? 'text-emerald-700' : ''}`}>{fmt(l.qty * l.unitPrice)}</div>
+                    </div>
+                  </div>
+                ),
+              )}
+              {!inv.lines.some((l) => l.kind === 'deviation') && <p className="text-sm text-stone-400">No deviations.</p>}
+            </div>
+          </Card>
+
+          <Card title="Discount, deposit & tax">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Discount type">
                 <Select value={inv.discountType} onChange={(v) => v && up((i) => (i.discountType = v))} options={[{ value: 'percent', label: 'Percent %' }, { value: 'amount', label: 'Fixed amount' }]} />

@@ -136,3 +136,26 @@ describe('plan reader', () => {
     expect(() => parsePlanJson('sorry I cannot')).toThrow(/No JSON/);
   });
 });
+
+import { normalizeData } from '../../store';
+
+describe('restoring backups from earlier versions', () => {
+  it('upgrades a first-version backup (no rooms walls, missing settings, no counters)', () => {
+    const old = {
+      settings: { company: { name: 'Old Joinery' }, pricing: { currency: 'USD' } },
+      catalog: { boards: [] },
+      quotes: [{ id: 'q1', number: 'QUO-0007', title: 'Old', date: '2025-01-01', status: 'draft', client: { name: 'A', phone: '', email: '', address: '' }, units: [createUnit('tv_stand')], extras: [], room: { width: 4000, depth: 3000, wallHeights: [2600, 2600, 2600, 2600], showWalls: [true, true, false, true], openings: [], placements: [] } }],
+      invoices: [{ id: 'i1', number: 'INV-0003', payments: [{ id: 'p', amount: 10, date: '2025-01-02', method: 'Cash', reference: '', receiptNumber: 'RCT-0005' }] }],
+    };
+    for (const wrapped of [old, { app: 'WoodQuote', version: 1, data: old }]) {
+      const d = normalizeData(wrapped);
+      expect(d.settings.company.name).toBe('Old Joinery');
+      expect(d.settings.pricing.kerf).toBeGreaterThan(0);
+      expect(d.catalog.boards.length).toBeGreaterThan(0);
+      expect(d.quotes[0].runs).toEqual([]);
+      expect(d.quotes[0].room!.walls).toHaveLength(4);
+      expect(d.counters).toEqual({ quote: 7, invoice: 3, receipt: 5 });
+      expect(() => calculateQuote(d.quotes[0], d.catalog, d.settings)).not.toThrow();
+    }
+  });
+});

@@ -34,6 +34,10 @@ jobs:
         run: npm test
 
       - name: Build web app & sync Android project
+        env:
+          # your own licence master key / developer PIN hash (optional, see woodquote/LICENSING.md)
+          VITE_WQ_LICENSE_KEY: ${{ secrets.WQ_LICENSE_KEY }}
+          VITE_WQ_DEV_PIN_HASH: ${{ secrets.WQ_DEV_PIN_HASH }}
         run: npm run android:sync
 
       - name: Build debug APK

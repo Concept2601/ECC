@@ -683,7 +683,11 @@ export interface InvoiceLine {
   id: ID;
   description: string;
   qty: number;
-  unitPrice: number;
+  unitPrice: number; // negative for a credit
+  /** A change from the quoted work (extra or credit), with its reason. */
+  kind?: 'item' | 'deviation';
+  reason?: string;
+  credit?: boolean; // deviation that reduces the total
 }
 
 export interface Payment {

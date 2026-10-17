@@ -902,7 +902,7 @@ export function invoicePdf(inv: Invoice, s: Settings): jsPDF {
   autoTable(doc, {
     startY: y,
     head: [['#', 'Description', 'Qty', 'Unit price', 'Amount']],
-    body: inv.lines.map((l, i) => [String(i + 1), l.description, String(l.qty), fm(l.unitPrice), fm(l.qty * l.unitPrice)]),
+    body: inv.lines.map((l, i) => [String(i + 1), l.kind === 'deviation' ? `${l.credit || l.unitPrice < 0 ? 'Credit' : 'Extra'} (deviation from quotation): ${l.description}${l.reason ? ` — ${l.reason}` : ''}` : l.description, String(l.qty), fm(l.unitPrice), fm(l.qty * l.unitPrice)]),
     theme: 'striped',
     headStyles: { fillColor: hexToRgb(s.doc.accentColor), fontSize: 9 },
     styles: { fontSize: 8.5, cellPadding: 2 },

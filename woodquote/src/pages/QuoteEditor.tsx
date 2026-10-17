@@ -14,10 +14,11 @@ import { COST_GROUPS } from '../lib/pricing';
 import type { Quote, QuoteStatus } from '../lib/types';
 import { deepClone, uid } from '../lib/util';
 import { quotePdf, saveOrShare, workshopPdf } from '../pdf/pdf';
+import MaterialHub from '../components/MaterialHub';
 import { usePageShortcuts } from '../app/shortcuts';
 import { useStore } from '../store';
 
-type Tab = 'units' | 'client' | 'pricing' | 'cut' | 'materials' | 'attachments';
+type Tab = 'client' | 'design' | 'hub' | 'costing' | 'schedule' | 'report';
 
 export default function QuoteEditor() {
   const { id = '' } = useParams();
@@ -26,7 +27,7 @@ export default function QuoteEditor() {
   const { updateQuote, deleteQuote, duplicateQuote, createInvoiceFromQuote, catalog, settings } = useStore();
   const calc = useQuoteCalc(quote);
   const fmt = useMoney();
-  const [tab, setTab] = useState<Tab>('units');
+  const [tab, setTab] = useState<Tab>('design');
   const [adding, setAdding] = useState(false);
   const [addingRun, setAddingRun] = useState(false);
   const attachRef = useRef<HTMLInputElement>(null);
@@ -102,12 +103,12 @@ export default function QuoteEditor() {
           value={tab}
           onChange={setTab}
           tabs={[
-            { value: 'units', label: `Items (${calc.items.length})` },
-            { value: 'client', label: 'Client & details' },
-            { value: 'pricing', label: 'Pricing' },
-            { value: 'cut', label: 'Cut plan' },
-            { value: 'materials', label: 'Materials list' },
-            { value: 'attachments', label: `Attachments${quote.attachments.length ? ` (${quote.attachments.length})` : ''}` },
+            { value: 'client', label: 'Client details' },
+            { value: 'design', label: `Design (${calc.items.length})` },
+            { value: 'hub', label: 'Material hub' },
+            { value: 'costing', label: 'Costing' },
+            { value: 'schedule', label: 'Material schedule' },
+            { value: 'report', label: 'Reporting' },
           ]}
         />
 
@@ -122,7 +123,7 @@ export default function QuoteEditor() {
           </div>
         )}
 
-        {tab === 'units' && (
+        {tab === 'design' && (
           <div className="space-y-3">
             {calc.items.map((it) => {
               const link = it.kind === 'run' ? `/quotes/${quote.id}/runs/${it.id}` : `/quotes/${quote.id}/units/${it.id}`;
@@ -217,7 +218,7 @@ export default function QuoteEditor() {
           </div>
         )}
 
-        {tab === 'attachments' && (
+        {tab === 'design' && (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
               <button className="btn-primary" onClick={() => attachRef.current?.click()}>
@@ -315,7 +316,7 @@ export default function QuoteEditor() {
           </div>
         )}
 
-        {tab === 'pricing' && (
+        {tab === 'costing' && (
           <div className="grid gap-3 md:grid-cols-2">
             <Card title="Adjustments">
               <div className="space-y-3">
@@ -391,7 +392,34 @@ export default function QuoteEditor() {
           </div>
         )}
 
-        {tab === 'cut' && (
+        {tab === 'schedule' && (
+          <div className="space-y-3">
+            {COST_GROUPS.map((g) => {
+              const lines = calc.costLines.filter((l) => l.group === g);
+              if (!lines.length) return null;
+              return (
+                <Card key={g} title={g} actions={<span className="text-sm font-bold">{fmt(lines.reduce((a, l) => a + l.total, 0))}</span>}>
+                  <div className="divide-y divide-stone-100">
+                    {lines.map((l) => (
+                      <div key={l.key} className="flex items-center justify-between gap-3 py-2 text-sm">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{l.description}</div>
+                          <div className="text-xs text-stone-500">
+                            {l.qty} {l.unit} × {fmt(l.unitPrice)}
+                            {l.note ? ` · ${l.note}` : ''}
+                          </div>
+                        </div>
+                        <span className="font-semibold tabular-nums">{fmt(l.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })}
+            {!calc.costLines.length && <p className="p-6 text-center text-sm text-stone-500">No materials yet.</p>}
+          </div>
+        )}
+        {tab === 'schedule' && (
           <div className="space-y-3">
             <div className="card grid grid-cols-2 gap-x-6 p-4 md:grid-cols-4">
               <Row label="Sheets" value={calc.boardPlans.reduce((a, p) => a + p.sheets.length, 0)} />
@@ -435,31 +463,47 @@ export default function QuoteEditor() {
           </div>
         )}
 
-        {tab === 'materials' && (
-          <div className="space-y-3">
-            {COST_GROUPS.map((g) => {
-              const lines = calc.costLines.filter((l) => l.group === g);
-              if (!lines.length) return null;
-              return (
-                <Card key={g} title={g} actions={<span className="text-sm font-bold">{fmt(lines.reduce((a, l) => a + l.total, 0))}</span>}>
-                  <div className="divide-y divide-stone-100">
-                    {lines.map((l) => (
-                      <div key={l.key} className="flex items-center justify-between gap-3 py-2 text-sm">
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{l.description}</div>
-                          <div className="text-xs text-stone-500">
-                            {l.qty} {l.unit} × {fmt(l.unitPrice)}
-                            {l.note ? ` · ${l.note}` : ''}
-                          </div>
-                        </div>
-                        <span className="font-semibold tabular-nums">{fmt(l.total)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              );
-            })}
-            {!calc.costLines.length && <p className="p-6 text-center text-sm text-stone-500">No materials yet.</p>}
+        {tab === 'hub' && <MaterialHub quote={quote} calc={calc} catalog={catalog} up={up} />}
+
+        {tab === 'report' && (
+          <div className="grid gap-3 md:grid-cols-2">
+            <Card title="Export">
+              <div className="grid gap-2">
+                <button className="btn-primary justify-start" disabled={!!busy} onClick={() => exportPdf('quote')}>
+                  <FileDown size={16} /> {busy === 'quote' ? 'Building…' : 'Quotation PDF (client)'}
+                </button>
+                <button className="btn-secondary justify-start" disabled={!!busy || !calc.items.length} onClick={() => exportPdf('workshop')}>
+                  <Hammer size={16} /> {busy === 'workshop' ? 'Building…' : 'Workshop cut list & material schedule PDF'}
+                </button>
+                <button className="btn-secondary justify-start" disabled={!calc.items.length || !!busy} onClick={captureViews}>
+                  <Camera size={16} /> {busy === 'capture' ? 'Rendering…' : 'Add 3D render views to the PDF'}
+                </button>
+                <button className="btn-secondary justify-start" disabled={!calc.items.length} onClick={() => { const iid = createInvoiceFromQuote(quote.id); if (iid) nav(`/invoices/${iid}`); }}>
+                  <Receipt size={16} /> Create invoice from this quotation
+                </button>
+                <button className="btn-secondary justify-start" onClick={() => nav(`/quotes/${quote.id}/room`)}>
+                  <Home size={16} /> Room layout {quote.room ? '(included in PDF)' : ''}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-stone-500">Shortcut: Ctrl+P makes the quotation PDF.</p>
+            </Card>
+            <Card title="Summary">
+              <div className="space-y-1 text-sm">
+                <Row label="Items" value={calc.items.length} />
+                <Row label="Board sheets" value={calc.boardPlans.reduce((a, p) => a + p.sheets.length, 0)} />
+                <Row label="Joined parts" value={calc.joins.length} />
+                <Row label="Materials & fittings" value={fmt(calc.materialsCost - calc.appliancesCost)} />
+                <Row label="Appliances" value={fmt(calc.appliancesCost)} />
+                <Row label="Labour" value={fmt(calc.labour)} />
+                <Row label="Installation" value={fmt(calc.installation)} />
+                <Row label="Mark-up" value={fmt(calc.markup)} />
+                <Row label="Transport" value={fmt(calc.transport)} />
+                <Row label="Extras" value={fmt(calc.extras)} />
+                <Row label="Discount" value={`− ${fmt(calc.discount)}`} />
+                <Row label="Tax" value={fmt(calc.tax)} />
+                <Row label={<b>Total</b>} value={<b>{fmt(calc.total)}</b>} />
+              </div>
+            </Card>
           </div>
         )}
       </div>

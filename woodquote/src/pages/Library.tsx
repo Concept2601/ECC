@@ -79,7 +79,7 @@ function EditableList<T extends { id: string; name: string }>({
 
 type Tab = 'boards' | 'edging' | 'glass' | 'aluminium' | 'countertops' | 'accessories' | 'appliances' | 'transport';
 
-export default function Library() {
+export default function Library({ embedded = false }: { embedded?: boolean }) {
   const { catalog, updateCatalog, resetCatalog, settings, updateSettings } = useStore();
   const fmt = useMoney();
   const [tab, setTab] = useState<Tab>('boards');
@@ -96,16 +96,25 @@ export default function Library() {
 
   return (
     <div>
-      <PageHeader
-        title="Price library"
-        subtitle="Materials, accessories & services used for quoting"
-        actions={
-          <button className="btn-ghost px-2" title="Restore default library" onClick={() => confirmAction('Restore the default price library? Your edits will be lost.') && resetCatalog()}>
-            <RotateCcw size={18} />
-          </button>
-        }
-      />
-      <div className="mx-auto max-w-5xl space-y-3 p-3">
+      {!embedded && (
+        <PageHeader
+          title="Price library"
+          subtitle="Materials, accessories & services used for quoting"
+          actions={
+            <button className="btn-ghost px-2" title="Restore default library" onClick={() => confirmAction('Restore the default price library? Your edits will be lost.') && resetCatalog()}>
+              <RotateCcw size={18} />
+            </button>
+          }
+        />
+      )}
+      <div className={embedded ? 'space-y-3' : 'mx-auto max-w-5xl space-y-3 p-3'}>
+        {embedded && (
+          <div className="flex justify-end">
+            <button className="btn-ghost px-2 text-xs" onClick={() => confirmAction('Restore the default price library? Your edits will be lost.') && resetCatalog()}>
+              <RotateCcw size={14} /> Restore default prices
+            </button>
+          </div>
+        )}
         <Tabs<Tab>
           value={tab}
           onChange={setTab}

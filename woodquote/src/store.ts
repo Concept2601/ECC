@@ -8,10 +8,12 @@ import { calculateQuote } from './lib/pricing';
 import type { Catalog, Counters, Invoice, Payment, Quote, Settings } from './lib/types';
 import { addDaysISO, deepClone, todayISO, uid } from './lib/util';
 
+const mem = new Map<string, string>();
+const hasIdb = typeof indexedDB !== 'undefined';
 const idbStorage: StateStorage = {
-  getItem: async (name) => (await get<string>(name)) ?? null,
-  setItem: async (name, value) => set(name, value),
-  removeItem: async (name) => del(name),
+  getItem: async (name) => (hasIdb ? ((await get<string>(name)) ?? null) : (mem.get(name) ?? null)),
+  setItem: async (name, value) => (hasIdb ? set(name, value) : void mem.set(name, value)),
+  removeItem: async (name) => (hasIdb ? del(name) : void mem.delete(name)),
 };
 
 export interface AppData {
@@ -58,6 +60,45 @@ export function mergeCatalog(c: Partial<Catalog>): Catalog {
 export function normalizeQuote(q: any): Quote {
   return { ...q, units: (q.units ?? []).map(normalizeUnit), runs: q.runs ?? [], attachments: q.attachments ?? [], includeAppliances: q.includeAppliances ?? true, room: normalizeRoom(q.room) };
 }
+
+/**
+ * Bring data from any WoodQuote version up to date: the app's own storage,
+ * backup files, save points and Windows backup files (which wrap it in
+ * { data }). Missing settings get today's defaults; old quotes, rooms and
+ * kitchens are converted; counters never go backwards.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizeData(raw: any): AppData {
+  const p = (raw?.data && (raw.data.quotes || raw.data.settings) ? raw.data : raw ?? {}) as Partial<AppData>;
+  const d = defaultSettings();
+  const s = (p.settings ?? {}) as Partial<Settings>;
+  const quotes = (Array.isArray(p.quotes) ? p.quotes : []).map(normalizeQuote);
+  const invoices = (Array.isArray(p.invoices) ? p.invoices : []).map((i) => ({ ...i, lines: i.lines ?? [], payments: i.payments ?? [], client: i.client ?? { name: '', phone: '', email: '', address: '' } }));
+  // the running number is the last group of digits ("QUO-0012" → 12)
+  const tail = (v?: string) => Number(/(\d+)\D*$/.exec(String(v ?? ''))?.[1] ?? 0);
+  const n = (list: { number?: string }[]) => Math.max(0, ...list.map((x) => tail(x.number)));
+  const c = (p.counters ?? {}) as Partial<Counters>;
+  return {
+    settings: {
+      company: { ...d.company, ...s.company },
+      pricing: { ...d.pricing, ...s.pricing },
+      doc: { ...d.doc, ...s.doc },
+      ai: { ...d.ai, ...s.ai },
+    },
+    catalog: p.catalog ? mergeCatalog(p.catalog) : defaultCatalog(),
+    quotes,
+    invoices,
+    counters: {
+      quote: Math.max(c.quote ?? 0, n(quotes)),
+      invoice: Math.max(c.invoice ?? 0, n(invoices)),
+      receipt: Math.max(c.receipt ?? 0, ...invoices.flatMap((i) => i.payments.map((x) => tail(x.receiptNumber)))),
+    },
+  };
+}
+
+/** True when a file looks like WoodQuote data from any version. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const isWoodQuoteData = (raw: any) => !!raw && (Array.isArray(raw.quotes) || Array.isArray(raw.data?.quotes) || !!raw.settings || !!raw.data?.settings);
 
 const num = (prefix: string, n: number) => `${prefix}${String(n).padStart(4, '0')}`;
 
@@ -219,7 +260,7 @@ export const useStore = create<AppState>()(
         setState({ counters: { ...getState().counters, receipt: n } });
         return pay.id;
       },
-      importData: (d) => setState({ settings: d.settings, catalog: mergeCatalog(d.catalog), quotes: d.quotes.map(normalizeQuote), invoices: d.invoices, counters: d.counters }),
+      importData: (d) => setState(normalizeData(d)),
       resetCatalog: () => setState({ catalog: defaultCatalog() }),
     }),
     {
@@ -229,20 +270,7 @@ export const useStore = create<AppState>()(
       migrate: (state) => state as AppData,
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ settings: s.settings, catalog: s.catalog, quotes: s.quotes, invoices: s.invoices, counters: s.counters }),
-      merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<AppData>;
-        const d = defaultSettings();
-        return {
-          ...current,
-          ...p,
-          catalog: p.catalog ? mergeCatalog(p.catalog) : current.catalog,
-          quotes: (p.quotes ?? []).map(normalizeQuote),
-          // keep new default keys when the app is updated
-          settings: p.settings
-            ? { company: { ...d.company, ...p.settings.company }, pricing: { ...d.pricing, ...p.settings.pricing }, doc: { ...d.doc, ...p.settings.doc }, ai: { ...d.ai, ...p.settings.ai } }
-            : current.settings,
-        };
-      },
+      merge: (persisted, current) => ({ ...current, ...(persisted ? normalizeData(persisted) : {}) }),
       onRehydrateStorage: () => () => useStore.setState({ hydrated: true }),
     },
   ),

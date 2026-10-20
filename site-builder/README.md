@@ -17,11 +17,15 @@ The studio carries the **Think Different Visuals** brand. The logo is redrawn as
 
 | Colour | Hex | Used for |
 | --- | --- | --- |
-| Brand blue | `#1B4374` | the D, “Different”, primary buttons |
-| Brand orange | `#E8983F` | the stem, “Think”, accents and highlights |
-| Brand navy | `#2F3557` | “VISUALS” |
+| Navy | `#1B4374` | the D and “Different”, primary buttons and fills |
+| Indigo navy | `#2E3660` | “VISUALS”, the Midnight profile |
+| Orange | `#E8983F` | the stem and “Think”, accents and highlights |
 
-The colour profile button (the dot in the top bar) switches between **Signature** (blue with orange), **Sunrise** (orange with blue), **Midnight** (navy with orange) and **Noir** (monochrome with brand accents). Each profile works in **Auto / Light / Dark** mode, and your choice is saved in the browser. In dark mode the blues are lifted and link shades are adjusted so text stays readable (WCAG AA). The logo mark itself always keeps its original colours.
+All blues in the studio are these two navies. In dark mode, where navy text would be unreadable, highlights switch to orange instead of using a lighter blue.
+
+**Brand spectrum.** The rainbow effect, done in brand colours, running light to dark: sand `#F6C886` → orange `#E8983F` → copper `#C8742B` → indigo `#2E3660` → navy `#1B4374` → deep navy `#0F2A4D`. It appears as the six-stripe band at the top of the landing page and under the top bar, on the gradient ring around the Launch buttons, the workspace step badges (two stripes each) and the feature tiles. Gradient text on black uses the warm half, because navy text on black would disappear.
+
+The colour profile button (the dot in the top bar) switches between **Signature** (navy with orange), **Sunrise** (orange with navy), **Midnight** (indigo navy with orange) and **Noir** (monochrome with brand accents), each in **Auto / Light / Dark** mode.
 
 Brand files in `public/brand/`: `tdv-mark.svg` (vector mark), `tdv-logo.png` (full logo on a transparent background, for light pages) and `tdv-logo-on-black.jpg` (the original artwork, cropped). For your own website, upload the PNG as the site logo in Back-End → Site settings, and start from the *Think Different Visuals* inspiration or the *TDV* palettes under Design → Theme.
 

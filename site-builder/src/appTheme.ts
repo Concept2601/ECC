@@ -10,15 +10,13 @@ export interface Profile {
   /** Hue used for links, active states and focus rings. */
   color: string;
   accent: string;
-  /** Fill used in dark mode, where the deep brand blues would disappear. */
-  darkFill?: string;
 }
 
 /** Colour profiles built from the Think Different Visuals palette. */
 export const PROFILES: Profile[] = [
-  { id: 'signature', name: 'Signature', fill: BRAND.blue, color: BRAND.blue, accent: BRAND.orange, darkFill: '#2b5c99' },
+  { id: 'signature', name: 'Signature', fill: BRAND.blue, color: BRAND.blue, accent: BRAND.orange },
   { id: 'sunrise', name: 'Sunrise', fill: BRAND.orange, color: BRAND.orange, accent: BRAND.blue },
-  { id: 'midnight', name: 'Midnight', fill: BRAND.navy, color: BRAND.navy, accent: BRAND.orange, darkFill: '#4a5390' },
+  { id: 'midnight', name: 'Midnight', fill: BRAND.navy, color: BRAND.navy, accent: BRAND.orange },
   { id: 'noir', name: 'Noir', fill: 'ink', color: BRAND.blue, accent: BRAND.orange },
 ];
 
@@ -57,12 +55,15 @@ export function applyTheme(t: AppTheme) {
   const p = PROFILES.find((x) => x.id === t.profile) ?? PROFILES[0];
   const panel = PANEL[scheme];
   const root = document.documentElement;
-  const fill = p.fill === 'ink' ? INK[scheme] : dark && p.darkFill ? p.darkFill : p.fill;
+  const fill = p.fill === 'ink' ? INK[scheme] : p.fill;
+  // The brand navies are too dark to read as text on a dark UI; there, text highlights use the orange
+  // instead of a lightened (off-brand) blue, while fills and tints stay navy.
+  const hue = dark && contrastRatio(p.color, panel) < 3 ? p.accent : p.color;
   const vars: Record<string, string> = {
-    '--brand': textSafe(p.color, panel, dark),
+    '--brand': textSafe(hue, panel, dark),
     '--brand-fill': fill,
     '--brand-ink': readableOn(fill),
-    '--brand-soft': mix(p.color, panel, dark ? 0.75 : 0.88),
+    '--brand-soft': mix(p.color, panel, dark ? 0.45 : 0.88),
     '--accent': p.accent,
     '--accent-text': textSafe(p.accent, panel, dark),
   };

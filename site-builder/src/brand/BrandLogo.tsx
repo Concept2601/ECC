@@ -4,7 +4,9 @@ export const BRAND = {
   name: 'Think Different Visuals',
   blue: '#1B4374',
   orange: '#E8983F',
-  navy: '#2F3557',
+  navy: '#2E3660',
+  /** Brand spectrum: the rainbow effect in brand colours, light to dark (sand → orange → copper → indigo → navy → deep navy). */
+  spectrum: ['#F6C886', '#E8983F', '#C8742B', '#2E3660', '#1B4374', '#0F2A4D'],
 } as const;
 
 const D_PATH = 'M2 2H178C222 2 250 36 250 80C250 126 220 159 176 159H137V127H178C200 127 215 106 215 80C215 56 200 39 178 39H2Z';

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { sanitizeHtml } from '../lib/sanitize';
+import { askText } from './dialog';
 
 type Cmd = { cmd: string; arg?: string; label: string; title: string };
 
@@ -33,12 +34,18 @@ export function RichText({ value, onChange, label, minHeight = 120 }: { value: s
     if (el && el.innerHTML !== value && document.activeElement !== el) el.innerHTML = value;
   }, [value, mode]);
 
-  const run = (t: Cmd) => {
+  const run = async (t: Cmd) => {
     ref.current?.focus();
     if (t.cmd === 'createLink') {
-      const url = window.prompt('Link URL (https://…, /page, mailto:, tel:)', 'https://');
-      if (!url) return;
-      document.execCommand('createLink', false, url);
+      // The dialog takes focus, so remember the selection and put it back afterwards.
+      const sel = window.getSelection();
+      const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+      const url = await askText({ title: 'Add link', message: 'Paste a web address, a page like /contact, or mailto: / tel:.', defaultValue: 'https://', confirmLabel: 'Add link' });
+      if (!url || !range) return;
+      ref.current?.focus();
+      sel!.removeAllRanges();
+      sel!.addRange(range);
+      document.execCommand('createLink', false, url.trim());
     } else document.execCommand(t.cmd, false, t.arg);
     emit();
   };

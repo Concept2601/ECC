@@ -6,6 +6,7 @@ import { usedMedia } from '../../lib/render';
 import { dataUrlBytes, formatBytes } from '../../lib/util';
 import { Badge, Card, Empty, PageHead, Segmented } from '../../components/ui';
 import type { MediaAsset, Site } from '../../types';
+import { ask } from '../../components/dialog';
 
 function usage(site: Site): Map<string, string[]> {
   const map = new Map<string, string[]>();
@@ -45,9 +46,9 @@ export function MediaTab() {
 
   const setAsset = (id: string, patch: Partial<MediaAsset>) => update((d) => { Object.assign(d.media.find((m) => m.id === id)!, patch); }, `media-${id}`);
 
-  const remove = (m: MediaAsset) => {
+  const remove = async (m: MediaAsset) => {
     const where = used.get(m.id);
-    if (where && !window.confirm(`“${m.name}” is used on: ${where.join(', ')}. Delete anyway?`)) return;
+    if (where && !(await ask({ title: 'Delete file?', message: `“${m.name}” is used on: ${[...new Set(where)].join(', ')}.`, confirmLabel: 'Delete', danger: true }))) return;
     update((d) => {
       d.media = d.media.filter((x) => x.id !== m.id);
       const clear = (o: { mediaId?: string }) => { if (o.mediaId === m.id) o.mediaId = undefined; };

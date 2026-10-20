@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Site, Version } from './types';
 import { deleteSite, listSites, saveSite } from './lib/storage';
 import { clone, uid } from './lib/util';
+import { DEMO } from './demo';
+import { INSPIRATIONS, siteFromInspiration } from './lib/inspirations';
 
 type Updater = (draft: Site) => void;
 
@@ -45,10 +47,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     listSites()
-      .then((s) => setSites(s.sort((a, b) => b.updatedAt - a.updatedAt)))
-      .catch(() => setSites([]))
+      .catch(() => [] as Site[])
+      .then(async (s) => {
+        // The preview edition opens on a ready-made project instead of an empty dashboard.
+        if (DEMO && s.length === 0) {
+          const insp = INSPIRATIONS.find((i) => i.id === 'think-different-visuals') ?? INSPIRATIONS[0];
+          const sample = siteFromInspiration(insp, 'TDV Portfolio (sample)');
+          sample.hosting.slug = 'tdv-portfolio';
+          await saveSite(sample).catch(() => {});
+          s = [sample];
+        }
+        setSites(s.sort((a, b) => b.updatedAt - a.updatedAt));
+      })
       .finally(() => setLoaded(true));
   }, []);
+
 
   const site = sites.find((s) => s.id === openId);
   // Latest site, so several updates in one tick build on each other.
@@ -60,6 +73,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setToasts((t) => [...t, { id, msg, kind }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
   }, []);
+
+  useEffect(() => {
+    const on = (e: Event) => {
+      const { msg, kind } = (e as CustomEvent<{ msg: string; kind: 'ok' | 'err' }>).detail;
+      toast(msg, kind);
+    };
+    window.addEventListener('tdv-notice', on);
+    return () => window.removeEventListener('tdv-notice', on);
+  }, [toast]);
 
   const persist = useCallback((s: Site) => {
     setSaving('saving');

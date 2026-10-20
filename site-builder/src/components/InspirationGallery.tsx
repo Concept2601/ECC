@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { INSPIRATIONS, type Inspiration, type InspectResult } from '../lib/inspirations';
 import { readableOn } from '../lib/color';
 import { DEFAULT_THEME } from '../lib/defaults';
+import { DEMO, DEMO_NOTE } from '../demo';
 
 export function InspirationCard({ insp, onUse, actionLabel = 'Use this' }: { insp: Inspiration; onUse: (i: Inspiration) => void; actionLabel?: string }) {
   const t = { ...DEFAULT_THEME, ...insp.theme };
@@ -67,7 +68,7 @@ export function UrlInspector({ onResult, serverUrl = '' }: { onResult: (r: Inspe
       if (!res.ok) throw new Error(json.error ?? 'Analysis failed');
       setResult(json);
     } catch (err) {
-      setError((err as Error).message === 'Failed to fetch' ? 'The studio server is not reachable. Start it with `npm run dev`.' : (err as Error).message);
+      setError(DEMO ? `Analysing a live website ${DEMO_NOTE} Try the curated inspirations instead.` : (err as Error).message === 'Failed to fetch' ? 'The studio server is not reachable. Start it with `npm run dev`.' : (err as Error).message);
     } finally {
       setBusy(false);
     }

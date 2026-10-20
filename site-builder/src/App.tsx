@@ -4,6 +4,7 @@ import { Landing } from './pages/Landing';
 import { Projects } from './pages/Projects';
 import { Studio } from './pages/Studio';
 import { FullPreview } from './pages/FullPreview';
+import { DialogHost } from './components/dialog';
 
 function Toasts() {
   const { toasts } = useStore();
@@ -35,6 +36,7 @@ export default function App() {
     <StoreProvider>
       <Routes />
       <Toasts />
+      <DialogHost />
     </StoreProvider>
   );
 }

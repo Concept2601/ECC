@@ -6,6 +6,7 @@ import { downloadBlob } from '../../lib/storage';
 import { formatBytes, slugify } from '../../lib/util';
 import { Card, PageHead } from '../../components/ui';
 import type { Site } from '../../types';
+import { ask } from '../../components/dialog';
 
 export function ExportTab() {
   const { site, update, snapshot, toast } = useSite();
@@ -18,7 +19,7 @@ export function ExportTab() {
     try {
       const data = JSON.parse(await file.text()) as Site;
       if (!data.pages || !data.theme) throw new Error('Not a studio backup file.');
-      if (!window.confirm(`Replace this project with “${data.name}” from the backup? Current work is saved as a version first.`)) return;
+      if (!(await ask({ title: 'Restore backup?', message: `Replace this project with “${data.name}” from the backup? Your current work is saved as a version first.`, confirmLabel: 'Restore' }))) return;
       snapshot('Before backup restore');
       update((d) => {
         const keep = { id: d.id, versions: d.versions, deployments: d.deployments };

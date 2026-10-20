@@ -32,8 +32,9 @@ export const href = (r: Route) => {
   }
 };
 
+/** Full-screen preview inside the app (new tabs are blocked in embedded viewers). */
 export function openPreview(siteId: string, pageId?: string) {
-  window.open(href({ name: 'preview', siteId, pageId }), '_blank');
+  go({ name: 'preview', siteId, pageId });
 }
 
 export const go = (r: Route) => {

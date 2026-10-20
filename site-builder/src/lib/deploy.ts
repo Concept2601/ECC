@@ -3,6 +3,7 @@ import { buildSite, filesSize, primaryDomain, type SiteFiles } from './render';
 import { createZip } from './zip';
 import { downloadBlob } from './storage';
 import { slugify } from './util';
+import { DEMO, DEMO_NOTE } from '../demo';
 
 export interface DeployResult {
   url?: string;
@@ -47,6 +48,7 @@ export async function deploy(site: Site, log: Log): Promise<DeployResult> {
   const files = buildSite(site, baseUrl);
   const bytes = filesSize(files);
   log(`Built ${Object.keys(files).length} files (${(bytes / 1024).toFixed(0)} KB).`);
+  if (DEMO) throw new Error(`Your site built successfully. Publishing it ${DEMO_NOTE}`);
 
   if (h.provider === 'zip') {
     const zip = createZip(files);

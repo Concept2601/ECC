@@ -3,6 +3,7 @@ import { useSite } from '../../store';
 import type { Site } from '../../types';
 import { Badge, Card, Empty, PageHead } from '../../components/ui';
 import { formatBytes, timeAgo } from '../../lib/util';
+import { ask } from '../../components/dialog';
 
 export function VersionsTab() {
   const { site, snapshot, restore, update, toast } = useSite();
@@ -39,7 +40,7 @@ export function VersionsTab() {
                     <p className="tiny muted">{timeAgo(v.at)} · {data.pages.length} pages · {data.media.length} media · {formatBytes(v.snapshot.length)}</p>
                   </div>
                   <div className="row">
-                    <button className="btn sm ghost" onClick={() => window.confirm(`Restore “${v.label}”? Your current work is saved as a version first.`) && (snapshot('Before restore'), restore(v))}>Restore</button>
+                    <button className="btn sm ghost" onClick={async () => { if (await ask({ title: 'Restore version?', message: `Restore “${v.label}”? Your current work is saved as a version first.`, confirmLabel: 'Restore' })) { snapshot('Before restore'); restore(v); } }}>Restore</button>
                     <button className="icon-btn sm danger" aria-label="Delete version" onClick={() => update((d) => { d.versions = d.versions.filter((x) => x.id !== v.id); })}>✕</button>
                   </div>
                 </li>

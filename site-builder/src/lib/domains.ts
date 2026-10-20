@@ -1,4 +1,5 @@
 import type { DomainRecord, Site } from '../types';
+import { DEMO, DEMO_NOTE } from '../demo';
 
 export interface DnsRecord {
   type: 'A' | 'CNAME' | 'TXT';
@@ -79,6 +80,7 @@ export async function verifyDomain(site: Site, d: DomainRecord): Promise<Pick<Do
     const ok = results.every((r) => r.ok);
     return { status: ok ? 'verified' : 'pending', message: results.map((r) => r.msg).join(' · ') + (ok ? '' : ' — DNS changes can take up to 48 h.'), lastChecked: Date.now() };
   } catch (err) {
-    return { status: 'failed', message: (err as Error).message, lastChecked: Date.now() };
+    const msg = (err as Error).message;
+    return { status: 'failed', message: msg === 'Failed to fetch' ? `Could not reach the DNS checker. Live DNS checks ${DEMO ? DEMO_NOTE : 'need an internet connection.'}` : msg, lastChecked: Date.now() };
   }
 }

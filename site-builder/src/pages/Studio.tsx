@@ -20,6 +20,7 @@ import { GrowthTab } from '../tabs/delivery/Growth';
 import { ExportTab } from '../tabs/delivery/Export';
 import { ThemeMenu } from '../components/ThemeMenu';
 import { BrandMark } from '../brand/BrandLogo';
+import { DemoBanner } from '../components/DemoBanner';
 
 interface TabDef {
   id: string;
@@ -125,6 +126,7 @@ export function Studio({ siteId, area, tab }: { siteId: string; area: Area; tab:
           <a className="btn sm launch" href={href({ name: 'studio', siteId, area: 'delivery', tab: 'launch' })}>🚀 Launch</a>
         </div>
       </header>
+      <DemoBanner />
       <div className="studio-body">
         <nav className="sidenav" aria-label={`${def.label} sections`}>
           <p className="sidenav-title">{def.label}</p>

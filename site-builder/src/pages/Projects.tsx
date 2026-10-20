@@ -10,6 +10,8 @@ import { BrandLogo } from '../brand/BrandLogo';
 import { downloadBlob } from '../lib/storage';
 import { clone, slugify, timeAgo, uid } from '../lib/util';
 import type { Site } from '../types';
+import { ask } from '../components/dialog';
+import { DemoBanner } from '../components/DemoBanner';
 
 function NewSite({ onClose }: { onClose: () => void }) {
   const { create } = useStore();
@@ -99,6 +101,7 @@ export function Projects() {
           <button className="btn" onClick={() => setCreating(true)}>＋ New website</button>
         </div>
       </header>
+      <DemoBanner />
       <main className="projects-main">
         <h1>Your websites</h1>
         {!loaded ? (
@@ -130,7 +133,7 @@ export function Projects() {
                       <a className="btn sm" href={href({ name: 'studio', siteId: s.id, area: 'frontend', tab: 'design' })}>Edit</a>
                       <button className="btn sm ghost" onClick={() => duplicate(s)}>Duplicate</button>
                       <button className="btn sm ghost" onClick={() => downloadBlob(JSON.stringify(s), `${slugify(s.name)}-backup.json`, 'application/json')}>Backup</button>
-                      <button className="btn sm ghost danger" onClick={() => window.confirm(`Delete “${s.name}”? This cannot be undone.`) && remove(s.id)}>Delete</button>
+                      <button className="btn sm ghost danger" onClick={async () => { if (await ask({ title: 'Delete website?', message: `Delete “${s.name}”? This cannot be undone.`, confirmLabel: 'Delete', danger: true })) remove(s.id); }}>Delete</button>
                     </div>
                   </div>
                 </article>

@@ -19,7 +19,8 @@ export function FullPreview({ siteId, pageId }: { siteId: string; pageId?: strin
   return (
     <div className="full-preview">
       <header className="topbar">
-        <strong className="ellipsis">{site.name} — preview</strong>
+        <button className="btn ghost sm" onClick={() => go({ name: 'studio', siteId, area: 'frontend', tab: 'design' })}>← Back to editor</button>
+        <strong className="ellipsis hide-sm">{site.name} — preview</strong>
         <select value={page.id} onChange={(e) => go({ name: 'preview', siteId, pageId: e.target.value })} aria-label="Page">
           {site.pages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>

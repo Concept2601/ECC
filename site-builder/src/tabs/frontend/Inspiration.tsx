@@ -6,6 +6,7 @@ import { Card, Modal, PageHead } from '../../components/ui';
 import { DEFAULT_THEME } from '../../lib/defaults';
 import { slugify } from '../../lib/util';
 import type { Page, Site } from '../../types';
+import { ask } from '../../components/dialog';
 
 type Pending = { label: string; from: Site };
 
@@ -39,8 +40,8 @@ export function InspirationTab() {
     setPending(undefined);
   };
 
-  const replaceAll = (from: Site) => {
-    if (!window.confirm('Replace all pages, menus and theme with this inspiration? (You can undo or restore a version.)')) return;
+  const replaceAll = async (from: Site) => {
+    if (!(await ask({ title: 'Replace everything?', message: 'Replace all pages, menus and theme with this inspiration? You can undo, or restore a version.', confirmLabel: 'Replace', danger: true }))) return;
     update((d) => {
       d.theme = from.theme;
       d.pages = from.pages;

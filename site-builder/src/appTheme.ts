@@ -47,7 +47,12 @@ export function loadTheme(): AppTheme {
   return { profile: 'signature', mode: 'auto' };
 }
 
-const prefersDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+const prefersDark = () => {
+  // An embedding viewer may force its theme on the root element.
+  const forced = document.documentElement.dataset.theme;
+  if (forced === 'dark' || forced === 'light') return forced === 'dark';
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+};
 
 export function applyTheme(t: AppTheme) {
   const dark = t.mode === 'dark' || (t.mode === 'auto' && prefersDark());
@@ -86,7 +91,12 @@ export function useAppTheme() {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const on = () => applyTheme(theme);
     mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
+    const mo = new MutationObserver(on);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => {
+      mq.removeEventListener('change', on);
+      mo.disconnect();
+    };
   }, [theme]);
   return [theme, setTheme] as const;
 }

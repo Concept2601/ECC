@@ -6,6 +6,7 @@ import { createBlock } from '../../lib/blocks';
 import { clone, slugify, uid } from '../../lib/util';
 import { Card, Modal, PageHead, Text } from '../../components/ui';
 import { openPreview } from '../../router';
+import { ask } from '../../components/dialog';
 
 const legal = (title: string, site: Site) =>
   `<p>Last updated: ${new Date().toLocaleDateString()}</p><h2>Who we are</h2><p>${site.seo.siteName} operates this website. Contact us via our contact page with any questions about this ${title.toLowerCase()}.</p><h2>Information we collect</h2><p>We collect the details you submit through our forms (such as your name, email and message) and anonymous usage data if analytics is enabled.</p><h2>How we use it</h2><p>To respond to enquiries, provide our services and improve this website. We never sell your personal data.</p><h2>Your rights</h2><p>You may request access to, correction of, or deletion of your personal data at any time.</p><p><em>This is a starting template — have it reviewed for your jurisdiction.</em></p>`;
@@ -133,8 +134,8 @@ export function PagesTab() {
       Object.assign(p, patch);
     }, `page-${id}-${Object.keys(patch).join()}`);
 
-  const removePage = (p: Page) => {
-    if (!window.confirm(`Delete page “${p.name}”?`)) return;
+  const removePage = async (p: Page) => {
+    if (!(await ask({ title: 'Delete page?', message: `Delete “${p.name}” and remove it from the menus?`, confirmLabel: 'Delete', danger: true }))) return;
     update((d) => {
       d.pages = d.pages.filter((x) => x.id !== p.id);
       const strip = (list: MenuItem[]): MenuItem[] => list.filter((m) => m.pageId !== p.id).map((m) => ({ ...m, children: m.children && strip(m.children) }));

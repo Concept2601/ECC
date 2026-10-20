@@ -1,4 +1,5 @@
 import type { Site } from '../types';
+import { DEMO, DEMO_NOTE, notify } from '../demo';
 
 // Projects live in IndexedDB: media is stored inline as data URLs, which quickly
 // outgrows localStorage's ~5 MB limit.
@@ -29,6 +30,10 @@ export const saveSite = (site: Site) => tx('readwrite', (s) => s.put(site));
 export const deleteSite = (id: string) => tx('readwrite', (s) => s.delete(id));
 
 export function downloadBlob(data: BlobPart, filename: string, type: string) {
+  if (DEMO) {
+    notify(`Downloading ${filename} ${DEMO_NOTE}`);
+    return;
+  }
   const url = URL.createObjectURL(new Blob([data], { type }));
   const a = document.createElement('a');
   a.href = url;

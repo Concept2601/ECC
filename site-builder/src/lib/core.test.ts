@@ -23,7 +23,7 @@ describe('sanitizeHtml', () => {
 });
 
 describe('render', () => {
-  const site = siteFromInspiration(INSPIRATIONS[0], 'Acme');
+  const site = siteFromInspiration(INSPIRATIONS.find((i) => i.id === 'saas-minimal')!, 'Acme');
   site.domains.domains.push({ id: 'd', host: 'acme.com', primary: true, status: 'verified' });
 
   it('builds every page, 404, robots, sitemap and headers', () => {

@@ -1,5 +1,7 @@
 import { href } from '../router';
 
+const SPECTRUM = ['#61BB46', '#FDB827', '#F5821F', '#E03A3E', '#963D97', '#009DDC'];
+
 const FEATURES = [
   { icon: '✦', title: 'Design from inspiration', text: 'Start from curated layouts inspired by world-class sites, or paste any URL and we extract its palette, fonts and structure.' },
   { icon: '✎', title: 'Visual editor', text: 'Click any section to edit it. Rich text, image and video uploads, drag-free reordering and a live desktop/tablet/mobile preview.' },
@@ -24,6 +26,7 @@ const jump = (id: string) => (e: React.MouseEvent) => {
 export function Landing() {
   return (
     <div className="landing">
+      <div className="l-stripes" aria-hidden="true">{SPECTRUM.map((c) => <i key={c} style={{ background: c }} />)}</div>
       <header className="l-nav">
         <a className="l-brand" href="#/"><img src="/favicon.svg" alt="" width="32" height="32" />Launchpad Studio</a>
         <nav aria-label="Main">
@@ -37,7 +40,7 @@ export function Landing() {
         <section className="l-hero">
           <div className="l-wrap">
             <p className="l-eyebrow">Design · Optimise · Host · Launch</p>
-            <h1>Turn website inspiration into a launch-ready site.</h1>
+            <h1>Inspiration in.<br /><span className="l-rainbow">Launch-ready</span> out.</h1>
             <p className="l-lead">Launchpad Studio is a complete website module: design from sites you love, polish every page with a visual editor, and ship to your own domain with SEO and performance handled for you.</p>
             <div className="l-actions">
               <a className="btn lg" href={href({ name: 'projects' })}>Start building — it’s free</a>
@@ -67,8 +70,8 @@ export function Landing() {
           <div className="l-wrap">
             <h2>Everything to go from idea to live website</h2>
             <div className="l-grid">
-              {FEATURES.map((f) => (
-                <article key={f.title} className="l-card">
+              {FEATURES.map((f, i) => (
+                <article key={f.title} className="l-card" style={{ '--c': SPECTRUM[i % SPECTRUM.length] } as React.CSSProperties}>
                   <span className="l-icon" aria-hidden="true">{f.icon}</span>
                   <h3>{f.title}</h3>
                   <p>{f.text}</p>
@@ -83,7 +86,7 @@ export function Landing() {
             <h2>Three workspaces. One clear path to launch.</h2>
             <div className="l-steps">
               {STEPS.map((s, i) => (
-                <article key={s.area} className="l-step">
+                <article key={s.area} className="l-step" style={{ '--g': `linear-gradient(135deg, ${SPECTRUM[i * 2]}, ${SPECTRUM[i * 2 + 1]})` } as React.CSSProperties}>
                   <span className="l-step-n">{i + 1}</span>
                   <h3>{s.area}</h3>
                   <ul>{s.items.map((it) => <li key={it}>{it}</li>)}</ul>
@@ -95,7 +98,7 @@ export function Landing() {
 
         <section className="l-section l-cta">
           <div className="l-wrap">
-            <h2>Your next website is one launch away.</h2>
+            <h2>Think different. <span className="l-rainbow">Launch</span> different.</h2>
             <p>No lock-in: export clean static HTML any time.</p>
             <a className="btn lg light" href={href({ name: 'projects' })}>Open Launchpad Studio</a>
           </div>

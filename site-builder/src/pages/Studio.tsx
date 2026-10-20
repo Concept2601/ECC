@@ -18,6 +18,7 @@ import { LaunchTab } from '../tabs/delivery/Launch';
 import { VersionsTab } from '../tabs/delivery/Versions';
 import { GrowthTab } from '../tabs/delivery/Growth';
 import { ExportTab } from '../tabs/delivery/Export';
+import { ThemeMenu } from '../components/ThemeMenu';
 
 interface TabDef {
   id: string;
@@ -112,6 +113,7 @@ export function Studio({ siteId, area, tab }: { siteId: string; area: Area; tab:
           ))}
         </nav>
         <div className="row">
+          <ThemeMenu />
           <button className="icon-btn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
           <button className="icon-btn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
           <a className="health" href={href({ name: 'studio', siteId, area: 'delivery', tab: 'checklist' })} title="Site health (SEO, speed, accessibility)">

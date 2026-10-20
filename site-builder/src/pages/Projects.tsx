@@ -5,6 +5,7 @@ import { createSite } from '../lib/defaults';
 import { siteFromInspection, siteFromInspiration, type Inspiration, type InspectResult } from '../lib/inspirations';
 import { InspirationGallery, UrlInspector } from '../components/InspirationGallery';
 import { Badge, Empty, Modal, Segmented } from '../components/ui';
+import { ThemeMenu } from '../components/ThemeMenu';
 import { downloadBlob } from '../lib/storage';
 import { clone, slugify, timeAgo, uid } from '../lib/util';
 import type { Site } from '../types';
@@ -91,6 +92,7 @@ export function Projects() {
       <header className="topbar">
         <a className="brand" href={href({ name: 'landing' })}><img src="/favicon.svg" alt="" width="28" height="28" /> Launchpad Studio</a>
         <div className="row">
+          <ThemeMenu />
           <input ref={fileInput} type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && importBackup(e.target.files[0])} />
           <button className="btn ghost" onClick={() => fileInput.current?.click()}>Import backup</button>
           <button className="btn" onClick={() => setCreating(true)}>＋ New website</button>

@@ -22,6 +22,31 @@ export interface Inspiration {
 
 export const INSPIRATIONS: Inspiration[] = [
   {
+    id: 'think-different',
+    name: 'Think Different',
+    category: 'Software & Startups',
+    description: 'Bold, minimal product launch: black hero, giant type, monochrome buttons and spectrum accents.',
+    inspiredBy: 'Classic keynote-style product pages',
+    theme: { primary: '#1d1d1f', accent: '#009ddc', background: '#ffffff', surface: '#f5f5f7', text: '#1d1d1f', muted: '#6e6e73', dark: '#000000', headingFont: 'Inter', bodyFont: 'Inter', headingWeight: 800, radius: 20, buttonStyle: 'pill', maxWidth: 1080 },
+    pages: [
+      {
+        name: 'Home',
+        slug: '',
+        description: 'Here’s to the ones who see things differently. Meet the product that changes everything.',
+        blocks: [
+          ['hero', { tone: 'dark', layout: 'stacked', align: 'center', eyebrow: 'Introducing', heading: 'Think different.', body: '<p>Here’s to the ones who see things differently. A product made for the crazy ones.</p>', ctaLabel: 'Pre-order', ctaLink: '#pricing', secondaryLabel: 'Watch the film', secondaryLink: '#features', spacing: 'lg' }],
+          ['features', { heading: 'Designed to be different', align: 'center', columns: 3 }],
+          ['video', { heading: 'See it move', tone: 'dark' }],
+          ['stats', { tone: 'default' }],
+          ['pricing', { heading: 'Pick yours', align: 'center' }],
+          ['cta', { tone: 'dark', heading: 'The future is yours to make.', ctaLabel: 'Get started' }],
+        ],
+      },
+      { name: 'Story', blocks: [['richtext', { heading: 'Our story', spacing: 'lg', align: 'center' }], ['team', { heading: 'The crazy ones' }]] },
+      { name: 'Contact', blocks: [['contact', { spacing: 'lg' }]] },
+    ],
+  },
+  {
     id: 'saas-minimal',
     name: 'Minimal SaaS',
     category: 'Software & Startups',

@@ -11,6 +11,16 @@ npm run build && npm start   # production: one Node process on :8787 serves the 
 
 Node 18+ is required. The server has no runtime dependencies.
 
+## Look & feel
+
+The studio uses a sleek **Think Different** style: a minimal black-and-white base with the six-colour spectrum (green `#61BB46`, yellow `#FDB827`, orange `#F5821F`, red `#E03A3E`, purple `#963D97`, blue `#009DDC`). The colour profile button (the dot in the top bar) offers:
+
+- **Spectrum** (default): monochrome buttons with rainbow details, including the top-bar stripe, a gradient step badge for each workspace and spectrum-ringed Launch buttons.
+- **Green, Yellow, Orange, Red, Purple, Blue**: single-colour profiles. Link and text shades are adjusted automatically so they stay readable (WCAG AA).
+- **Auto / Light / Dark** appearance, saved in your browser.
+
+Sites you build can use the same style: pick the *Think Different* inspiration, or the *Think Different* and *Spectrum* palettes under Design → Theme.
+
 ## What's inside
 
 The landing page (`#/`) introduces the module. **Open studio** leads to the projects dashboard, where you create a site from a curated inspiration, from the URL of a site you like, or from a blank page. Each project then opens in three workspaces:

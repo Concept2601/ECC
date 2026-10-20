@@ -60,7 +60,7 @@ export function DomainsTab() {
       </Card>
 
       {site.hosting.provider === 'self' && (
-        <Card title="DNS targets" subtitle="Where your Launchpad server is reachable on the internet.">
+        <Card title="DNS targets" subtitle="Where your TDV hosting server is reachable on the internet.">
           <div className="grid2">
             <Text label="Server public IPv4" value={dom.targetIp} onChange={(v) => update((d) => { d.domains.targetIp = v.trim(); }, 'dns-ip')} placeholder="203.0.113.10" />
             <Text label="CNAME target (optional)" value={dom.targetCname} onChange={(v) => update((d) => { d.domains.targetCname = v.trim(); }, 'dns-cname')} placeholder="hosting.yourcompany.com" hint="Used for subdomains like www." />

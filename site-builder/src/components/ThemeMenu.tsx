@@ -24,7 +24,7 @@ export function ThemeMenu() {
   return (
     <div className="theme-menu" ref={ref}>
       <button className="icon-btn" aria-label="Colour profile" aria-expanded={open} title="Colour profile" onClick={() => setOpen(!open)}>
-        <span className={`profile-dot p-${theme.profile}`} />
+        <span className="profile-dot" />
       </button>
       {open && (
         <div className="theme-pop" role="dialog" aria-label="Colour profile">
@@ -32,7 +32,7 @@ export function ThemeMenu() {
           <div className="profile-grid" role="radiogroup">
             {PROFILES.map((p) => (
               <button key={p.id} role="radio" aria-checked={theme.profile === p.id} className={`profile${theme.profile === p.id ? ' on' : ''}`} onClick={() => setTheme({ ...theme, profile: p.id })}>
-                <span className={`profile-dot lg p-${p.id}`} style={p.id === 'spectrum' ? undefined : { background: p.color }} />
+                <span className="profile-dot lg" style={{ background: `linear-gradient(135deg, ${p.fill === 'ink' ? '#111827' : p.fill} 0 58%, ${p.accent} 58%)` }} />
                 {p.name}
               </button>
             ))}

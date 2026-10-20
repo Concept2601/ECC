@@ -3,4 +3,4 @@ The agent harness performance optimization system. Skills, instincts, memory, se
 
 ## Modules
 
-- [`site-builder/`](site-builder/README.md) — **Launchpad Studio**: design websites from inspirations, optimise them, then host, connect domains and launch them (Front-End · Back-End · Delivery).
+- [`site-builder/`](site-builder/README.md) — **Think Different Visuals Studio**: design websites from inspirations, optimise them, then host, connect domains and launch them (Front-End · Back-End · Delivery).

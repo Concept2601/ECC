@@ -6,7 +6,7 @@ import type { HostingProvider, HostingSettings } from '../../types';
 import { Badge, Card, PageHead, Select, Text, Toggle } from '../../components/ui';
 
 const PROVIDERS: { id: HostingProvider; title: string; text: string; badge: string }[] = [
-  { id: 'self', title: 'Launchpad server', text: 'Host on the bundled Node server (your VPS, cloud VM or this machine). Custom domains, forms inbox, password protection and redirects included.', badge: 'Recommended' },
+  { id: 'self', title: 'TDV hosting server', text: 'Host on the bundled Node server (your VPS, cloud VM or this machine). Custom domains, forms inbox, password protection and redirects included.', badge: 'Recommended' },
   { id: 'netlify', title: 'Netlify', text: 'Global CDN with automatic HTTPS. Deploys only changed files. Needs a free Netlify access token.', badge: 'CDN' },
   { id: 'zip', title: 'Any host (ZIP)', text: 'Download clean static files for cPanel, GitHub Pages, Cloudflare Pages, S3 or any web server.', badge: 'Portable' },
 ];
@@ -43,7 +43,7 @@ export function HostingTab() {
 
       {h.provider === 'self' && (
         <Card
-          title="Launchpad server"
+          title="TDV hosting server"
           subtitle="The server that publishes and serves your site."
           actions={<button className="btn sm ghost" onClick={check} disabled={checking}>{checking ? 'Checking…' : 'Test connection'}</button>}
         >
@@ -60,12 +60,12 @@ export function HostingTab() {
       )}
 
       {h.provider === 'netlify' && (
-        <Card title="Netlify" subtitle="Deploys go through your Launchpad server so your token never touches third-party scripts.">
+        <Card title="Netlify" subtitle="Deploys go through your TDV hosting server so your token never touches third-party scripts.">
           <div className="grid2">
             <Text label="Personal access token" type="password" value={h.netlifyToken} onChange={(v) => set('netlifyToken', v.trim())} hint={<a href="https://app.netlify.com/user/applications#personal-access-tokens" target="_blank" rel="noopener">Create a token ↗</a>} />
             <Text label="Netlify site ID" value={h.netlifySiteId} onChange={(v) => set('netlifySiteId', v.trim())} hint="Filled in automatically after the first launch." />
             <Text label="Site name" value={h.slug} onChange={(v) => set('slug', slugify(v))} hint={<>Default address: <code>{h.slug}.netlify.app</code></>} />
-            <Text label="Launchpad server URL" value={h.serverUrl} onChange={(v) => set('serverUrl', v.trim())} placeholder="Same origin" />
+            <Text label="TDV hosting server URL" value={h.serverUrl} onChange={(v) => set('serverUrl', v.trim())} placeholder="Same origin" />
           </div>
         </Card>
       )}

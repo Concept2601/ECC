@@ -65,10 +65,10 @@ export function launchChecklist(site: Site): LaunchGroup[] {
     {
       title: 'Back-End',
       checks: [
-        c('hosting', 'Hosting configured', hostingReady, h.provider === 'netlify' && !h.netlifyToken ? 'Add your Netlify token.' : `Target: ${h.provider === 'self' ? `Launchpad server (/sites/${h.slug}/)` : h.provider === 'netlify' ? 'Netlify' : 'ZIP export'}.`, 'hosting'),
+        c('hosting', 'Hosting configured', hostingReady, h.provider === 'netlify' && !h.netlifyToken ? 'Add your Netlify token.' : `Target: ${h.provider === 'self' ? `TDV hosting server (/sites/${h.slug}/)` : h.provider === 'netlify' ? 'Netlify' : 'ZIP export'}.`, 'hosting'),
         c('domain', 'Custom domain', site.domains.domains.length === 0 ? 'warn' : verified.length ? true : 'warn', site.domains.domains.length === 0 ? 'Launching on the free address. Connect a domain for a professional URL.' : verified.length ? `${verified.map((d) => d.host).join(', ')} verified.` : 'Domain added but DNS not verified yet.', 'domains'),
         c('https', 'HTTPS enforced', h.httpsRedirect || h.provider !== 'self', h.provider === 'self' ? (h.httpsRedirect ? 'HTTP redirects to HTTPS.' : 'Turn on Force HTTPS.') : 'Handled by the host.', 'hosting'),
-        c('forms', 'Contact form delivery', !hasForm || site.integrations.formEndpoint === 'self' || !!site.integrations.customFormAction, hasForm ? (site.integrations.formEndpoint === 'self' ? 'Submissions go to your Launchpad inbox.' : site.integrations.customFormAction ? 'Custom endpoint set.' : 'Custom endpoint missing — messages would be lost.') : 'No forms on the site.', 'integrations'),
+        c('forms', 'Contact form delivery', !hasForm || site.integrations.formEndpoint === 'self' || !!site.integrations.customFormAction, hasForm ? (site.integrations.formEndpoint === 'self' ? 'Submissions go to your Studio inbox.' : site.integrations.customFormAction ? 'Custom endpoint set.' : 'Custom endpoint missing — messages would be lost.') : 'No forms on the site.', 'integrations'),
         c('analytics', 'Analytics', site.integrations.ga4Id || site.integrations.plausibleDomain ? true : 'warn', site.integrations.ga4Id || site.integrations.plausibleDomain ? 'Traffic will be measured.' : 'No analytics — you won’t know how visitors find you.', 'integrations'),
       ],
     },

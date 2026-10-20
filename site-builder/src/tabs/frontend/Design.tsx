@@ -11,10 +11,10 @@ import { MediaField } from '../../components/MediaPicker';
 import { Area, Color, Modal, Segmented, Select, Text, Toggle } from '../../components/ui';
 
 const PALETTES: { name: string; theme: Partial<Theme> }[] = [
-  { name: 'Think Different', theme: { primary: '#1d1d1f', accent: '#009ddc', background: '#ffffff', surface: '#f5f5f7', text: '#1d1d1f', muted: '#6e6e73', dark: '#000000' } },
-  { name: 'Spectrum Blue', theme: { primary: '#0077a8', accent: '#61bb46', background: '#ffffff', surface: '#f2f8fb', text: '#1d1d1f', muted: '#5f6670', dark: '#000000' } },
-  { name: 'Spectrum Purple', theme: { primary: '#963d97', accent: '#fdb827', background: '#ffffff', surface: '#f8f2f8', text: '#1d1d1f', muted: '#655d66', dark: '#120612' } },
-  { name: 'Spectrum Red', theme: { primary: '#c9302c', accent: '#fdb827', background: '#ffffff', surface: '#fbf3f2', text: '#1d1d1f', muted: '#6b5d5c', dark: '#140606' } },
+  { name: 'TDV Signature', theme: { primary: '#1b4374', accent: '#e8983f', background: '#ffffff', surface: '#f3f6fa', text: '#111827', muted: '#5f6878', dark: '#0a1222' } },
+  { name: 'TDV Sunrise', theme: { primary: '#b86a14', accent: '#1b4374', background: '#fffdf9', surface: '#fbf3e9', text: '#1a1712', muted: '#6b6156', dark: '#1b4374' } },
+  { name: 'TDV Midnight', theme: { primary: '#e8983f', accent: '#6f9ad4', background: '#070b13', surface: '#0f1624', text: '#f4f6fa', muted: '#9aa6bd', dark: '#000000' } },
+  { name: 'TDV Navy', theme: { primary: '#2f3557', accent: '#e8983f', background: '#ffffff', surface: '#f2f3f8', text: '#141728', muted: '#5f6377', dark: '#1a1e33' } },
   { name: 'Indigo', theme: { primary: '#4f46e5', accent: '#f59e0b', background: '#ffffff', surface: '#f5f6fa', text: '#111827', muted: '#5b6475', dark: '#0f172a' } },
   { name: 'Ocean', theme: { primary: '#0e7490', accent: '#f97316', background: '#ffffff', surface: '#f0f9fb', text: '#0f1f2a', muted: '#4b6170', dark: '#082f3a' } },
   { name: 'Forest', theme: { primary: '#047857', accent: '#facc15', background: '#ffffff', surface: '#f1f7f3', text: '#11201a', muted: '#4f6158', dark: '#0b2219' } },

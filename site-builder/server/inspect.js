@@ -31,7 +31,7 @@ async function fetchText(url, hops = 0) {
     const res = await fetch(u, {
       redirect: 'manual',
       signal: ctrl.signal,
-      headers: { 'user-agent': 'Mozilla/5.0 (compatible; LaunchpadStudio/1.0; +design-inspiration)', accept: 'text/html,text/css,*/*' },
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; TDVStudio/1.0; +design-inspiration)', accept: 'text/html,text/css,*/*' },
     });
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       if (hops >= 4) throw new Error('Too many redirects.');

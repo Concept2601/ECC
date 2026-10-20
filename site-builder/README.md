@@ -1,4 +1,4 @@
-# Launchpad Studio — website builder module
+# Think Different Visuals Studio — website builder module
 
 Design websites from inspiration, optimise them, and launch them with hosting and domain connection, all in one app.
 
@@ -13,13 +13,17 @@ Node 18+ is required. The server has no runtime dependencies.
 
 ## Look & feel
 
-The studio uses a sleek **Think Different** style: a minimal black-and-white base with the six-colour spectrum (green `#61BB46`, yellow `#FDB827`, orange `#F5821F`, red `#E03A3E`, purple `#963D97`, blue `#009DDC`). The colour profile button (the dot in the top bar) offers:
+The studio carries the **Think Different Visuals** brand. The logo is redrawn as a vector (`src/brand/BrandLogo.tsx`) so it stays sharp at any size. Brand colours are taken from the supplied artwork:
 
-- **Spectrum** (default): monochrome buttons with rainbow details, including the top-bar stripe, a gradient step badge for each workspace and spectrum-ringed Launch buttons.
-- **Green, Yellow, Orange, Red, Purple, Blue**: single-colour profiles. Link and text shades are adjusted automatically so they stay readable (WCAG AA).
-- **Auto / Light / Dark** appearance, saved in your browser.
+| Colour | Hex | Used for |
+| --- | --- | --- |
+| Brand blue | `#1B4374` | the D, “Different”, primary buttons |
+| Brand orange | `#E8983F` | the stem, “Think”, accents and highlights |
+| Brand navy | `#2F3557` | “VISUALS” |
 
-Sites you build can use the same style: pick the *Think Different* inspiration, or the *Think Different* and *Spectrum* palettes under Design → Theme.
+The colour profile button (the dot in the top bar) switches between **Signature** (blue with orange), **Sunrise** (orange with blue), **Midnight** (navy with orange) and **Noir** (monochrome with brand accents). Each profile works in **Auto / Light / Dark** mode, and your choice is saved in the browser. In dark mode the blues are lifted and link shades are adjusted so text stays readable (WCAG AA). The logo mark itself always keeps its original colours.
+
+Brand files in `public/brand/`: `tdv-mark.svg` (vector mark), `tdv-logo.png` (full logo on a transparent background, for light pages) and `tdv-logo-on-black.jpg` (the original artwork, cropped). For your own website, upload the PNG as the site logo in Back-End → Site settings, and start from the *Think Different Visuals* inspiration or the *TDV* palettes under Design → Theme.
 
 ## What's inside
 
@@ -38,7 +42,7 @@ The landing page (`#/`) introduces the module. **Open studio** leads to the proj
 ### 2 · Back-End
 | Tab | What it does |
 | --- | --- |
-| **Hosting** | Choose the bundled Launchpad server (self-hosted), Netlify (file-digest deploys) or a ZIP for any host. Also: force HTTPS, security headers, asset cache lifetime, and a Caddy config for automatic HTTPS. |
+| **Hosting** | Choose the bundled TDV hosting server (self-hosted), Netlify (file-digest deploys) or a ZIP for any host. Also: force HTTPS, security headers, asset cache lifetime, and a Caddy config for automatic HTTPS. |
 | **Domains** | Add a domain (the `www` pair is added for you; suffixes like `.co.zw` and `.co.uk` are handled), see the exact DNS records to create, and verify them live over DNS-over-HTTPS. Pick the primary domain. |
 | **SEO** | Per page: focus keyword, title and description with length counters, a Google result preview, a social card preview, OG image, canonical, noindex and a live score. Site-wide: title template, structured data (Organization, LocalBusiness or Person, plus FAQ and breadcrumbs), Search Console and Bing verification. A preview of the generated sitemap.xml and robots.txt. |
 | **Forms & Integrations** | Contact forms post to the server's inbox, with honeypot and rate limiting, CSV export, or to a custom endpoint (Formspree, Zapier…). Also GA4, Plausible, Meta Pixel, a cookie consent banner that holds tracking until visitors accept, a WhatsApp chat button and custom head/body code. |
@@ -78,5 +82,5 @@ Environment variables: `PORT` (8787), `BUILDER_TOKEN` (set this in production), 
 
 - Projects are stored in the browser (IndexedDB). Use **Export & backup** to move them between machines.
 - Uploaded videos are embedded in the project (up to 200 MB). For long videos, use YouTube or Vimeo links, which also load faster.
-- Password protection is enforced only by the Launchpad server.
+- Password protection is enforced only by the TDV hosting server.
 - The URL analyser copies structure and style, never another site's text or images.

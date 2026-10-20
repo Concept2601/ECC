@@ -1,23 +1,25 @@
 import { useEffect, useState } from 'react';
 import { contrastRatio, mix, readableOn } from './lib/color';
-
-/** The six-colour "Think Different" spectrum, in stripe order. */
-export const SPECTRUM = ['#61BB46', '#FDB827', '#F5821F', '#E03A3E', '#963D97', '#009DDC'] as const;
+import { BRAND } from './brand/BrandLogo';
 
 export interface Profile {
   id: string;
   name: string;
+  /** Button / highlight fill. 'ink' = black on light, white on dark. */
+  fill: string;
+  /** Hue used for links, active states and focus rings. */
   color: string;
+  accent: string;
+  /** Fill used in dark mode, where the deep brand blues would disappear. */
+  darkFill?: string;
 }
 
+/** Colour profiles built from the Think Different Visuals palette. */
 export const PROFILES: Profile[] = [
-  { id: 'spectrum', name: 'Spectrum', color: '#009DDC' },
-  { id: 'green', name: 'Green', color: SPECTRUM[0] },
-  { id: 'yellow', name: 'Yellow', color: SPECTRUM[1] },
-  { id: 'orange', name: 'Orange', color: SPECTRUM[2] },
-  { id: 'red', name: 'Red', color: SPECTRUM[3] },
-  { id: 'purple', name: 'Purple', color: SPECTRUM[4] },
-  { id: 'blue', name: 'Blue', color: SPECTRUM[5] },
+  { id: 'signature', name: 'Signature', fill: BRAND.blue, color: BRAND.blue, accent: BRAND.orange, darkFill: '#2b5c99' },
+  { id: 'sunrise', name: 'Sunrise', fill: BRAND.orange, color: BRAND.orange, accent: BRAND.blue },
+  { id: 'midnight', name: 'Midnight', fill: BRAND.navy, color: BRAND.navy, accent: BRAND.orange, darkFill: '#4a5390' },
+  { id: 'noir', name: 'Noir', fill: 'ink', color: BRAND.blue, accent: BRAND.orange },
 ];
 
 export type Mode = 'auto' | 'light' | 'dark';
@@ -26,9 +28,9 @@ export interface AppTheme {
   mode: Mode;
 }
 
-const KEY = 'launchpad-app-theme';
-const PANEL = { light: '#ffffff', dark: '#161618' };
-const INK = { light: '#1d1d1f', dark: '#f5f5f7' };
+const KEY = 'tdv-app-theme';
+const PANEL = { light: '#ffffff', dark: '#0f1624' };
+const INK = { light: '#111827', dark: '#f4f6fa' };
 
 /** Darken (light mode) or lighten (dark mode) until the colour is readable as text. */
 function textSafe(color: string, against: string, dark: boolean) {
@@ -44,7 +46,7 @@ export function loadTheme(): AppTheme {
   } catch {
     // first visit, or storage unavailable
   }
-  return { profile: 'spectrum', mode: 'auto' };
+  return { profile: 'signature', mode: 'auto' };
 }
 
 const prefersDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
@@ -55,14 +57,14 @@ export function applyTheme(t: AppTheme) {
   const p = PROFILES.find((x) => x.id === t.profile) ?? PROFILES[0];
   const panel = PANEL[scheme];
   const root = document.documentElement;
-  // Spectrum keeps buttons monochrome (black on light, white on dark) and lets the rainbow do the talking.
-  const fill = t.profile === 'spectrum' ? INK[scheme] : p.color;
+  const fill = p.fill === 'ink' ? INK[scheme] : dark && p.darkFill ? p.darkFill : p.fill;
   const vars: Record<string, string> = {
     '--brand': textSafe(p.color, panel, dark),
     '--brand-fill': fill,
     '--brand-ink': readableOn(fill),
-    '--brand-soft': mix(p.color, panel, dark ? 0.8 : 0.88),
-    '--accent': t.profile === 'spectrum' ? SPECTRUM[1] : p.color,
+    '--brand-soft': mix(p.color, panel, dark ? 0.75 : 0.88),
+    '--accent': p.accent,
+    '--accent-text': textSafe(p.accent, panel, dark),
   };
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
   root.dataset.mode = scheme;

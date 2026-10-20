@@ -17,7 +17,7 @@ export function ExportTab() {
   const restoreFrom = async (file: File) => {
     try {
       const data = JSON.parse(await file.text()) as Site;
-      if (!data.pages || !data.theme) throw new Error('Not a Launchpad backup file.');
+      if (!data.pages || !data.theme) throw new Error('Not a studio backup file.');
       if (!window.confirm(`Replace this project with “${data.name}” from the backup? Current work is saved as a version first.`)) return;
       snapshot('Before backup restore');
       update((d) => {
@@ -40,7 +40,7 @@ export function ExportTab() {
             {names.length > 40 && <li className="muted">…and {names.length - 40} more</li>}
           </ul>
         </Card>
-        <Card title="Project backup (JSON)" subtitle="Everything: pages, theme, media, settings and history. Import it into any Launchpad Studio.">
+        <Card title="Project backup (JSON)" subtitle="Everything: pages, theme, media, settings and history. Import it into any copy of the studio.">
           <div className="row wrap">
             <button className="btn" onClick={() => downloadBlob(JSON.stringify(site), `${base}-backup-${new Date().toISOString().slice(0, 10)}.json`, 'application/json')}>Download backup</button>
             <input ref={input} type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && restoreFrom(e.target.files[0])} />

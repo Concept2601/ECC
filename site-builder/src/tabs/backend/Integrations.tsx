@@ -30,7 +30,7 @@ function Inbox() {
   return (
     <Card
       title="Form submissions"
-      subtitle="Messages sent through contact forms on your live site (Launchpad server)."
+      subtitle="Messages sent through contact forms on your live site (TDV hosting server)."
       actions={
         <>
           {rows?.length ? <button className="btn sm ghost" onClick={exportCsv}>Export CSV</button> : null}
@@ -74,9 +74,9 @@ export function IntegrationsTab() {
       <PageHead title="Forms & Integrations" subtitle="Capture leads, measure traffic and connect the tools you already use." />
       <div className="grid-2col">
         <Card title="Contact forms" subtitle="Every Contact form section posts here. Spam is filtered with a honeypot and rate limiting.">
-          <Segmented value={i.formEndpoint} onChange={(v) => set('formEndpoint', v)} options={[{ value: 'self', label: 'Launchpad inbox' }, { value: 'custom', label: 'Custom endpoint' }]} />
+          <Segmented value={i.formEndpoint} onChange={(v) => set('formEndpoint', v)} options={[{ value: 'self', label: 'Studio inbox' }, { value: 'custom', label: 'Custom endpoint' }]} />
           {i.formEndpoint === 'self' ? (
-            <p className="hint">Submissions are stored on your Launchpad server and appear in the inbox below. Works even when the site itself is hosted on Netlify or elsewhere.</p>
+            <p className="hint">Submissions are stored on your TDV hosting server and appear in the inbox below. Works even when the site itself is hosted on Netlify or elsewhere.</p>
           ) : (
             <Text label="Form action URL" value={i.customFormAction} onChange={(v) => set('customFormAction', v.trim())} placeholder="https://formspree.io/f/xxxx" hint="Any service that accepts standard form POSTs (Formspree, Basin, Getform, Zapier/Make webhooks, your CRM…)." />
           )}

@@ -1,4 +1,4 @@
-// Launchpad Studio server — zero dependencies.
+// Think Different Visuals Studio server — zero dependencies.
 //  • serves the studio app (dist/)
 //  • hosts published sites at /sites/<slug>/ and on connected custom domains (by Host header)
 //  • captures contact-form submissions
@@ -388,6 +388,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Launchpad Studio server on http://localhost:${PORT}`);
+  console.log(`Think Different Visuals Studio server on http://localhost:${PORT}`);
   if (!TOKEN) console.log('  ⚠ BUILDER_TOKEN is not set — anyone who can reach this server can publish. Set it in production.');
 });

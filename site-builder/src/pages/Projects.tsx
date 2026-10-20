@@ -6,6 +6,7 @@ import { siteFromInspection, siteFromInspiration, type Inspiration, type Inspect
 import { InspirationGallery, UrlInspector } from '../components/InspirationGallery';
 import { Badge, Empty, Modal, Segmented } from '../components/ui';
 import { ThemeMenu } from '../components/ThemeMenu';
+import { BrandLogo } from '../brand/BrandLogo';
 import { downloadBlob } from '../lib/storage';
 import { clone, slugify, timeAgo, uid } from '../lib/util';
 import type { Site } from '../types';
@@ -77,7 +78,7 @@ export function Projects() {
   const importBackup = async (file: File) => {
     try {
       const data = JSON.parse(await file.text()) as Site;
-      if (!data.pages || !data.theme) throw new Error('Not a Launchpad backup file.');
+      if (!data.pages || !data.theme) throw new Error('Not a studio backup file.');
       data.id = uid('site');
       data.updatedAt = Date.now();
       await create(data);
@@ -90,7 +91,7 @@ export function Projects() {
   return (
     <div className="projects">
       <header className="topbar">
-        <a className="brand" href={href({ name: 'landing' })}><img src="/favicon.svg" alt="" width="28" height="28" /> Launchpad Studio</a>
+        <a className="brand" href={href({ name: 'landing' })} aria-label="Studio home"><BrandLogo size={28} suffix="Studio" /></a>
         <div className="row">
           <ThemeMenu />
           <input ref={fileInput} type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && importBackup(e.target.files[0])} />

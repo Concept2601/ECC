@@ -19,6 +19,7 @@ import { VersionsTab } from '../tabs/delivery/Versions';
 import { GrowthTab } from '../tabs/delivery/Growth';
 import { ExportTab } from '../tabs/delivery/Export';
 import { ThemeMenu } from '../components/ThemeMenu';
+import { BrandMark } from '../brand/BrandLogo';
 
 interface TabDef {
   id: string;
@@ -98,7 +99,7 @@ export function Studio({ siteId, area, tab }: { siteId: string; area: Area; tab:
     <div className={`studio area-${area}`}>
       <header className="topbar studio-bar">
         <div className="row">
-          <a className="icon-btn" href={href({ name: 'projects' })} aria-label="All projects" title="All projects">←</a>
+          <a className="studio-home" href={href({ name: 'projects' })} aria-label="All projects" title="All projects"><span aria-hidden="true">←</span><BrandMark size={18} /></a>
           <input className="site-name" value={site.name} aria-label="Site name" onChange={(e) => update((d) => { d.name = e.target.value; }, 'name')} />
           <span className={`save-dot ${saving}`} title={saving === 'saved' ? 'All changes saved' : saving === 'saving' ? 'Saving…' : 'Save failed'}>
             {saving === 'saved' ? 'Saved' : saving === 'saving' ? 'Saving…' : 'Not saved'}

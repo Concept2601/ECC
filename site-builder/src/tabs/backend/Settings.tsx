@@ -60,7 +60,7 @@ export function SettingsTab() {
 
       <Card title="Access & security">
         <Toggle label="Maintenance / coming-soon mode" hint="Publishes a single “launching soon” page and hides the site from search engines." checked={s.maintenanceMode} onChange={(v) => set('maintenanceMode', v)} />
-        <Toggle label="Password-protect the site" hint={site.hosting.provider === 'self' ? 'Visitors must enter the password (HTTP authentication, enforced by your Launchpad server).' : 'Only enforced on the Launchpad server. Netlify requires its paid plan; ZIP hosts need their own protection.'} checked={s.passwordProtect} onChange={(v) => set('passwordProtect', v)} />
+        <Toggle label="Password-protect the site" hint={site.hosting.provider === 'self' ? 'Visitors must enter the password (HTTP authentication, enforced by your TDV hosting server).' : 'Only enforced on the TDV hosting server. Netlify requires its paid plan; ZIP hosts need their own protection.'} checked={s.passwordProtect} onChange={(v) => set('passwordProtect', v)} />
         {s.passwordProtect && <Text label="Site password" type="password" value={s.password} onChange={(v) => set('password', v)} hint="Visitors can enter any username." />}
       </Card>
     </div>

@@ -1,6 +1,8 @@
 import { href } from '../router';
+import { BRAND, BrandLogo } from '../brand/BrandLogo';
 
-const SPECTRUM = ['#61BB46', '#FDB827', '#F5821F', '#E03A3E', '#963D97', '#009DDC'];
+// Card accents alternate the logo's orange and (a lifted, readable) blue.
+const ACCENTS = [BRAND.orange, '#6F9AD4'];
 
 const FEATURES = [
   { icon: '✦', title: 'Design from inspiration', text: 'Start from curated layouts inspired by world-class sites, or paste any URL and we extract its palette, fonts and structure.' },
@@ -26,9 +28,9 @@ const jump = (id: string) => (e: React.MouseEvent) => {
 export function Landing() {
   return (
     <div className="landing">
-      <div className="l-stripes" aria-hidden="true">{SPECTRUM.map((c) => <i key={c} style={{ background: c }} />)}</div>
+      <div className="l-stripes" aria-hidden="true"><i style={{ background: BRAND.orange, flex: '0 0 32%' }} /><i style={{ background: BRAND.blue }} /></div>
       <header className="l-nav">
-        <a className="l-brand" href="#/"><img src="/favicon.svg" alt="" width="32" height="32" />Launchpad Studio</a>
+        <a className="l-brand" href="#/" aria-label={`${BRAND.name} Studio home`}><BrandLogo size={30} suffix="Studio" /></a>
         <nav aria-label="Main">
           <a href="#features" onClick={jump('features')}>Features</a>
           <a href="#workflow" onClick={jump('workflow')}>Workflow</a>
@@ -39,9 +41,10 @@ export function Landing() {
       <main>
         <section className="l-hero">
           <div className="l-wrap">
+            <div className="l-hero-logo"><BrandLogo variant="stacked" size={150} /></div>
             <p className="l-eyebrow">Design · Optimise · Host · Launch</p>
             <h1>Inspiration in.<br /><span className="l-rainbow">Launch-ready</span> out.</h1>
-            <p className="l-lead">Launchpad Studio is a complete website module: design from sites you love, polish every page with a visual editor, and ship to your own domain with SEO and performance handled for you.</p>
+            <p className="l-lead">Think Different Visuals Studio is a complete website module: design from sites you love, polish every page with a visual editor, and ship to your own domain with SEO and performance handled for you.</p>
             <div className="l-actions">
               <a className="btn lg" href={href({ name: 'projects' })}>Start building — it’s free</a>
               <a className="btn lg ghost" href="#workflow" onClick={jump('workflow')}>See how it works</a>
@@ -71,7 +74,7 @@ export function Landing() {
             <h2>Everything to go from idea to live website</h2>
             <div className="l-grid">
               {FEATURES.map((f, i) => (
-                <article key={f.title} className="l-card" style={{ '--c': SPECTRUM[i % SPECTRUM.length] } as React.CSSProperties}>
+                <article key={f.title} className="l-card" style={{ '--c': ACCENTS[i % ACCENTS.length] } as React.CSSProperties}>
                   <span className="l-icon" aria-hidden="true">{f.icon}</span>
                   <h3>{f.title}</h3>
                   <p>{f.text}</p>
@@ -86,7 +89,7 @@ export function Landing() {
             <h2>Three workspaces. One clear path to launch.</h2>
             <div className="l-steps">
               {STEPS.map((s, i) => (
-                <article key={s.area} className="l-step" style={{ '--g': `linear-gradient(135deg, ${SPECTRUM[i * 2]}, ${SPECTRUM[i * 2 + 1]})` } as React.CSSProperties}>
+                <article key={s.area} className="l-step" style={{ '--g': [BRAND.orange, BRAND.blue, `linear-gradient(135deg, ${BRAND.orange} 0 45%, ${BRAND.blue} 45%)`][i] } as React.CSSProperties}>
                   <span className="l-step-n">{i + 1}</span>
                   <h3>{s.area}</h3>
                   <ul>{s.items.map((it) => <li key={it}>{it}</li>)}</ul>
@@ -98,13 +101,13 @@ export function Landing() {
 
         <section className="l-section l-cta">
           <div className="l-wrap">
-            <h2>Think different. <span className="l-rainbow">Launch</span> different.</h2>
+            <h2>Think different. <span className="l-rainbow">Launch</span> visually.</h2>
             <p>No lock-in: export clean static HTML any time.</p>
-            <a className="btn lg light" href={href({ name: 'projects' })}>Open Launchpad Studio</a>
+            <a className="btn lg light" href={href({ name: 'projects' })}>Open the studio</a>
           </div>
         </section>
       </main>
-      <footer className="l-foot"><div className="l-wrap">© {new Date().getFullYear()} Launchpad Studio · Works offline · Your projects stay in your browser until you publish.</div></footer>
+      <footer className="l-foot"><div className="l-wrap">© {new Date().getFullYear()} {BRAND.name} · Works offline · Your projects stay in your browser until you publish.</div></footer>
     </div>
   );
 }

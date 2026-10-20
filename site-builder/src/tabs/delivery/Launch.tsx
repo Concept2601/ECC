@@ -8,7 +8,7 @@ import { href } from '../../router';
 import { Badge, Card, PageHead } from '../../components/ui';
 import type { Deployment } from '../../types';
 
-const TARGET = { self: 'Launchpad server', netlify: 'Netlify', zip: 'ZIP download' };
+const TARGET = { self: 'TDV hosting server', netlify: 'Netlify', zip: 'ZIP download' };
 
 export function LaunchTab() {
   const { site, update, snapshot, toast } = useSite();
@@ -42,7 +42,7 @@ export function LaunchTab() {
       push(h.provider === 'zip' ? '✓ Export complete.' : `✓ Live at ${r.url}`);
       toast(h.provider === 'zip' ? 'Site exported' : 'Your site is live 🚀');
     } catch (err) {
-      const msg = (err as Error).message === 'Failed to fetch' ? 'Could not reach the Launchpad server. Is it running? (npm run dev / npm start)' : (err as Error).message;
+      const msg = (err as Error).message === 'Failed to fetch' ? 'Could not reach the TDV hosting server. Is it running? (npm run dev / npm start)' : (err as Error).message;
       push(`✕ ${msg}`);
       dep = { id: uid('dep'), at: Date.now(), provider: h.provider, status: 'failed', message: msg, versionId: version.id, bytes: 0 };
       toast('Launch failed', 'err');

@@ -11,6 +11,31 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '2.2.0',
+    date: '2026-10-23',
+    title: "Islands, cabinet groups and room-first quoting",
+    added: [
+      "Islands with cupboards on four sides, two sides (back to back) or one side (with a back panel or a seating overhang)",
+      "Cabinet groups: build any unit from several cabinets – each one placed anywhere and facing front, back, left, right or any angle – quoted as one item with a shared worktop",
+      "Loose free-standing appliances as their own items: fridge, chest freezer, stove, microwave, dishwasher, washing machine, top-loader, tumble dryer, bins and TV",
+      "Start a quotation from the room: draw the room, then add doors, windows, openings, appliances, kitchens, islands, cabinets, wardrobes, BICs, TV stands and displays straight onto the plan",
+      "Corners of L and U kitchens: choose which wall runs into each corner",
+      "One-tap “Switch to” buttons to change a cabinet’s type (base, wall, tall, corner, wardrobe, BIC…) keeping its width, materials and handles; kitchen slots switch between base, tall, open space and filler",
+    ],
+    updated: [
+      "Room plan: face items front, back, left, right or any angle, open an item’s designer from the plan and remove items from the quotation there",
+      "Plan reader turns islands into islands with cupboards on the right number of sides and stand-alone fridges / stoves into appliances",
+      "Quotation PDF shows 3D, top and back views of islands and cabinet groups",
+    ],
+    fixed: [
+      "Number boxes no longer change or add up figures while you type or after you clear them: what you type stays until you pause, press Enter / Tab or leave the box; the mouse wheel no longer changes them",
+      "The price library is kept exactly as you leave it: deleted materials no longer come back and edited prices are no longer replaced by defaults after restarting",
+      "Freezing while typing or dragging: work is now saved once you pause instead of on every key press, and dragging on room / group plans only saves when you let go",
+      "Work is saved immediately when the app is sent to the background or closed; the device is asked to keep the app’s data permanently",
+      "Duplicated quotations keep their room layout",
+    ],
+  },
+  {
     version: '2.1.0',
     date: '2026-10-17',
     title: 'Corner cupboards',

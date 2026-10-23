@@ -4,7 +4,8 @@
 // sees the design in context.
 import { unitExtents } from './generate';
 import type { ItemPrice } from './pricing';
-import { activeLegs, legLength, legStart } from './runs';
+import { activeLegs, legLength, runLayout } from './runs';
+import { pieceFootprint } from './assembly';
 import type { Catalog, Room, RoomOpening, RoomPlacement, RoomWall, WallSide } from './types';
 import { uid } from './util';
 
@@ -128,6 +129,10 @@ export function normalizeRoom(r: any): Room | null {
 /** Local footprint of a quoted item (relative to its own back-left origin). */
 export function itemBounds(it: ItemPrice, cat: Catalog) {
   if (it.kind === 'run' && it.runBuild) return { x0: 0, x1: it.runBuild.size.w, z0: 0, z1: it.runBuild.size.d, h: it.runBuild.size.h };
+  if (it.kind === 'assembly' && it.assemblyBuild) {
+    const z = it.assemblyBuild.size;
+    return { x0: z.x0, x1: z.x1, z0: z.z0, z1: z.z1, h: z.h };
+  }
   if (it.unit) {
     const e = unitExtents(it.unit, cat);
     return { x0: e.x0, x1: e.x1, z0: e.z0, z1: e.z1, h: e.y1 };
@@ -149,11 +154,13 @@ export function footprints(it: ItemPrice, cat: Catalog, p: RoomPlacement): [numb
     const r = it.run;
     const D = r.baseDepth + r.counterOverhang;
     const LA = legLength(r.legs[0]);
-    const rects: [number, number, number, number][] = [[0, 0, LA, D]];
+    const lay = runLayout(r);
+    const X1 = Math.max(LA, lay.x1);
+    const rects: [number, number, number, number][] = [[0, 0, X1, D]];
     const n = activeLegs(r);
-    // side walls start after a corner cupboard's Width B; the strip in between is the corner's return
-    if (n > 1) rects.push([LA - D, r.baseDepth, LA, legStart(r, 1) + legLength(r.legs[1])]);
-    if (n > 2) rects.push([0, r.baseDepth, D, legStart(r, 2) + legLength(r.legs[2])]);
+    // side walls run from their corners; the strip near the back wall belongs to the corner
+    if (n > 1) rects.push([X1 - D, r.baseDepth, X1, lay.start1 + legLength(r.legs[1])]);
+    if (n > 2) rects.push([0, r.baseDepth, D, lay.start2 + legLength(r.legs[2])]);
     return rects.map(([x0, z0, x1, z1]) =>
       [
         [x0, z0],
@@ -163,6 +170,7 @@ export function footprints(it: ItemPrice, cat: Catalog, p: RoomPlacement): [numb
       ].map(([x, z]) => placeXZ(x, z, p)),
     );
   }
+  if (it.kind === 'assembly' && it.assembly && it.assembly.pieces.length > 1) return it.assembly.pieces.map((pc) => pieceFootprint(pc, cat).map(([x, z]) => placeXZ(x, z, p)));
   return [footprint(it, cat, p)];
 }
 

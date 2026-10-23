@@ -13,6 +13,7 @@ import SpaceFit from './pages/SpaceFit';
 import PlanReader from './pages/PlanReader';
 import RunDesigner from './pages/RunDesigner';
 import RoomDesigner from './pages/RoomDesigner';
+import AssemblyDesigner from './pages/AssemblyDesigner';
 import SettingsPage from './pages/Settings';
 import UnitDesigner from './pages/UnitDesigner';
 import { useStore } from './store';
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="/quotes/:id/units/:uid" element={<UnitDesigner />} />
           <Route path="/quotes/:id/runs/:rid" element={<RunDesigner />} />
           <Route path="/quotes/:id/room" element={<RoomDesigner />} />
+          <Route path="/quotes/:id/groups/:gid" element={<AssemblyDesigner />} />
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/invoices/:id" element={<InvoiceEditor />} />
           <Route path="/library" element={<Library />} />

@@ -1,7 +1,8 @@
 import { Box, Columns2, DoorOpen, Map as MapIcon, Plus, RotateCw, SquareDashed, Trash2, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
-import { Card, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import RoomPalette from '../components/RoomPalette';
+import { Card, confirmAction, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import Viewer3D from '../components/Viewer3D';
 import { useQuoteCalc } from '../hooks';
 import type { ItemPrice } from '../lib/pricing';
@@ -27,6 +28,14 @@ const pts = (ps: P[]) => ps.map((q) => q.join(',')).join(' ');
 function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: Room; items: ItemPrice[]; catalog: Catalog; selected: string | null; onSelect: (id: string | null) => void; onMove: (id: string, p: RoomPlacement) => void }) {
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<{ id: string; start: [number, number]; orig: RoomPlacement } | null>(null);
+  // while dragging, the item moves on the plan only; it is saved once on release so the app never stalls
+  const [live, setLive] = useState<RoomPlacement | null>(null);
+  const placements = live ? room.placements.map((p) => (p.itemId === live.itemId ? live : p)) : room.placements;
+  const endDrag = () => {
+    if (drag.current && live) onMove(drag.current.id, live);
+    drag.current = null;
+    setLive(null);
+  };
   const T = room.wallThickness;
   const ext = { ...roomExtents(room) };
   for (const pl of room.placements) {
@@ -69,10 +78,10 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
         if (!drag.current) return;
         const [x, z] = toMm(e);
         const d = drag.current;
-        onMove(d.id, { ...d.orig, x: Math.round(d.orig.x + x - d.start[0]), z: Math.round(d.orig.z + z - d.start[1]) });
+        setLive({ ...d.orig, x: Math.round((d.orig.x + x - d.start[0]) / 5) * 5, z: Math.round((d.orig.z + z - d.start[1]) / 5) * 5 });
       }}
-      onPointerUp={() => (drag.current = null)}
-      onPointerLeave={() => (drag.current = null)}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
       onClick={(e) => e.target === svg.current && onSelect(null)}
     >
       <polygon points={pts(v)} fill={room.floorColor} opacity={0.35} />
@@ -137,13 +146,13 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
           </g>
         );
       })}
-      {room.placements.map((p) => {
+      {placements.map((p) => {
         const it = items.find((i) => i.id === p.itemId);
         if (!it) return null;
         const polys = footprints(it, catalog, p);
-        const ps = polys[0];
-        const cx = ps.reduce((a, q) => a + q[0], 0) / 4;
-        const cz = ps.reduce((a, q) => a + q[1], 0) / 4;
+        const ps = polys.flat();
+        const cx = ps.reduce((a, q) => a + q[0], 0) / ps.length;
+        const cz = ps.reduce((a, q) => a + q[1], 0) / ps.length;
         const sel = selected === it.id;
         return (
           <g
@@ -157,7 +166,7 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
             }}
           >
             {polys.map((poly, k) => (
-              <polygon key={k} points={pts(poly)} fill={it.kind === 'run' ? '#ddd6fe' : '#e9c99f'} fillOpacity={0.85} stroke={sel ? '#ea580c' : '#57534e'} strokeWidth={sel ? fs / 3 : fs / 10} />
+              <polygon key={k} points={pts(poly)} fill={it.kind === 'run' ? '#ddd6fe' : it.kind === 'assembly' && !it.assembly?.pieces.some((x) => x.unit) ? '#bae6fd' : '#e9c99f'} fillOpacity={0.85} stroke={sel ? '#ea580c' : '#57534e'} strokeWidth={sel ? fs / 3 : fs / 10} />
             ))}
             <text x={cx} y={cz} fontSize={fs * 0.8} textAnchor="middle" dominantBaseline="middle" fill="#1c1917" fontWeight={600}>
               {it.name.length > 24 ? `${it.name.slice(0, 22)}…` : it.name}
@@ -186,7 +195,8 @@ export default function RoomDesigner() {
   const quote = useStore((s) => s.quotes.find((q) => q.id === id));
   const { updateQuote, catalog } = useStore();
   const calc = useQuoteCalc(quote);
-  const [tab, setTab] = useState<Tab>('room');
+  const [search] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(search.get('start') ? 'items' : 'room');
   const [mode, setMode] = useState<'3d' | 'plan' | 'both'>(typeof window !== 'undefined' && window.innerWidth >= 900 ? 'both' : '3d');
   const [selected, setSelected] = useState<string | null>(null);
   const items = useMemo(() => calc?.items ?? [], [calc]);
@@ -259,7 +269,7 @@ export default function RoomDesigner() {
               tabs={[
                 { value: 'room', label: 'Room & walls' },
                 { value: 'openings', label: `Windows, doors & openings (${room.openings.length})` },
-                { value: 'items', label: 'Place items' },
+                { value: 'items', label: 'Add & place items' },
               ]}
             />
           </div>
@@ -428,6 +438,17 @@ export default function RoomDesigner() {
 
           {tab === 'items' && (
             <div className="space-y-3">
+              <RoomPalette
+                quote={quote}
+                room={room}
+                catalog={catalog}
+                items={items}
+                up={(fn) => updateQuote(quote.id, fn)}
+                onAdded={(itemId, t) => {
+                  if (itemId) setSelected(itemId);
+                  if (t) setTab(t);
+                }}
+              />
               <div className="no-scrollbar flex gap-2 overflow-x-auto">
                 {items.map((it) => (
                   <Chip key={it.id} active={selected === it.id} onClick={() => setSelected(it.id)}>
@@ -445,11 +466,26 @@ export default function RoomDesigner() {
                       <Field label="Down the plan (Z)">
                         <NumInput value={sel.z} suffix="mm" onChange={(v) => up((r) => (r.placements.find((p) => p.itemId === sel.itemId)!.z = v))} />
                       </Field>
-                      <Field label="Facing">
-                        <button className="btn-secondary w-full" onClick={() => up((r) => { const p = r.placements.find((x) => x.itemId === sel.itemId)!; p.rot = (p.rot + 90) % 360; })}>
-                          <RotateCw size={14} /> {sel.rot}°
-                        </button>
+                      <Field label="Angle">
+                        <NumInput value={sel.rot} min={0} max={359} step={15} suffix="°" onChange={(v) => up((r) => (r.placements.find((p) => p.itemId === sel.itemId)!.rot = Math.round(v) % 360))} />
                       </Field>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1">
+                      {(
+                        [
+                          [0, '↓ Front'],
+                          [180, '↑ Back'],
+                          [90, '← Left'],
+                          [270, '→ Right'],
+                        ] as const
+                      ).map(([r0, label]) => (
+                        <button key={r0} className={`rounded-lg px-1 py-2 text-xs font-semibold ${sel.rot === r0 ? 'bg-brand-600 text-white' : 'bg-stone-100 text-stone-700'}`} onClick={() => up((r) => (r.placements.find((p) => p.itemId === sel.itemId)!.rot = r0))}>
+                          {label}
+                        </button>
+                      ))}
+                      <button className="rounded-lg bg-stone-100 px-1 py-2 text-xs font-semibold text-stone-700" aria-label="Turn 90°" onClick={() => up((r) => { const p = r.placements.find((x) => x.itemId === sel.itemId)!; p.rot = (p.rot + 90) % 360; })}>
+                        <RotateCw size={14} className="inline" /> 90°
+                      </button>
                     </div>
                     <span className="label">Push against a wall</span>
                     <div className="flex flex-wrap gap-2">
@@ -459,6 +495,24 @@ export default function RoomDesigner() {
                         </button>
                       ))}
                     </div>
+                    <Link className="btn-secondary w-full" to={selItem.kind === 'run' ? `/quotes/${quote.id}/runs/${selItem.id}` : selItem.kind === 'assembly' ? `/quotes/${quote.id}/groups/${selItem.id}` : `/quotes/${quote.id}/units/${selItem.id}`}>
+                      Design / change this item
+                    </Link>
+                    <button
+                      className="btn-ghost w-full text-red-600"
+                      onClick={() =>
+                        confirmAction(`Remove ${selItem.name} from the quotation?`) &&
+                        (updateQuote(quote.id, (q) => {
+                          q.units = q.units.filter((u) => u.id !== selItem.id);
+                          q.runs = q.runs.filter((r) => r.id !== selItem.id);
+                          q.assemblies = (q.assemblies ?? []).filter((a) => a.id !== selItem.id);
+                          if (q.room) q.room.placements = q.room.placements.filter((p) => p.itemId !== selItem.id);
+                        }),
+                        setSelected(null))
+                      }
+                    >
+                      <Trash2 size={14} className="inline" /> Remove from quotation
+                    </button>
                     <p className="text-xs text-stone-500">Kitchen runs are placed from their back-left corner; an L or U kitchen fits into the first corner of the room when X and Z are 0.</p>
                   </div>
                 </Card>

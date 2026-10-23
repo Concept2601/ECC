@@ -1,7 +1,9 @@
-import { AlertTriangle, Camera, Home, Copy, FileDown, Hammer, ImagePlus, LayoutPanelTop, Minus, MoreVertical, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
+import { AlertTriangle, Boxes, Camera, Home, Copy, FileDown, Hammer, ImagePlus, LayoutPanelTop, Minus, MoreVertical, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import AddUnitModal from '../components/AddUnitModal';
+import AddGroupModal from '../components/AddGroupModal';
+import { cloneAssembly } from '../lib/assembly';
 import { BarPlanCard, BoardPlanCard } from '../components/CutPlanView';
 import { Card, confirmAction, Field, Modal, NumInput, PageHeader, Row, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import UnitThumb from '../components/UnitThumb';
@@ -9,7 +11,7 @@ import { imageFileToJpeg } from '../lib/images';
 import { STATUS_STYLE, useMoney, useQuoteCalc } from '../hooks';
 import { cloneRun, createRun, RUN_SHAPE_LABELS, syncRun } from '../lib/runs';
 import type { RunShape } from '../lib/types';
-import { renderRunImage, renderUnitImage } from '../render/scene';
+import { renderAssemblyImage, renderRunImage, renderUnitImage } from '../render/scene';
 import { COST_GROUPS } from '../lib/pricing';
 import type { Quote, QuoteStatus } from '../lib/types';
 import { deepClone, uid } from '../lib/util';
@@ -30,6 +32,7 @@ export default function QuoteEditor() {
   const [tab, setTab] = useState<Tab>('design');
   const [adding, setAdding] = useState(false);
   const [addingRun, setAddingRun] = useState(false);
+  const [addingGroup, setAddingGroup] = useState(false);
   const attachRef = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState('');
@@ -65,14 +68,14 @@ export default function QuoteEditor() {
     await new Promise((r) => setTimeout(r, 30));
     const shots: { name: string; dataUrl: string }[] = [];
     for (const it of calc.items) {
-      const views = it.kind === 'run' ? (['3d', 'front'] as const) : (['3d', 'front', 'left'] as const);
+      const views = it.kind === 'unit' ? (['3d', 'front', 'left'] as const) : it.kind === 'assembly' ? (['3d', 'front', 'back', 'top'] as const) : (['3d', 'front'] as const);
       for (const v of views) {
-        const img = it.kind === 'run' && it.run && it.runBuild ? renderRunImage(it.run, it.runBuild, catalog, 1400, 800, 'image/jpeg', v) : it.unit && it.build ? renderUnitImage(it.unit, it.build, catalog, 1100, 850, 'image/jpeg', v) : null;
+        const img = it.kind === 'assembly' && it.assembly && it.assemblyBuild ? renderAssemblyImage(it.assembly, it.assemblyBuild, catalog, 1400, 900, 'image/jpeg', v) : it.kind === 'run' && it.run && it.runBuild ? renderRunImage(it.run, it.runBuild, catalog, 1400, 800, 'image/jpeg', v) : it.unit && it.build ? renderUnitImage(it.unit, it.build, catalog, 1100, 850, 'image/jpeg', v) : null;
         if (img) shots.push({ name: `${it.name} – ${v === '3d' ? '3D view' : `${v} view`}`, dataUrl: img });
       }
       const hasLights = it.entries.some((e) => e.build.lights.length > 0);
       if (hasLights) {
-        const img = it.kind === 'run' && it.run && it.runBuild ? renderRunImage(it.run, it.runBuild, catalog, 1400, 800, 'image/jpeg', '3d', true) : it.unit && it.build ? renderUnitImage(it.unit, it.build, catalog, 1100, 850, 'image/jpeg', '3d', true) : null;
+        const img = it.kind === 'assembly' && it.assembly && it.assemblyBuild ? renderAssemblyImage(it.assembly, it.assemblyBuild, catalog, 1400, 900, 'image/jpeg', '3d', true) : it.kind === 'run' && it.run && it.runBuild ? renderRunImage(it.run, it.runBuild, catalog, 1400, 800, 'image/jpeg', '3d', true) : it.unit && it.build ? renderUnitImage(it.unit, it.build, catalog, 1100, 850, 'image/jpeg', '3d', true) : null;
         if (img) shots.push({ name: `${it.name} – lighting`, dataUrl: img });
       }
     }
@@ -126,22 +129,25 @@ export default function QuoteEditor() {
         {tab === 'design' && (
           <div className="space-y-3">
             {calc.items.map((it) => {
-              const link = it.kind === 'run' ? `/quotes/${quote.id}/runs/${it.id}` : `/quotes/${quote.id}/units/${it.id}`;
+              const link = it.kind === 'run' ? `/quotes/${quote.id}/runs/${it.id}` : it.kind === 'assembly' ? `/quotes/${quote.id}/groups/${it.id}` : `/quotes/${quote.id}/units/${it.id}`;
               const isRun = it.kind === 'run';
+              const isGroup = it.kind === 'assembly';
+              const wide = isRun || isGroup;
               const setQty = (d: number) =>
                 up((q) => {
-                  const target = isRun ? q.runs.find((r) => r.id === it.id) : q.units.find((u) => u.id === it.id);
+                  const target = isRun ? q.runs.find((r) => r.id === it.id) : isGroup ? q.assemblies?.find((a) => a.id === it.id) : q.units.find((u) => u.id === it.id);
                   if (target) target.qty = Math.max(1, target.qty + d);
                 });
               return (
                 <div key={it.id} className="card flex flex-col gap-3 p-3 sm:flex-row">
                   <Link to={link} className="shrink-0">
-                    <UnitThumb unit={it.unit} build={it.build} run={it.run} runBuild={it.runBuild} catalog={catalog} className={`h-40 w-full ${isRun ? 'sm:h-32 sm:w-56' : 'sm:h-32 sm:w-40'}`} />
+                    <UnitThumb unit={it.unit} build={it.build} run={it.run} runBuild={it.runBuild} assembly={it.assembly} assemblyBuild={it.assemblyBuild} catalog={catalog} className={`h-40 w-full ${wide ? 'sm:h-32 sm:w-56' : 'sm:h-32 sm:w-40'}`} />
                   </Link>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <Link to={link} className="font-bold hover:text-brand-700">
                         {isRun && <span className="chip mr-1 bg-violet-100 text-violet-800">Kitchen</span>}
+                        {isGroup && <span className="chip mr-1 bg-sky-100 text-sky-800">{it.assembly!.pieces.some((p) => p.unit) ? 'Group' : 'Appliance'}</span>}
                         {it.name}
                       </Link>
                       <div className="text-right">
@@ -177,6 +183,10 @@ export default function QuoteEditor() {
                             if (isRun) {
                               const i = q.runs.findIndex((r) => r.id === it.id);
                               q.runs.splice(i + 1, 0, { ...cloneRun(q.runs[i]), name: `${q.runs[i].name} (copy)` });
+                            } else if (isGroup) {
+                              const list = (q.assemblies ??= []);
+                              const i = list.findIndex((a) => a.id === it.id);
+                              list.splice(i + 1, 0, { ...cloneAssembly(list[i]), name: `${list[i].name} (copy)` });
                             } else {
                               const i = q.units.findIndex((u) => u.id === it.id);
                               q.units.splice(i + 1, 0, { ...deepClone(q.units[i]), id: uid('u'), name: `${q.units[i].name} (copy)` });
@@ -189,7 +199,7 @@ export default function QuoteEditor() {
                       <button
                         className="btn-ghost px-2 py-1.5 text-red-600"
                         aria-label="Delete"
-                        onClick={() => confirmAction(`Remove ${it.name}?`) && up((q) => (isRun ? (q.runs = q.runs.filter((r) => r.id !== it.id)) : (q.units = q.units.filter((u) => u.id !== it.id))))}
+                        onClick={() => confirmAction(`Remove ${it.name}?`) && up((q) => (isRun ? (q.runs = q.runs.filter((r) => r.id !== it.id)) : isGroup ? (q.assemblies = (q.assemblies ?? []).filter((a) => a.id !== it.id)) : (q.units = q.units.filter((u) => u.id !== it.id))))}
                       >
                         <Trash2 size={16} />
                       </button>
@@ -213,6 +223,9 @@ export default function QuoteEditor() {
               </button>
               <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-violet-700 hover:border-violet-400" onClick={() => setAddingRun(true)}>
                 <LayoutPanelTop size={18} /> Add whole kitchen (straight / L / U)
+              </button>
+              <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-sky-700 hover:border-sky-400 sm:col-span-2" onClick={() => setAddingGroup(true)}>
+                <Boxes size={18} /> Add island, custom multi-cabinet unit or loose appliance
               </button>
             </div>
           </div>
@@ -529,6 +542,14 @@ export default function QuoteEditor() {
       </div>
       <div className="h-16" />
 
+      <AddGroupModal
+        open={addingGroup}
+        onClose={() => setAddingGroup(false)}
+        onAdd={(g) => {
+          up((q) => (q.assemblies ??= []).push(g));
+          nav(`/quotes/${quote.id}/groups/${g.id}`);
+        }}
+      />
       <AddUnitModal open={adding} onClose={() => setAdding(false)} onAdd={(u) => up((q) => q.units.push(u))} />
       <Modal open={addingRun} onClose={() => setAddingRun(false)} title="Add a whole kitchen">
         <div className="grid gap-2">

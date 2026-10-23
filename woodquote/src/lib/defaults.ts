@@ -47,7 +47,17 @@ export const defaultAppliances = (): Appliance[] => [
   { id: 'ap-washer', category: 'washer', name: 'Front-load washing machine', variant: 'Front load', width: 600, height: 850, depth: 600, price: 520, color: '#f4f4f5', placement: 'inbuilt' },
   { id: 'ap-cooker-gas', category: 'cooker', name: 'Freestanding gas stove 4 burner', variant: 'Gas', width: 600, height: 900, depth: 600, price: 380, color: '#d4d4d8', placement: 'freestanding' },
   { id: 'ap-cooker-elec', category: 'cooker', name: 'Freestanding electric stove', variant: 'Electric', width: 600, height: 900, depth: 600, price: 360, color: '#e4e4e7', placement: 'freestanding' },
+  // added in 2.2 for room plans
+  { id: 'ap-washer-top', category: 'washer', name: 'Top-load washing machine', variant: 'Top load', width: 600, height: 950, depth: 620, price: 450, color: '#f4f4f5', placement: 'freestanding' },
+  { id: 'ap-dryer', category: 'washer', name: 'Tumble dryer', variant: 'Dryer', width: 600, height: 850, depth: 600, price: 420, color: '#f4f4f5', placement: 'freestanding' },
+  { id: 'ap-freezer-chest', category: 'fridge', name: 'Chest freezer', variant: 'Chest', width: 900, height: 850, depth: 650, price: 400, color: '#f4f4f5', placement: 'freestanding' },
+  { id: 'ap-bin-pedal', category: 'other', name: 'Pedal bin 50 L', variant: 'Bin', width: 350, height: 650, depth: 350, price: 45, color: '#a1a1aa', placement: 'freestanding' },
+  { id: 'ap-bin-twin', category: 'other', name: 'Twin recycling bin', variant: 'Bin', width: 600, height: 700, depth: 400, price: 85, color: '#a1a1aa', placement: 'freestanding' },
+  { id: 'ap-tv-55', category: 'other', name: 'TV 55"', variant: 'TV', width: 1230, height: 710, depth: 80, price: 600, color: '#0b0b0d', placement: 'freestanding' },
 ];
+
+/** Built-in library items added after 2.1, offered once to libraries saved by older versions. */
+export const DEFAULTS_ADDED_LATER = ['ap-washer-top', 'ap-dryer', 'ap-freezer-chest', 'ap-bin-pedal', 'ap-bin-twin', 'ap-tv-55'];
 
 
 export const defaultCatalog = (): Catalog => ({

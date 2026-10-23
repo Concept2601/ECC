@@ -5,8 +5,9 @@ import { describeUnit } from './describe';
 import { buildUnit } from './generate';
 import { packBars, packSheets, priceBoardPlan, type BarPlan, type BoardPlan, type Piece } from './optimizer';
 import { buildRun, describeRun, type RunBuild } from './runs';
+import { buildAssembly, describeAssembly, pieceName, type AssemblyBuild } from './assembly';
 import { splitForStock, type JoinPlan } from './joinery';
-import type { Accessory, Catalog, Invoice, PricingSettings, Quote, Run, Settings, Unit, UnitBuild } from './types';
+import type { Accessory, Assembly, Catalog, Invoice, PricingSettings, Quote, Run, Settings, Unit, UnitBuild } from './types';
 import { round2, sum } from './util';
 
 export type CostGroup = 'Boards' | 'Edge banding' | 'Glass' | 'Aluminium' | 'Countertops' | 'Hardware' | 'Appliances';
@@ -35,7 +36,7 @@ export interface Entry {
 }
 
 export interface ItemPrice {
-  kind: 'unit' | 'run';
+  kind: 'unit' | 'run' | 'assembly';
   id: string;
   name: string;
   qty: number;
@@ -43,6 +44,8 @@ export interface ItemPrice {
   run?: Run;
   build?: UnitBuild; // single units
   runBuild?: RunBuild; // kitchen runs
+  assembly?: Assembly;
+  assemblyBuild?: AssemblyBuild; // cabinet groups / islands / loose appliances
   entries: Entry[];
   lines: string[]; // description
   materials: number; // allocated materials & hardware for all qty
@@ -124,6 +127,13 @@ export function quoteItems(q: Quote, cat: Catalog, settings: Settings): { items:
     es.push({ key: `${r.id}:extra`, itemId: r.id, name: `${r.name} – worktop & appliances`, qty: r.qty, build: rb.extra, unit: null, labourOverride: null });
     entries.push(...es);
     items.push({ kind: 'run', id: r.id, name: r.name, qty: r.qty, run: r, runBuild: rb, entries: es, lines: describeRun(r, cat) });
+  }
+  for (const a of q.assemblies ?? []) {
+    const ab = cached(cat, pr, `g${JSON.stringify(a)}`, () => buildAssembly(a, cat, pr));
+    const es: Entry[] = ab.pieces.filter((p) => p.build).map((p) => ({ key: `${a.id}:${p.piece.id}`, itemId: a.id, name: `${a.name} – ${pieceName(p.piece, cat)}`, qty: a.qty, build: p.build!, unit: p.piece.unit, labourOverride: p.piece.unit?.labourOverride ?? null }));
+    es.push({ key: `${a.id}:extra`, itemId: a.id, name: `${a.name} – worktop & appliances`, qty: a.qty, build: ab.extra, unit: null, labourOverride: null });
+    entries.push(...es);
+    items.push({ kind: 'assembly', id: a.id, name: a.name, qty: a.qty, assembly: a, assemblyBuild: ab, entries: es, lines: describeAssembly(a, cat) });
   }
   return { items, entries };
 }

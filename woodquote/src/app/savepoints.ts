@@ -3,7 +3,7 @@
 // nothing is lost if the app closes; save points let you go back in time.
 import { del, get, set } from 'idb-keyval';
 import { create } from 'zustand';
-import { exportData, useStore, type AppData } from '../store';
+import { exportData, useStore, type AppData, flushSave } from '../store';
 import { usePrefs } from './prefs';
 
 export interface SavePoint {
@@ -48,6 +48,7 @@ export async function saveNow(kind: 'manual' | 'auto' = 'manual', label?: string
   if (useSaves.getState().saving) return null;
   useSaves.setState({ saving: true });
   try {
+    await flushSave();
     const data = exportData();
     const at = Date.now();
     const p: SavePoint = { id: String(at), at, kind, label: label ?? (kind === 'auto' ? 'Auto-save' : 'Saved'), quotes: data.quotes.length, invoices: data.invoices.length };

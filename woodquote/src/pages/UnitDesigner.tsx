@@ -3,14 +3,16 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import ElevationEditor, { type EditorView, type Sel, type SidePick } from '../components/ElevationEditor';
 import { choices, FIT_ICONS, FIT_LABELS, FRONT_ICONS, FRONT_LABELS, IconChoice, MATERIAL_ICONS, MATERIAL_LABELS, OPENING_ICONS, OPENING_LABELS, PANEL_ICONS, PANEL_LABELS, SLIDE_ICONS, SLIDE_LABELS } from '../components/OptionIcons';
-import { Card, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
+import { Card, Field, NumInput, OptNumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import Viewer3D from '../components/Viewer3D';
 import ApplianceSelect from '../components/ApplianceSelect';
 import { useMoney, useQuoteCalc } from '../hooks';
 import { elevation } from '../lib/generate';
 import { locateUnit } from '../lib/locate';
-import { PRODUCT_LABELS, PRODUCT_ORDER, sec } from '../lib/presets';
-import { syncRun } from '../lib/runs';
+import { PRODUCT_LABELS, PRODUCT_ORDER, QUICK_TYPES, retypeUnit, sec } from '../lib/presets';
+import { retypeModule, syncRun } from '../lib/runs';
+import { replaceUnit } from '../lib/locate';
+import { syncAssembly } from '../lib/assembly';
 import { cellRects, getSection, mergeSection, sameRef, splitSection } from '../lib/sections';
 import { ACCESSORY_LABELS, type AccessoryCategory, type FrontKind, type LightLocation, type ProductType, type SectionRef, type Unit } from '../lib/types';
 import { kelvinToHex, LIGHT_TEMPS, uid } from '../lib/util';
@@ -158,7 +160,7 @@ export default function UnitDesigner() {
 
   const loc = quote ? locateUnit(quote, unitId) : null;
   const unit = loc?.unit;
-  const item = calc?.items.find((it) => it.id === (loc?.run ? loc.run.id : unitId));
+  const item = calc?.items.find((it) => it.id === (loc?.run ? loc.run.id : loc?.assembly ? loc.assembly.id : unitId));
   const build = calc?.entries.find((e) => e.unit?.id === unitId)?.build;
   const elev = useMemo(() => (unit ? elevation(unit, catalog) : null), [unit, catalog]);
   const runRef = loc?.role === 'base' ? loc.run : undefined;
@@ -170,7 +172,7 @@ export default function UnitDesigner() {
 
   if (!quote || !unit || !build || !elev || !item) return <PageHeader title="Unit not found" back />;
   const inRun = !!loc?.run;
-  const backTo = inRun ? `/quotes/${quote.id}/runs/${loc!.run!.id}` : `/quotes/${quote.id}`;
+  const backTo = inRun ? `/quotes/${quote.id}/runs/${loc!.run!.id}` : loc?.assembly ? `/quotes/${quote.id}/groups/${loc.assembly.id}` : `/quotes/${quote.id}`;
 
   const up = (fn: (u: Unit) => void) =>
     updateQuote(quote.id, (q) => {
@@ -178,6 +180,24 @@ export default function UnitDesigner() {
       if (!l) return;
       fn(l.unit);
       if (l.run) syncRun(l.run, catalog);
+      if (l.assembly) syncAssembly(l.assembly, catalog);
+    });
+
+  /** One-step type change: a stand-alone / grouped unit gets the new type's layout; a kitchen slot switches base ↔ tall. */
+  const retype = (t: ProductType) =>
+    updateQuote(quote.id, (q) => {
+      const l = locateUnit(q, unitId);
+      if (!l) return;
+      if (l.run && l.module) {
+        if (t === 'kitchen_tall' || t === 'kitchen_base') retypeModule(l.module, t === 'kitchen_tall' ? 'tall' : 'base', l.run);
+        syncRun(l.run, catalog);
+        // the slot keeps its id; its new cabinet gets a new one
+        const nu = l.module.base;
+        if (nu && nu.id !== unitId) nu.id = unitId;
+        return;
+      }
+      replaceUnit(q, retypeUnit(l.unit, t));
+      if (l.assembly) syncAssembly(l.assembly, catalog);
     });
 
   const cells = cellRects(unit, catalog);
@@ -305,6 +325,16 @@ export default function UnitDesigner() {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {build.warnings.length > 0 && <div className="bg-amber-50 px-4 py-2 text-xs text-amber-900">{build.warnings.join(' ')}</div>}
+        {(!inRun || loc?.role !== 'wall') && (
+          <div className="no-scrollbar flex items-center gap-1 overflow-x-auto border-b border-stone-200 bg-white px-3 py-1.5">
+            <span className="shrink-0 text-[11px] font-semibold text-stone-500">Switch to:</span>
+            {(inRun ? QUICK_TYPES.filter((q) => q.type === 'kitchen_base' || q.type === 'kitchen_tall') : QUICK_TYPES).map((q) => (
+              <Chip key={q.type} active={unit.type === q.type || (inRun && ((q.type === 'kitchen_tall') === (loc?.role === 'tall')))} onClick={() => retype(q.type)}>
+                {q.short}
+              </Chip>
+            ))}
+          </div>
+        )}
         <div className="sticky top-0 z-10 border-b border-stone-200 bg-stone-100/95 px-3 backdrop-blur">
           <div className="mx-auto max-w-5xl">
             <Tabs<Tab>
@@ -486,7 +516,7 @@ export default function UnitDesigner() {
                   {!inRun && (
                     <div className="grid grid-cols-2 gap-3">
                       <Field label="Type">
-                        <Select<ProductType> value={unit.type} onChange={(v) => v && up((u) => (u.type = v))} options={PRODUCT_ORDER.map((t) => ({ value: t, label: PRODUCT_LABELS[t] }))} />
+                        <Select<ProductType> value={unit.type} onChange={(v) => v && retype(v)} options={PRODUCT_ORDER.map((t) => ({ value: t, label: PRODUCT_LABELS[t] }))} />
                       </Field>
                       <Field label="Quantity">
                         <NumInput value={unit.qty} min={1} onChange={(v) => up((u) => (u.qty = Math.max(1, Math.round(v))))} />
@@ -509,7 +539,7 @@ export default function UnitDesigner() {
                     <TextInput multiline value={unit.notes} onChange={(v) => up((u) => (u.notes = v))} />
                   </Field>
                   <Field label="Fixed labour price per unit (blank = use settings)">
-                    <input className="input" inputMode="decimal" value={unit.labourOverride ?? ''} placeholder="Auto" onChange={(e) => up((u) => (u.labourOverride = e.target.value === '' ? null : Number(e.target.value) || 0))} />
+                    <OptNumInput value={unit.labourOverride} min={0} placeholder="Auto" onChange={(v) => up((u) => (u.labourOverride = v))} />
                   </Field>
                 </div>
               </Card>
@@ -911,10 +941,10 @@ export default function UnitDesigner() {
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <Field label="Front edge → front of hob/sink">
-                            <input className="input" inputMode="numeric" placeholder="Centred" value={t.frontGap ?? ''} onChange={(e) => up((u) => (u.topAppliances[i].frontGap = e.target.value === '' ? null : Number(e.target.value) || 0))} />
+                            <OptNumInput placeholder="Centred" suffix="mm" value={t.frontGap} onChange={(v) => up((u) => (u.topAppliances[i].frontGap = v))} />
                           </Field>
                           <Field label="Unit left edge → left of hob/sink">
-                            <input className="input" inputMode="numeric" placeholder="Centred on bay" value={t.xOffset ?? ''} onChange={(e) => up((u) => (u.topAppliances[i].xOffset = e.target.value === '' ? null : Number(e.target.value) || 0))} />
+                            <OptNumInput placeholder="Centred on bay" suffix="mm" value={t.xOffset} onChange={(v) => up((u) => (u.topAppliances[i].xOffset = v))} />
                           </Field>
                         </div>
                         {isHob && (

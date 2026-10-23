@@ -1,6 +1,6 @@
 // Dashboard: where the business stands — open, draft and closed quotations,
 // invoices and receipts, quick tools — with a + button for a new quotation.
-import { FileCheck2, FilePen, FileText, Map as MapIcon, Plus, Receipt, Ruler, ScanLine, ShieldCheck, TrendingUp } from 'lucide-react';
+import { FileCheck2, FilePen, FileText, LayoutDashboard, Map as MapIcon, Plus, Receipt, Ruler, ScanLine, ShieldCheck, TrendingUp } from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import EditTools from '../components/EditTools';
@@ -126,7 +126,12 @@ export default function Home() {
               </div>
             </div>
           </section>
-          <section className="card grid grid-cols-3 gap-2 p-3">
+          <section className="card grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
+            <button className="flex flex-col items-start gap-1 rounded-xl p-2 text-left hover:bg-stone-50" onClick={() => nav(`/quotes/${createQuote({ title: 'Room design' })}/room?start=1`)}>
+              <LayoutDashboard className="text-brand-600" />
+              <span className="text-sm font-bold">Start from a room</span>
+              <span className="text-[11px] text-stone-500">Draw the room, place everything, get the quote</span>
+            </button>
             <Link to="/reader" className="flex flex-col items-start gap-1 rounded-xl p-2 hover:bg-stone-50">
               <ScanLine className="text-brand-600" />
               <span className="text-sm font-bold">Diagram reader</span>

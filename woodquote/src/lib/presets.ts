@@ -334,3 +334,44 @@ export function normalizeUnit(raw: any): Unit {
   }));
   return u;
 }
+
+/** The material and fitting choices that carry over when a cabinet changes type. */
+const KEEP_ON_RETYPE = ['carcassMaterialId', 'frontMaterialId', 'backMaterialId', 'edgingId', 'frontEdgingId', 'glassId', 'aluminiumId', 'hingeId', 'glassHingeId', 'runnerId', 'handleId', 'screwId', 'connectorId', 'shelfPinId', 'installType'] as const;
+
+/**
+ * Change a cabinet's type in one step (base → tall, wall → base, TV stand →
+ * bookshelf…). Sizes, mounting, plinth, top and inside layout come from the new
+ * type; its width, quantity, materials, handles, hinges, notes and labour price
+ * stay. A name you typed yourself is kept.
+ */
+export function retypeUnit(u: Unit, type: ProductType): Unit {
+  if (u.type === type) return u;
+  const n = createUnit(type);
+  const out: Unit = { ...n, id: u.id, qty: u.qty, notes: u.notes, labourOverride: u.labourOverride, extraParts: u.extraParts, extraHardware: u.extraHardware };
+  for (const k of KEEP_ON_RETYPE) (out as unknown as Record<string, unknown>)[k] = u[k];
+  const cornerNow = type === 'corner_base' || type === 'corner_wall';
+  const cornerWas = u.type === 'corner_base' || u.type === 'corner_wall';
+  if (!cornerNow && !cornerWas) {
+    out.width = u.width;
+  }
+  const defaultName = (t: ProductType) => u.name === PRODUCT_LABELS[t] || u.name.startsWith(PRODUCT_LABELS[t]);
+  out.name = defaultName(u.type) || !u.name.trim() ? n.name : u.name;
+  return out;
+}
+
+/** Quick switch buttons shown at the top of the designer. */
+export const QUICK_TYPES: { type: ProductType; short: string }[] = [
+  { type: 'kitchen_base', short: 'Base' },
+  { type: 'kitchen_wall', short: 'Wall' },
+  { type: 'kitchen_tall', short: 'Tall' },
+  { type: 'corner_base', short: 'Corner base' },
+  { type: 'corner_wall', short: 'Corner wall' },
+  { type: 'island', short: 'Island' },
+  { type: 'wardrobe', short: 'Wardrobe' },
+  { type: 'sliding_wardrobe', short: 'Sliding wardrobe' },
+  { type: 'built_in', short: 'BIC' },
+  { type: 'tv_stand', short: 'TV stand' },
+  { type: 'bookshelf', short: 'Display' },
+  { type: 'vanity', short: 'Vanity' },
+  { type: 'custom', short: 'Custom' },
+];

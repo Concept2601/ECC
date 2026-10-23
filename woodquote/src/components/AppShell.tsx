@@ -6,14 +6,14 @@ import { startHistory, useHistory } from '../app/history';
 import { usePrefs } from '../app/prefs';
 import { saveNow, startSaving, useSaves } from '../app/savepoints';
 import { ACTIONS, actionKeys, installKeyHandler, keyLabel, runAction, toAccelerator, useShortcuts, type ActionId } from '../app/shortcuts';
-import { useStore } from '../store';
+import { flushSave, useStore } from '../store';
 import { Modal } from './ui';
 
 let started = false;
 
 /** Reload the whole app. Work is already stored, so nothing is lost; give the last write a moment to land. */
 export function refreshApp() {
-  setTimeout(() => window.location.reload(), 150);
+  void flushSave().finally(() => setTimeout(() => window.location.reload(), 100));
 }
 
 export function ShortcutHelp({ open, onClose }: { open: boolean; onClose: () => void }) {

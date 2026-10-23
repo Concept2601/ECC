@@ -89,8 +89,8 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
   function listProps<K extends keyof Catalog>(key: K) {
     return {
       items: catalog[key] as Catalog[K],
-      onChange: (i: number, patch: object) => updateCatalog((c) => Object.assign(c[key][i], patch)),
-      onRemove: (i: number) => updateCatalog((c) => c[key].splice(i, 1)),
+      onChange: (i: number, patch: object) => updateCatalog((c) => Object.assign((c[key] as object[])[i], patch)),
+      onRemove: (i: number) => updateCatalog((c) => void (c[key] as object[]).splice(i, 1)),
     };
   }
 

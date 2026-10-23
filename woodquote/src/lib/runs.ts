@@ -189,6 +189,31 @@ export function customModule(spec: CustomSpec, run: Run): RunModule {
   }
 }
 
+const KEEP = ['carcassMaterialId', 'frontMaterialId', 'backMaterialId', 'edgingId', 'frontEdgingId', 'handleId', 'hingeId', 'runnerId', 'legId', 'screwId', 'connectorId', 'shelfPinId'] as const;
+
+/**
+ * Switch a kitchen position between base cabinet, tall cabinet, open space and
+ * filler in one step. Width, custom sizes and the chosen materials / handles stay.
+ */
+export function retypeModule(m: RunModule, kind: 'base' | 'tall' | 'gap' | 'filler', run: Run) {
+  if (m.kind === kind) return;
+  const old = m.base ?? m.wall;
+  const keepWall = m.wall;
+  let next: RunModule;
+  if (kind === 'base') next = baseModule('doors', run, 'none', m.width);
+  else if (kind === 'tall') next = tallModule('pantry', run, m.width);
+  else next = customModule({ kind: kind === 'filler' ? 'filler' : 'space', width: m.width, height: null, depth: null }, run);
+  if (old) for (const u of [next.base, next.wall]) if (u) for (const k of KEEP) (u as unknown as Record<string, unknown>)[k] = old[k];
+  const custom = { height: kind === m.kind ? m.height : null, depth: m.depth };
+  Object.assign(m, { ...next, id: m.id, ...custom });
+  // base and spaces keep the wall cabinet that was above; a tall cabinet or filler has none
+  if (kind === 'base' || kind === 'gap') m.wall = keepWall;
+  if (kind !== 'gap') {
+    m.gapApplianceId = null;
+    m.gapLabel = '';
+  }
+}
+
 /** Mm still free on each leg when a target length was measured (negative = too long). */
 export const legRemaining = (run: Run, leg: number): number | null => {
   const t = run.targets?.[leg];
@@ -245,10 +270,62 @@ export function ensureLegs(run: Run) {
   }
 }
 
-/** Where a side wall's cabinets start, measured from the back wall: after the corner cupboard's Width B. */
+/** How far a corner reaches along the other wall: a corner cupboard's Width B, else the cabinet depth. */
+const cornerReach = (run: Run, m?: RunModule) => (m?.base?.corner ? Math.max(run.baseDepth, m.cornerB || m.base.corner.widthB) : run.baseDepth);
+
+/** Which wall runs into each corner. */
+export const cornerOwner = (run: Run, side: 'left' | 'right'): 'back' | 'side' => {
+  if (side === 'right' && activeLegs(run) < 2) return 'back';
+  if (side === 'left' && activeLegs(run) < 3) return 'back';
+  return run.corners?.[side] ?? 'back';
+};
+
+/**
+ * Plan layout of a kitchen. The back wall's cabinets start at x = off0 and the right
+ * wall's back faces x = x1. When a side wall runs into a corner, the back wall
+ * starts (or stops) a corner's reach away from it instead.
+ */
+export function runLayout(run: Run) {
+  const LA = legLength(run.legs[0]);
+  const rightSide = cornerOwner(run, 'right') === 'side';
+  const leftSide = cornerOwner(run, 'left') === 'side';
+  const off0 = leftSide ? cornerReach(run, run.legs[2][0]) : 0;
+  const x1 = off0 + LA + (rightSide ? cornerReach(run, run.legs[1][0]) : 0);
+  const start1 = rightSide ? 0 : cornerReach(run, run.legs[0][run.legs[0].length - 1]);
+  const start2 = leftSide ? 0 : cornerReach(run, run.legs[0][0]);
+  return { LA, off0, x1, start1, start2, rightSide, leftSide };
+}
+
+/** Where a side wall's cabinets start, measured from the back wall. */
 export function legStart(run: Run, leg: 1 | 2): number {
-  const m = leg === 1 ? run.legs[0][run.legs[0].length - 1] : run.legs[0][0];
-  return m?.base?.corner ? Math.max(run.baseDepth, m.cornerB || m.base.corner.widthB) : run.baseDepth;
+  const l = runLayout(run);
+  return leg === 1 ? l.start1 : l.start2;
+}
+
+/** The corner cupboard / cabinet at each corner, wherever it sits. */
+export function cornerModule(run: Run, side: 'left' | 'right'): RunModule | undefined {
+  if (side === 'right') return cornerOwner(run, 'right') === 'side' ? run.legs[1][0] : run.legs[0][run.legs[0].length - 1];
+  return cornerOwner(run, 'left') === 'side' ? run.legs[2][0] : run.legs[0][0];
+}
+
+/** Let the other wall run into a corner, moving a corner cupboard with it. */
+export function setCornerOwner(run: Run, side: 'left' | 'right', owner: 'back' | 'side') {
+  if (cornerOwner(run, side) === owner) return;
+  const leg = side === 'right' ? 1 : 2;
+  const cur = cornerModule(run, side);
+  if (cur?.base?.corner) {
+    // the corner cupboard moves to the wall that now runs into the corner
+    if (owner === 'side') {
+      if (side === 'right') run.legs[0].pop();
+      else run.legs[0].shift();
+      run.legs[leg].unshift(cur);
+    } else {
+      run.legs[leg].shift();
+      if (side === 'right') run.legs[0].push(cur);
+      else run.legs[0].unshift(cur);
+    }
+  }
+  run.corners = { ...run.corners, [side]: owner };
 }
 
 /** Height of a filler panel: custom, else up to the worktop underside. */
@@ -281,9 +358,9 @@ export function syncRun(run: Run, cat?: Catalog) {
       if (m.base && corner) {
         corner.widthB = Math.max(1, m.cornerB || corner.widthB);
         m.cornerB = corner.widthB;
-        const li = run.legs.indexOf(leg);
-        if (li === 0 && run.shape !== 'straight' && m === leg[leg.length - 1]) corner.hand = 'right';
-        else if (li === 0 && run.shape === 'U' && m === leg[0]) corner.hand = 'left';
+        // the return goes along the wall the corner turns onto
+        if (m === cornerModule(run, 'right') && activeLegs(run) > 1) corner.hand = cornerOwner(run, 'right') === 'side' ? 'left' : 'right';
+        else if (m === cornerModule(run, 'left') && activeLegs(run) > 2) corner.hand = cornerOwner(run, 'left') === 'side' ? 'right' : 'left';
         m.base.type = 'corner_base';
       }
       if (m.wall) {
@@ -315,10 +392,10 @@ export interface Placement {
 
 /** World transform for something spanning [s, s+w] along a leg (local x 0..w, z 0 = wall). */
 export function legTransform(run: Run, p: Placement): { x: number; z: number; rotY: number } {
-  const LA = legLength(run.legs[0]);
-  if (p.leg === 0) return { x: p.s, z: 0, rotY: 0 };
-  if (p.leg === 1) return { x: LA, z: legStart(run, 1) + p.s, rotY: -Math.PI / 2 };
-  return { x: 0, z: legStart(run, 2) + p.s + p.w, rotY: Math.PI / 2 };
+  const l = runLayout(run);
+  if (p.leg === 0) return { x: l.off0 + p.s, z: 0, rotY: 0 };
+  if (p.leg === 1) return { x: l.x1, z: l.start1 + p.s, rotY: -Math.PI / 2 };
+  return { x: 0, z: l.start2 + p.s + p.w, rotY: Math.PI / 2 };
 }
 
 export interface RunPiece {
@@ -405,13 +482,17 @@ export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunB
   // worktop over the side arm of each corner cupboard (between the back-wall worktop and the side wall's)
   if (counter && nLegs > 1) {
     const depth = run.baseDepth + run.counterOverhang;
-    for (const leg of [1, 2] as const) {
-      if (leg === 2 && nLegs < 3) continue;
-      const len = legStart(run, leg) - depth;
-      const m = leg === 1 ? run.legs[0][run.legs[0].length - 1] : run.legs[0][0];
-      if (!m?.base?.corner || m.height || len <= 0) continue;
+    for (const side of ['right', 'left'] as const) {
+      if (side === 'left' && nLegs < 3) continue;
+      const m = cornerModule(run, side);
+      if (!m?.base?.corner || m.height) continue;
+      const len = cornerReach(run, m) - depth;
+      if (len <= 0) continue;
       const box: Box3 = { x: 0, y: run.counterHeight - counter.thickness, z: 0, w: len, h: counter.thickness, d: depth };
-      extraPlacements.push({ place: { leg, s: -len, w: len }, box, kind: 'counter' });
+      // the return lies along the wall the corner cupboard turns onto
+      const bySide = cornerOwner(run, side) === 'side';
+      const place = bySide ? { leg: 0, s: side === 'right' ? legLength(run.legs[0]) : -len, w: len } : { leg: side === 'right' ? 1 : 2, s: -len, w: len };
+      extraPlacements.push({ place, box, kind: 'counter' });
       const key = `${counter.id}|${Math.round(len)}|${depth}|corner`;
       const p = counterParts.get(key);
       if (p) p.qty++;
@@ -424,9 +505,10 @@ export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunB
   const LA = legLength(run.legs[0]);
   const LB = nLegs > 1 ? legLength(run.legs[1]) : 0;
   const LC = nLegs > 2 ? legLength(run.legs[2]) : 0;
-  const d = Math.max(run.baseDepth + run.counterOverhang, nLegs > 1 ? legStart(run, 1) + LB : 0, nLegs > 2 ? legStart(run, 2) + LC : 0);
+  const lay = runLayout(run);
+  const d = Math.max(run.baseDepth + run.counterOverhang, nLegs > 1 ? lay.start1 + LB : 0, nLegs > 2 ? lay.start2 + LC : 0);
   const tops = run.legs.slice(0, nLegs).flat().map((m) => Math.max(m.height ?? 0, m.wall ? (m.wallBottom ?? run.wallBottom) + (m.wallHeight || run.wallHeight) : 0));
-  return { pieces, extra, extraPlacements, size: { w: LA, d, h: Math.max(run.tallHeight, run.wallBottom + run.wallHeight, ...tops) } };
+  return { pieces, extra, extraPlacements, size: { w: Math.max(LA, lay.x1), d, h: Math.max(run.tallHeight, run.wallBottom + run.wallHeight, ...tops) } };
 }
 
 /** All units in a run (for lookups by id). */

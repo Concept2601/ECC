@@ -10,7 +10,7 @@ import { accessoryPacks, balanceAfterPayment, calculateInvoice, type ItemPrice, 
 import { activeLegs, LEG_LABELS, legLength } from '../lib/runs';
 import type { Catalog, Invoice, Payment, Quote, Room, Run, Settings, Unit } from '../lib/types';
 import { addDaysISO, fmtDate, money } from '../lib/util';
-import { renderRoomImage, renderRunImage, renderUnitImage } from '../render/scene';
+import { renderAssemblyImage, renderRoomImage, renderRunImage, renderUnitImage } from '../render/scene';
 import { footprints, inwardNormal, placeXZ, roomExtents, vertices, wallDir } from '../lib/room';
 import { cellRects } from '../lib/sections';
 
@@ -549,6 +549,27 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
         y += 5;
         continue;
       }
+      if (it.kind === 'assembly' && it.assembly && it.assemblyBuild) {
+        // 3D view and the top view (shows which way every cabinet faces)
+        const views = [s.doc.showRenders ? ('3d' as const) : null, s.doc.showElevations ? ('top' as const) : null, s.doc.showElevations && it.assembly.pieces.some((p) => p.rot === 180) ? ('back' as const) : null].filter(Boolean) as ('3d' | 'top' | 'back')[];
+        const w = (PAGE_W - 2 * M - 6 * (views.length - 1)) / Math.max(1, views.length);
+        views.forEach((v, k) => {
+          const img = renderAssemblyImage(it.assembly!, it.assemblyBuild!, cat, 1000, 760, 'image/jpeg', v);
+          const x = M + k * (w + 6);
+          doc.roundedRect(x, y, w, blockH, 2, 2, 'S');
+          if (img) {
+            const ih = blockH - 8;
+            const iw = Math.min(w - 4, (ih * 1000) / 760);
+            doc.addImage(img, 'JPEG', x + (w - iw) / 2, y + 2, iw, ih);
+          }
+          doc.setFontSize(7);
+          doc.setTextColor(110);
+          doc.text(v === '3d' ? '3D view' : v === 'top' ? 'Top view (front at the bottom)' : 'Back view', x + w / 2, y + blockH - 2, { align: 'center' });
+          doc.setTextColor(0);
+        });
+        y += blockH + 9;
+        continue;
+      }
       const colW = both ? (PAGE_W - 2 * M - 6) / 2 : PAGE_W - 2 * M;
       if (s.doc.showRenders && it.unit && it.build) {
         const img = renderUnitImage(it.unit, it.build, cat, 900, 700, 'image/jpeg');
@@ -718,10 +739,12 @@ export function drawRoomPlan(doc: Doc, room: Room, items: ItemPrice[], cat: Cata
     const polys = footprints(it, cat, p);
     for (const poly of polys) {
       if (it.kind === 'run') doc.setFillColor(221, 214, 254);
+      else if (it.kind === 'assembly' && !it.assembly?.pieces.some((x) => x.unit)) doc.setFillColor(186, 230, 253);
       else doc.setFillColor(233, 201, 159);
       quad(poly, 'FD');
     }
-    const c = polys[0].reduce((acc, q) => [acc[0] + q[0] / 4, acc[1] + q[1] / 4], [0, 0]);
+    const allPts = polys.flat();
+    const c = allPts.reduce((acc, q) => [acc[0] + q[0] / allPts.length, acc[1] + q[1] / allPts.length], [0, 0]);
     const [cx, cz] = P(c[0], c[1]);
     doc.text(it.name.slice(0, 28), cx, cz, { align: 'center' });
   }

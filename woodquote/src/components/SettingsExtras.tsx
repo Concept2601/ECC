@@ -7,7 +7,7 @@ import { deleteSave, restoreSave, saveNow, savePointJson, useSaves } from '../ap
 import { ACTIONS, actionKeys, keyLabel, keyName, shortcutCapture, type ActionId } from '../app/shortcuts';
 import { shareTextFile } from '../pdf/pdf';
 import { refreshApp } from './AppShell';
-import { Card, confirmAction, Field, Toggle } from './ui';
+import { Card, confirmAction, Field, NumInput, Toggle } from './ui';
 
 const when = (t: number) => new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -39,10 +39,10 @@ export function SavingCard() {
             </select>
           </Field>
           <Field label="Custom interval (minutes)">
-            <input className="input" type="number" min={0} max={240} value={prefs.autoSaveMinutes} onChange={(e) => prefs.set({ autoSaveMinutes: Math.max(0, Math.min(240, Number(e.target.value) || 0)) })} />
+            <NumInput min={0} max={240} suffix="min" value={prefs.autoSaveMinutes} onChange={(v) => prefs.set({ autoSaveMinutes: v })} />
           </Field>
           <Field label="Automatic save points to keep">
-            <input className="input" type="number" min={1} max={200} value={prefs.keepAutoSaves} onChange={(e) => prefs.set({ keepAutoSaves: Math.max(1, Math.min(200, Number(e.target.value) || 1)) })} />
+            <NumInput min={1} max={200} step={1} value={prefs.keepAutoSaves} onChange={(v) => prefs.set({ keepAutoSaves: Math.round(v) })} />
           </Field>
           {window.woodquoteDesktop && <Toggle label="Also write backup files on this PC" checked={prefs.backupFiles} onChange={(v) => prefs.set({ backupFiles: v })} />}
           <div className="rounded-xl bg-stone-50 p-3 text-xs text-stone-600">

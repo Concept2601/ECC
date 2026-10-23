@@ -159,3 +159,33 @@ describe('restoring backups from earlier versions', () => {
     }
   });
 });
+
+import { mergeCatalog } from '../../store';
+
+describe('price library is kept as you left it', () => {
+  it('keeps deleted items deleted and edited prices after restarting', () => {
+    const c = mergeCatalog(defaultCatalog());
+    const gone = c.boards[0].id;
+    c.boards.splice(0, 1);
+    c.boards[0].pricePerSheet = 123.45;
+    c.accessories = c.accessories.slice(3);
+    const again = mergeCatalog(JSON.parse(JSON.stringify(c)));
+    expect(again.boards.find((b) => b.id === gone)).toBeUndefined();
+    expect(again.boards[0].pricePerSheet).toBe(123.45);
+    expect(again.accessories).toHaveLength(c.accessories.length);
+  });
+  it('older libraries get the new built-in appliances once, then deleting them sticks', () => {
+    const old = defaultCatalog();
+    old.appliances = old.appliances.filter((x) => x.id !== 'ap-dryer' && x.id !== 'ap-bin-pedal');
+    const a = mergeCatalog(old);
+    expect(a.appliances.some((x) => x.id === 'ap-dryer')).toBe(true);
+    a.appliances = a.appliances.filter((x) => x.id !== 'ap-dryer');
+    expect(mergeCatalog(JSON.parse(JSON.stringify(a))).appliances.some((x) => x.id === 'ap-dryer')).toBe(false);
+  });
+  it('does not bring back items deleted before deletions were tracked', () => {
+    const c = defaultCatalog();
+    const gone = c.glass[0].id;
+    c.glass.splice(0, 1);
+    expect(mergeCatalog(c).glass.find((g) => g.id === gone)).toBeUndefined();
+  });
+});

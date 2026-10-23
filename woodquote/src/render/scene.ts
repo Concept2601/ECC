@@ -4,8 +4,9 @@ import { unitExtents } from '../lib/generate';
 import { cellRects, sameRef } from '../lib/sections';
 import type { ItemPrice } from '../lib/pricing';
 import { inwardNormal, itemBounds, orientation, roomExtents, vertices, wallPieces } from '../lib/room';
-import { activeLegs, legLength, legStart, legTransform, type RunBuild } from '../lib/runs';
-import type { Appliance, Box3 as PartBox, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
+import { activeLegs, legLength, legStart, legTransform, runLayout, type RunBuild } from '../lib/runs';
+import type { AssemblyBuild } from '../lib/assembly';
+import type { Appliance, Assembly, Box3 as PartBox, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
 
 /* ---------------------------------------------------- procedural textures */
 
@@ -579,10 +580,55 @@ export function buildRunObject(run: Run, rb: RunBuild, cat: Catalog, opt: SceneO
   return root;
 }
 
+/* ------------------------------------------------------ cabinet groups */
+
+/** Islands and other groups: every cabinet at its own spot, facing its own way, under one shared worktop. */
+export function buildAssemblyObject(a: Assembly, ab: AssemblyBuild, cat: Catalog, opt: SceneOptions & { selectedUnitId?: string | null }): THREE.Group {
+  const root = new THREE.Group();
+  for (const { piece, build } of ab.pieces) {
+    let o: THREE.Object3D | null = null;
+    if (piece.unit && build) {
+      o = buildUnitObject(piece.unit, build, cat, { ...opt, highlight: opt.selectedUnitId === piece.unit.id ? opt.highlight : null });
+    } else {
+      const ap = cat.appliances.find((x) => x.id === piece.applianceId);
+      if (ap) o = applianceObject(ap, { x: 0, y: 0, z: 0, w: ap.width, h: ap.height, d: ap.depth });
+    }
+    if (!o) continue;
+    const g = new THREE.Group();
+    g.add(o);
+    g.position.set(piece.x, 0, piece.z);
+    g.rotation.y = (-piece.rot * Math.PI) / 180;
+    g.userData.unitId = piece.unit?.id ?? piece.id;
+    g.traverse((c) => (c.userData.unitId = piece.unit?.id ?? piece.id));
+    if (opt.selectedUnitId && opt.selectedUnitId === (piece.unit?.id ?? piece.id) && !opt.highlight) {
+      const u = piece.unit;
+      const ap = cat.appliances.find((x) => x.id === piece.applianceId);
+      const hb: PartBox = u ? { x: 0, y: u.mount === 'wall' ? u.mountHeight : 0, z: 0, w: u.width, h: u.height, d: u.depth + 4 } : { x: 0, y: 0, z: 0, w: ap?.width ?? 600, h: ap?.height ?? 850, d: ap?.depth ?? 600 };
+      const ln = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(hb)), new THREE.LineBasicMaterial({ color: '#ea580c' }));
+      ln.position.set(hb.x + hb.w / 2, hb.y + hb.h / 2, hb.z + hb.d / 2);
+      g.add(ln);
+    }
+    root.add(g);
+  }
+  if (ab.top) {
+    const counter = cat.countertops.find((c) => c.id === a.top.countertopId);
+    root.add(boxMesh(ab.top, surfaceMaterial(counter?.color ?? '#999', counter?.finish ?? 'satin')));
+  }
+  return root;
+}
+
+export function assemblyBounds3(ab: AssemblyBuild): Bounds {
+  return { x0: ab.size.x0, x1: ab.size.x1, y0: 0, y1: Math.max(300, ab.size.h), z0: ab.size.z0, z1: ab.size.z1 };
+}
+
+export function renderAssemblyImage(a: Assembly, ab: AssemblyBuild, cat: Catalog, width = 1200, height = 800, mime: 'image/png' | 'image/jpeg' = 'image/png', view: ViewName = '3d', night = false): string | null {
+  return still(buildAssemblyObject(a, ab, cat, { showFronts: true, lightsOn: night }), assemblyBounds3(ab), width, height, mime, view, night, view === '3d' ? [0.7, 0.75, 1] : undefined);
+}
+
 function addRoom(root: THREE.Group, run: Run) {
   const wallMat = new THREE.MeshStandardMaterial({ color: '#e7e3dc', roughness: 0.95 }); // one-sided: invisible from outside the room
   const H = 2700;
-  const LA = legLength(run.legs[0]);
+  const LA = runLayout(run).x1;
   const n = activeLegs(run);
   const depth = Math.max(n > 1 ? legStart(run, 1) + legLength(run.legs[1]) : 0, n > 2 ? legStart(run, 2) + legLength(run.legs[2]) : 0, run.baseDepth + 600) + 400;
   const back = new THREE.Mesh(new THREE.PlaneGeometry(LA + 400, H), wallMat);
@@ -909,6 +955,7 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
     if (!it) continue;
     let obj: THREE.Object3D | null = null;
     if (it.kind === 'run' && it.run && it.runBuild) obj = buildRunObject(it.run, it.runBuild, cat, { ...opt, room: false, highlight: null });
+    else if (it.kind === 'assembly' && it.assembly && it.assemblyBuild) obj = buildAssemblyObject(it.assembly, it.assemblyBuild, cat, { ...opt, highlight: null });
     else if (it.unit && it.build) obj = buildUnitObject(it.unit, it.build, cat, { ...opt, highlight: null });
     if (!obj) continue;
     const g = new THREE.Group();

@@ -7,7 +7,7 @@ import { usePageShortcuts } from '../app/shortcuts';
 import Viewer3D from '../components/Viewer3D';
 import ApplianceSelect from '../components/ApplianceSelect';
 import { useMoney, useQuoteCalc } from '../hooks';
-import { activeLegs, applyRunMaterials, CUSTOM_KINDS, customModule, ensureLegs, fillerHeight, legRemaining, BASE_TEMPLATES, type CustomKind, type CustomSpec, baseModule, GAP_TEMPLATES, gapModule, LEG_LABELS, legLength, RUN_SHAPE_LABELS, runUnits, setWallTemplate, syncRun, TALL_TEMPLATES, tallModule, WALL_TEMPLATES, type BaseTemplate, type GapTemplate, type TallTemplate, type WallTemplate } from '../lib/runs';
+import { activeLegs, retypeModule, cornerOwner, setCornerOwner, applyRunMaterials, CUSTOM_KINDS, customModule, ensureLegs, fillerHeight, legRemaining, BASE_TEMPLATES, type CustomKind, type CustomSpec, baseModule, GAP_TEMPLATES, gapModule, LEG_LABELS, legLength, RUN_SHAPE_LABELS, runUnits, setWallTemplate, syncRun, TALL_TEMPLATES, tallModule, WALL_TEMPLATES, type BaseTemplate, type GapTemplate, type TallTemplate, type WallTemplate } from '../lib/runs';
 import type { Catalog, Run, RunModule, RunShape } from '../lib/types';
 import { useStore } from '../store';
 
@@ -282,6 +282,46 @@ export default function RunDesigner() {
           </div>
         </div>
         <div className="mx-auto max-w-5xl space-y-3 p-3">
+          {tab === 'layout' && nLegs > 1 && (
+            <Card title="Corners – which wall runs into the corner">
+              <div className="grid gap-3 md:grid-cols-2">
+                {(nLegs > 2 ? (['left', 'right'] as const) : (['right'] as const)).map((side) => {
+                  const owner = cornerOwner(run, side);
+                  const sideName = side === 'right' ? 'Right wall' : 'Left wall';
+                  const chip = (o: 'back' | 'side', label: string) => (
+                    <button className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold ${owner === o ? 'border-brand-600 bg-brand-600 text-white' : 'border-stone-300 bg-white text-stone-700'}`} onClick={() => up((r) => setCornerOwner(r, side, o))}>
+                      {label}
+                    </button>
+                  );
+                  return (
+                    <div key={side} className="rounded-xl border border-stone-200 p-2">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                        <svg viewBox="0 0 40 40" className="h-8 w-8">
+                          {side === 'right' ? (
+                            <>
+                              <path d={owner === 'back' ? 'M4 8h32' : 'M4 8h22'} stroke="#7c2d12" strokeWidth={5} />
+                              <path d={owner === 'back' ? 'M32 14v22' : 'M32 6v30'} stroke="#a8a29e" strokeWidth={5} />
+                            </>
+                          ) : (
+                            <>
+                              <path d={owner === 'back' ? 'M4 8h32' : 'M14 8h22'} stroke="#7c2d12" strokeWidth={5} />
+                              <path d={owner === 'back' ? 'M8 14v22' : 'M8 6v30'} stroke="#a8a29e" strokeWidth={5} />
+                            </>
+                          )}
+                        </svg>
+                        {side === 'right' ? 'Back-right corner' : 'Back-left corner'}
+                      </div>
+                      <div className="flex gap-2">
+                        {chip('back', 'Back wall goes in')}
+                        {chip('side', `${sideName} goes in`)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-stone-500">The wall that goes into the corner runs right up to it; the other wall starts after the corner. A corner cupboard moves with it and turns to suit.</p>
+            </Card>
+          )}
           {tab === 'layout' &&
             run.legs.slice(0, nLegs).map((mods, leg) => (
               <Card
@@ -397,6 +437,21 @@ export default function RunDesigner() {
                   }
                 >
                   <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="text-[11px] font-semibold text-stone-500">Switch to:</span>
+                      {(
+                        [
+                          ['base', 'Base cabinet'],
+                          ['tall', 'Tall cabinet'],
+                          ['gap', 'Open space'],
+                          ['filler', 'Filler'],
+                        ] as const
+                      ).map(([k, label]) => (
+                        <button key={k} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sel.m.kind === k ? 'bg-brand-600 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`} onClick={() => up((r) => retypeModule(findMod(r, sel.m.id)!.m, k, r))}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                     <div className="grid grid-cols-3 gap-2">
                       <Field label="Width">
                         <NumInput value={sel.m.width} min={1} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.width = Math.max(1, v)))} />

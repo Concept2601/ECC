@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { RunBuild } from '../lib/runs';
-import type { Box3, Catalog, Room, Run, SectionRef, Unit, UnitBuild } from '../lib/types';
-import { addUnitRoom, buildRoomObject, buildRunObject, buildUnitObject, createStage, ROOM_VIEW_DIR, roomBounds, runBounds, runViewDir, unitBounds, type ViewName } from '../render/scene';
+import type { AssemblyBuild } from '../lib/assembly';
+import type { Assembly, Box3, Catalog, Room, Run, SectionRef, Unit, UnitBuild } from '../lib/types';
+import { addUnitRoom, assemblyBounds3, buildAssemblyObject, buildRoomObject, buildRunObject, buildUnitObject, createStage, ROOM_VIEW_DIR, roomBounds, runBounds, runViewDir, unitBounds, type ViewName } from '../render/scene';
 import type { ItemPrice } from '../lib/pricing';
 import { RENDER_QUALITY, usePrefs } from '../app/prefs';
 import { unitExtents } from '../lib/generate';
@@ -21,6 +22,8 @@ interface Props {
   build?: UnitBuild;
   run?: Run;
   runBuild?: RunBuild;
+  assembly?: Assembly;
+  assemblyBuild?: AssemblyBuild;
   highlight?: SectionRef | null;
   selectedUnitId?: string | null;
   onPick?: (p: Pick) => void;
@@ -61,7 +64,7 @@ export default function Viewer3D(props: Props) {
   );
 }
 
-function ViewerInner({ onLost, catalog, unit, build, run, runBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes, room, roomItems, selectedItemId }: Props & { onLost?: () => void }) {
+function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, assemblyBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes, room, roomItems, selectedItemId }: Props & { onLost?: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const ctx = useRef<{ renderer: THREE.WebGLRenderer; stage: ReturnType<typeof createStage>; controls: OrbitControls; key: string; invalidate: () => void } | null>(null);
   const pickRef = useRef(onPick);
@@ -189,6 +192,10 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, highlight, s
       obj = buildRunObject(run, runBuild, catalog, { ...opt, selectedUnitId: selectedUnitId ?? null, room: view !== 'back' && view !== 'top' });
       bounds = runBounds(runBuild);
       dir = runViewDir(run);
+    } else if (assembly && assemblyBuild) {
+      obj = buildAssemblyObject(assembly, assemblyBuild, catalog, { ...opt, selectedUnitId: selectedUnitId ?? null });
+      bounds = assemblyBounds3(assemblyBuild);
+      dir = view === '3d' ? [0.7, 0.75, 1] : undefined;
     } else if (unit && build) {
       obj = buildUnitObject(unit, build, catalog, opt);
       for (const xb of extraBoxes ?? []) {
@@ -201,7 +208,7 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, highlight, s
     } else return;
     c.stage.setNight(lights);
     c.stage.setContent(obj, bounds);
-    const key = `${view}|${room ? 'room' : run?.shape ?? ''}|${Math.round(bounds.x1 - bounds.x0)}|${Math.round(bounds.y1)}|${Math.round(bounds.z1 - bounds.z0)}`;
+    const key = `${view}|${room ? 'room' : assembly ? 'group' : run?.shape ?? ''}|${Math.round(bounds.x1 - bounds.x0)}|${Math.round(bounds.y1)}|${Math.round(bounds.z1 - bounds.z0)}`;
     if (key !== c.key) {
       const el = host.current!;
       const target = c.stage.frame((el.clientWidth || 1) / (el.clientHeight || 1), view, dir);
@@ -210,7 +217,7 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, highlight, s
     }
     c.controls.update();
     c.invalidate();
-  }, [unit, build, run, runBuild, catalog, fronts, open, lights, highlight, selectedUnitId, view, extraBoxes, room, roomItems, selectedItemId]);
+  }, [unit, build, run, runBuild, assembly, assemblyBuild, catalog, fronts, open, lights, highlight, selectedUnitId, view, extraBoxes, room, roomItems, selectedItemId]);
 
   const chip = (active: boolean) => `rounded-lg px-2 py-1 text-[11px] font-semibold ${active ? 'bg-brand-600 text-white' : 'bg-white/90 text-stone-700'}`;
   return (

@@ -171,6 +171,12 @@ export interface Catalog {
   countertops: Countertop[];
   accessories: Accessory[];
   appliances: Appliance[];
+  /**
+   * Ids of the built-in library items this device has already been given. Only
+   * built-in items that are not listed here are added on start-up, so items you
+   * delete stay deleted and your prices are never replaced.
+   */
+  defaultsSeen?: string[];
 }
 
 /* ----------------------------------------------------------------- settings */
@@ -464,6 +470,8 @@ export interface Run {
   legs: RunModule[][]; // [back wall, right wall, left wall]
   /** Measured wall / space length for each leg (mm); the designer shows what is left to fill. */
   targets?: (number | null)[];
+  /** Which wall's cabinets run into each corner: the back wall (default) or the side wall. */
+  corners?: { right?: 'back' | 'side'; left?: 'back' | 'side' };
   counterHeight: number; // floor to top of worktop
   baseDepth: number;
   plinthHeight: number;
@@ -622,6 +630,8 @@ export interface Quote {
   client: Client;
   units: Unit[];
   runs: Run[];
+  /** Cabinet groups: islands, peninsulas, free-standing groups and loose appliances, each piece facing any way. */
+  assemblies?: Assembly[];
   extras: ExtraLine[];
   attachments: Attachment[];
   includeAppliances: boolean; // appliances supplied by us (priced) or by the client
@@ -637,6 +647,31 @@ export interface Quote {
   room: Room | null; // room layout for visualising the design
   createdAt: number;
   updatedAt: number;
+}
+
+/* ---------------------------------------------------- cabinet groups */
+
+/** One cabinet (or free-standing appliance) in a group, placed on the group's plan. */
+export interface AssemblyPiece {
+  id: ID;
+  unit: Unit | null;
+  applianceId?: ID | null;
+  /** back-left corner on the plan (mm) and which way it faces, like room placements:
+      0 = front faces the front, 180 = faces the back, 90 = faces left, 270 = faces right */
+  x: number;
+  z: number;
+  rot: number;
+  /** sits under the shared worktop (height set by the group) */
+  underTop: boolean;
+}
+
+export interface Assembly {
+  id: ID;
+  name: string;
+  qty: number;
+  pieces: AssemblyPiece[];
+  top: { countertopId: ID | null; height: number; overhang: Sides<number> };
+  notes: string;
 }
 
 /* -------------------------------------------------------------- rooms */

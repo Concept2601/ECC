@@ -1,5 +1,5 @@
 import { ArrowLeft, X } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent as RKeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EditTools from './EditTools';
 
@@ -49,36 +49,122 @@ export function Field({ label, children, className }: { label: string; children:
   );
 }
 
-/** Number input that tolerates temporary empty / partial values while typing. */
-export function NumInput({ value, onChange, min, max, step, suffix, className }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; suffix?: string; className?: string }) {
-  const [text, setText] = useState(String(value));
+const fmtNum = (v: number | null | undefined) => (v == null || Number.isNaN(v) ? '' : String(Math.round(v * 1000) / 1000));
+const parseNum = (t: string) => {
+  const c = t.replace(',', '.').trim();
+  if (c === '' || c === '-' || c === '.' || c === '-.') return null;
+  const n = Number(c);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Number box built for typing: while it has focus the text you type is never
+ * overwritten or rebuilt into the design keystroke by keystroke. The value is
+ * applied when you pause, press Enter or Tab, or leave the box; clearing it
+ * leaves it empty until you type. Focus selects everything so typing replaces.
+ * Up/Down arrows step (Shift ×10). The mouse wheel never changes it.
+ */
+function useNumText(value: number | null, commit: (n: number | null) => void, opts: { min?: number; max?: number; step?: number; nullable?: boolean; delay?: number }) {
+  const [text, setText] = useState(fmtNum(value));
+  const focused = useRef(false);
+  const justFocused = useRef(false);
+  const timer = useRef<number | undefined>(undefined);
+  const last = useRef(value);
   useEffect(() => {
-    if (Number(text) !== value) setText(String(value));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    last.current = value;
+    if (!focused.current) setText(fmtNum(value));
   }, [value]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const clamp = (n: number) => {
+    if (opts.min != null) n = Math.max(opts.min, n);
+    if (opts.max != null) n = Math.min(opts.max, n);
+    return n;
+  };
+  const apply = (t: string, final: boolean) => {
+    window.clearTimeout(timer.current);
+    const n = parseNum(t);
+    if (n == null) {
+      if (!final) return;
+      if (opts.nullable) {
+        if (last.current != null) commit(null);
+        setText('');
+      } else setText(fmtNum(last.current));
+      return;
+    }
+    // while typing, wait for a value that is already in range (typing 1200 passes 1, 12, 120)
+    if (!final && ((opts.min != null && n < opts.min) || (opts.max != null && n > opts.max))) return;
+    const v = clamp(n);
+    if (v !== last.current) {
+      last.current = v;
+      commit(v);
+    }
+    if (final) setText(fmtNum(v));
+  };
+  const props = {
+    type: 'text',
+    inputMode: 'decimal' as const,
+    autoComplete: 'off',
+    value: text,
+    onFocus: (e: FocusEvent<HTMLInputElement>) => {
+      focused.current = true;
+      justFocused.current = true;
+      e.currentTarget.select();
+    },
+    // the click that focused the box would otherwise drop the selection again
+    onMouseUp: (e: MouseEvent<HTMLInputElement>) => {
+      if (justFocused.current) e.preventDefault();
+      justFocused.current = false;
+    },
+    onChange: (e: ChangeEvent<HTMLInputElement>) => {
+      const t = e.target.value.replace(/[^0-9.,-]/g, '');
+      setText(t);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => apply(t, false), opts.delay ?? 700);
+    },
+    onBlur: () => {
+      focused.current = false;
+      apply(text, true);
+    },
+    onKeyDown: (e: RKeyboardEvent<HTMLInputElement>) => {
+      if (['Enter', 'Escape', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.stopPropagation();
+      if (e.key === 'Enter') {
+        apply(text, true);
+        const el = e.currentTarget;
+        requestAnimationFrame(() => el.select());
+      }
+      else if (e.key === 'Escape') {
+        window.clearTimeout(timer.current);
+        setText(fmtNum(last.current));
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const base = parseNum(text) ?? last.current ?? opts.min ?? 0;
+        const st = (opts.step ?? 1) * (e.shiftKey ? 10 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+        const v = clamp(Math.round((base + st) * 1000) / 1000);
+        setText(fmtNum(v));
+        last.current = v;
+        commit(v);
+      }
+    },
+  };
+  return props;
+}
+
+export function NumInput({ value, onChange, min, max, step, suffix, className, placeholder }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; suffix?: string; className?: string; placeholder?: string }) {
+  const props = useNumText(value, (n) => n != null && onChange(n), { min, max, step });
   return (
     <div className={`relative ${className ?? ''}`}>
-      <input
-        className="input pr-10"
-        inputMode="decimal"
-        type="number"
-        value={text}
-        min={min}
-        max={max}
-        step={step ?? 'any'}
-        onChange={(e) => {
-          setText(e.target.value);
-          const n = Number.parseFloat(e.target.value);
-          if (!Number.isNaN(n)) onChange(max != null ? Math.min(max, n) : n);
-        }}
-        onBlur={() => {
-          let n = Number.parseFloat(text);
-          if (Number.isNaN(n)) n = min ?? 0;
-          if (min != null) n = Math.max(min, n);
-          setText(String(n));
-          onChange(n);
-        }}
-      />
+      <input className="input pr-10" placeholder={placeholder} {...props} />
+      {suffix && <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">{suffix}</span>}
+    </div>
+  );
+}
+
+/** Like NumInput, but an empty box means "automatic" (null). */
+export function OptNumInput({ value, onChange, min, max, step, suffix, className, placeholder }: { value: number | null | undefined; onChange: (v: number | null) => void; min?: number; max?: number; step?: number; suffix?: string; className?: string; placeholder?: string }) {
+  const props = useNumText(value ?? null, onChange, { min, max, step, nullable: true });
+  return (
+    <div className={`relative ${className ?? ''}`}>
+      <input className="input pr-10" placeholder={placeholder} {...props} />
       {suffix && <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">{suffix}</span>}
     </div>
   );

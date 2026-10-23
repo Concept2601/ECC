@@ -8,7 +8,9 @@ import { chatGptPrompt, designChecks, parsePlanJson, PLAN_JSON_EXAMPLE, planRoom
 import { fileToBase64, prepareImage } from '../ai/vision';
 import { Card, Field, NumInput, PageHeader, Tabs, TextInput } from '../components/ui';
 import { fitKitchen, fitUnit } from '../lib/fit';
-import type { Quote, Run, Unit } from '../lib/types';
+import type { Assembly, Quote, Run, Unit } from '../lib/types';
+import { applianceGroup, islandGroup, syncAssembly } from '../lib/assembly';
+import { placeXZ } from '../lib/room';
 import { useStore } from '../store';
 
 type Mode = 'auto' | 'chatgpt';
@@ -69,7 +71,7 @@ function RoomOutline({ room }: { room: PlanRoom }) {
 }
 
 export default function PlanReader() {
-  const { settings, updateSettings, quotes, createQuote, updateQuote } = useStore();
+  const { settings, updateSettings, quotes, createQuote, updateQuote, catalog } = useStore();
   const nav = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
@@ -153,15 +155,42 @@ export default function PlanReader() {
     const r = planRoomToRoom(room);
     const units: Unit[] = [];
     const runs: Run[] = [];
+    const groups: Assembly[] = [];
     const places: { itemId: string; x: number; z: number; rot: number }[] = [];
     if (quoteJoinery) {
+      const box = (f: { x: number; z: number; w: number; d: number; rot: number }) => {
+        const ps = [[0, 0], [f.w, 0], [f.w, f.d], [0, f.d]].map(([a, b]) => placeXZ(a, b, { itemId: '', x: f.x, z: f.z, rot: f.rot }));
+        return { x0: Math.min(...ps.map((q) => q[0])), x1: Math.max(...ps.map((q) => q[0])), z0: Math.min(...ps.map((q) => q[1])), z1: Math.max(...ps.map((q) => q[1])) };
+      };
+      const runs0 = (r.fixtures ?? []).filter((f) => f.kind === 'baseRun' || f.kind === 'tall').map(box);
+      const inRun = (f: Parameters<typeof box>[0]) => {
+        const b = box(f);
+        return runs0.some((o) => Math.min(o.x1, b.x1) - Math.max(o.x0, b.x0) > 50 && Math.min(o.z1, b.z1) - Math.max(o.z0, b.z0) > 50);
+      };
       for (const f of r.fixtures ?? []) {
         const H = room.ceilingHeight || 2700;
+        // islands become cabinet groups (cupboards on 4, 2 or 1 side by size); stand-alone fridges / stoves become loose appliances
+        if (f.kind === 'island' || ((f.kind === 'fridge' || f.kind === 'stove') && !inRun(f))) {
+          let g: Assembly | null = null;
+          if (f.kind === 'island') {
+            const sides = f.d >= 1000 && f.w >= 1800 ? 4 : f.d >= 850 ? 2 : 1;
+            g = islandGroup({ width: Math.round(f.w), depth: Math.round(f.d), height: 900, sides, countertopId: catalog.countertops[0]?.id ?? null, seatingOverhang: sides === 1 ? 300 : 0 });
+          } else {
+            const a = catalog.appliances.find((x) => x.category === (f.kind === 'fridge' ? 'fridge' : 'cooker') && x.placement === 'freestanding');
+            if (a) g = applianceGroup(a);
+          }
+          if (g) {
+            if (f.label) g.name = f.label;
+            syncAssembly(g, catalog);
+            groups.push(g);
+            places.push({ itemId: g.id, x: Math.round(f.x), z: Math.round(f.z), rot: f.rot });
+          }
+          continue;
+        }
         let made: Unit | Run | null = null;
         if (f.kind === 'bic') made = fitUnit('wardrobe', { width: f.w, height: Math.min(2400, H), depth: f.d, sideGap: 0, topGap: 0 });
         else if (f.kind === 'tall') made = fitUnit('kitchen_tall', { width: f.w, height: Math.min(2200, H), depth: f.d, sideGap: 0, topGap: 0 });
         else if (f.kind === 'wallRun') made = fitUnit('kitchen_wall', { width: f.w, height: 720, depth: f.d, sideGap: 0, topGap: 0 });
-        else if (f.kind === 'island') made = fitUnit('island', { width: f.w, height: 900, depth: f.d, sideGap: 0, topGap: 0 });
         else if (f.kind === 'baseRun') made = fitKitchen({ width: f.w, height: H, depth: f.d + 40, sideGap: 0, topGap: 0 });
         if (!made) continue;
         if ('legs' in made) {
@@ -180,6 +209,7 @@ export default function PlanReader() {
     updateQuote(qid, (q: Quote) => {
       q.units.push(...units);
       q.runs.push(...runs);
+      (q.assemblies ??= []).push(...groups);
       q.room = r;
     });
     nav(`/quotes/${qid}/room`);

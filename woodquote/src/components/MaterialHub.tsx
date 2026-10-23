@@ -4,6 +4,7 @@
 import { useMoney } from '../hooks';
 import type { QuoteCalc } from '../lib/pricing';
 import { runUnits } from '../lib/runs';
+import { assemblyUnits } from '../lib/assembly';
 import { leafSections } from '../lib/sections';
 import type { Catalog, Quote, Unit } from '../lib/types';
 import ApplianceSelect from './ApplianceSelect';
@@ -61,21 +62,30 @@ function applianceSlots(q: Quote): Slot[] {
         if (m.kind === 'gap') out.push({ key: `${m.id}:gap`, where: `${r.name} · ${m.gapLabel || 'space'}`, value: m.gapApplianceId, set: (qq, v) => { const x = findMod(qq); if (x) x.gapApplianceId = v; } });
         if (m.hoodId) out.push({ key: `${m.id}:hood`, where: `${r.name} · hood`, value: m.hoodId, set: (qq, v) => { const x = findMod(qq); if (x) x.hoodId = v; } });
       }
+  for (const a of q.assemblies ?? [])
+    for (const p of a.pieces) {
+      const findG = (qq: Quote) => qq.assemblies?.find((x) => x.id === a.id);
+      if (p.unit) unitSlots(p.unit, `${a.name} · ${p.unit.name}`, (qq) => findG(qq)?.pieces.find((x) => x.id === p.id)?.unit ?? undefined);
+      else out.push({ key: `${p.id}:loose`, where: a.name, value: p.applianceId ?? null, set: (qq, v) => { const x = findG(qq)?.pieces.find((y) => y.id === p.id); if (x && v) x.applianceId = v; } });
+    }
   return out;
 }
 
 export default function MaterialHub({ quote, calc, catalog, up }: { quote: Quote; calc: QuoteCalc; catalog: Catalog; up: (fn: (q: Quote) => void) => void }) {
   const fmt = useMoney();
-  const units = [...quote.units, ...quote.runs.flatMap(runUnits)];
+  const units = [...quote.units, ...quote.runs.flatMap(runUnits), ...(quote.assemblies ?? []).flatMap(assemblyUnits)];
   const cost = (key: string) => calc.costLines.find((l) => l.key === key)?.total ?? 0;
   const setAll = (g: Group, v: string) =>
     up((q) => {
-      for (const u of [...q.units, ...q.runs.flatMap(runUnits)]) if (!g.applies || g.applies(u)) (u as unknown as Record<Field, string | null>)[g.field] = v;
-      if (g.field === 'countertopId') for (const r of q.runs) r.countertopId = v;
+      for (const u of [...q.units, ...q.runs.flatMap(runUnits), ...(q.assemblies ?? []).flatMap(assemblyUnits)]) if (!g.applies || g.applies(u)) (u as unknown as Record<Field, string | null>)[g.field] = v;
+      if (g.field === 'countertopId') {
+        for (const r of q.runs) r.countertopId = v;
+        for (const a of q.assemblies ?? []) if (a.top.countertopId) a.top.countertopId = v;
+      }
     });
   const slots = applianceSlots(quote);
   const appl = (id: string | null) => catalog.appliances.find((a) => a.id === id);
-  if (!units.length) return <p className="p-6 text-center text-sm text-stone-500">Add units or a kitchen in Design to see their materials here.</p>;
+  if (!units.length && !slots.length) return <p className="p-6 text-center text-sm text-stone-500">Add units or a kitchen in Design to see their materials here.</p>;
   return (
     <div className="space-y-3">
       <p className="px-1 text-xs text-stone-500">Every material in this quotation, grouped by what it is used for. Choosing one here changes it on every unit and kitchen cabinet in the job (change single units in their designer).</p>
@@ -87,7 +97,7 @@ export default function MaterialHub({ quote, calc, catalog, up }: { quote: Quote
             const id = u[g.field] as string | null;
             if (id) ids.set(id, (ids.get(id) ?? 0) + 1);
           }
-          if (g.field === 'countertopId') for (const r of quote.runs) if (r.countertopId) ids.set(r.countertopId, (ids.get(r.countertopId) ?? 0) + 1);
+          if (g.field === 'countertopId') for (const c of [...quote.runs.map((r) => r.countertopId), ...(quote.assemblies ?? []).map((a) => a.top.countertopId)]) if (c) ids.set(c, (ids.get(c) ?? 0) + 1);
           if (!ids.size) return null;
           const opts = g.options(catalog);
           const name = (id: string) => opts.find((o) => o.value === id)?.label ?? id;

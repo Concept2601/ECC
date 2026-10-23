@@ -475,7 +475,7 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
   }
   const tr = s.pricing.transportOptions.find((t) => t.id === q.transportId);
   if (calc.transport) body.push([String(body.length + 1), tr ? `Transport – ${tr.name}` : 'Transport', '1', fm(calc.transport), fm(calc.transport)]);
-  for (const e of q.extras) body.push([String(body.length + 1), e.description, String(e.qty), fm(e.unitPrice), fm(e.qty * e.unitPrice)]);
+  for (const e of q.extras) body.push([String(body.length + 1), e.description, `${e.qty}${e.unit ? ` ${e.unit}` : ''}`, fm(e.unitPrice), fm(e.qty * e.unitPrice)]);
   const supplied = calc.costLines.filter((l) => l.group === 'Appliances' && l.total === 0);
 
   autoTable(doc, {

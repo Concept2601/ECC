@@ -589,6 +589,14 @@ export function buildAssemblyObject(a: Assembly, ab: AssemblyBuild, cat: Catalog
     let o: THREE.Object3D | null = null;
     if (piece.unit && build) {
       o = buildUnitObject(piece.unit, build, cat, { ...opt, highlight: opt.selectedUnitId === piece.unit.id ? opt.highlight : null });
+    } else if (piece.slats && build) {
+      const sg = new THREE.Group();
+      for (const part of build.parts) {
+        const bd = cat.boards.find((x) => x.id === part.materialId);
+        const mat = surfaceMaterial(bd?.color ?? '#b08d57', bd?.finish ?? 'matte', bd?.texture === 'wood' ? woodTexture(bd.color, true) : null);
+        for (const bx of part.boxes) sg.add(boxMesh(bx, mat, false));
+      }
+      o = sg;
     } else {
       const ap = cat.appliances.find((x) => x.id === piece.applianceId);
       if (ap) o = applianceObject(ap, { x: 0, y: 0, z: 0, w: ap.width, h: ap.height, d: ap.depth });
@@ -603,12 +611,17 @@ export function buildAssemblyObject(a: Assembly, ab: AssemblyBuild, cat: Catalog
     if (opt.selectedUnitId && opt.selectedUnitId === (piece.unit?.id ?? piece.id) && !opt.highlight) {
       const u = piece.unit;
       const ap = cat.appliances.find((x) => x.id === piece.applianceId);
-      const hb: PartBox = u ? { x: 0, y: u.mount === 'wall' ? u.mountHeight : 0, z: 0, w: u.width, h: u.height, d: u.depth + 4 } : { x: 0, y: 0, z: 0, w: ap?.width ?? 600, h: ap?.height ?? 850, d: ap?.depth ?? 600 };
+      const sl = piece.slats;
+      const hb: PartBox = sl ? { x: 0, y: sl.bottom, z: 0, w: sl.width, h: sl.height, d: 30 } : u ? { x: 0, y: u.mount === 'wall' ? u.mountHeight : 0, z: 0, w: u.width, h: u.height, d: u.depth + 4 } : { x: 0, y: 0, z: 0, w: ap?.width ?? 600, h: ap?.height ?? 850, d: ap?.depth ?? 600 };
       const ln = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(hb)), new THREE.LineBasicMaterial({ color: '#ea580c' }));
       ln.position.set(hb.x + hb.w / 2, hb.y + hb.h / 2, hb.z + hb.d / 2);
       g.add(ln);
     }
     root.add(g);
+  }
+  for (const pn of ab.panels) {
+    const b = cat.boards.find((x) => x.id === pn.materialId);
+    root.add(boxMesh(pn.box, surfaceMaterial(b?.color ?? '#ddd', b?.finish ?? 'matte', b?.texture === 'wood' ? woodTexture(b.color, true) : null)));
   }
   if (ab.top) {
     const counter = cat.countertops.find((c) => c.id === a.top.countertopId);

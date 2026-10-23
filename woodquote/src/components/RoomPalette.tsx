@@ -2,7 +2,7 @@
 // the real thing into the middle of the room (a priced item, or an opening in
 // the wall) ready to drag into place.
 import { useState } from 'react';
-import { applianceGroup, assemblyBounds, islandGroup, newAssembly, syncAssembly, type IslandSides } from '../lib/assembly';
+import { applianceGroup, assemblyBounds, islandGroup, newAssembly, rowGroup, slatGroup, syncAssembly, type IslandSides, type RowPreset } from '../lib/assembly';
 import { unitExtents } from '../lib/generate';
 import { createUnit } from '../lib/presets';
 import { footprints, newOpening, roomExtents, wallName } from '../lib/room';
@@ -81,6 +81,7 @@ export default function RoomPalette({ quote, room, catalog, items, up, onAdded }
     up((q) => q.runs.push(r));
     onAdded(r.id);
   };
+  const addRow = (p: RowPreset) => addGroup(rowGroup(p, 2400, p === 'tv' ? 2200 : 2400));
   const island = (sides: IslandSides) => addGroup(islandGroup({ width: 2400, depth: sides === 1 ? 900 : 1000, height: 900, sides, countertopId: catalog.countertops[0]?.id ?? null, seatingOverhang: 300 }));
 
   const groups: { title: string; entries: Entry[] }[] = [
@@ -133,6 +134,10 @@ export default function RoomPalette({ quote, room, catalog, items, up, onAdded }
         { label: 'Display / bookshelf', act: () => addUnit('bookshelf') },
         { label: 'Vanity', act: () => addUnit('vanity') },
         { label: 'Custom unit', act: () => addUnit('custom') },
+        { label: 'BIC wall (row)', act: () => addRow('bic') },
+        { label: 'Wardrobe wall (row)', act: () => addRow('wardrobe') },
+        { label: 'TV wall unit (row)', act: () => addRow('tv') },
+        { label: 'Wall slats', hint: 'fixed onto the wall with silicone and anchors', act: () => addGroup(slatGroup(1800, 2400)) },
         { label: 'Custom group (several cabinets)', act: () => addGroup(newAssembly('Custom unit (several cabinets)')) },
       ],
     },

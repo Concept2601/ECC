@@ -255,6 +255,17 @@ export interface Settings {
   pricing: PricingSettings;
   doc: DocTemplate;
   ai: AISettings;
+  /** saved services and other non-design items with their usual price */
+  services?: ServiceItem[];
+}
+
+/** A service or other non-design item you charge for (installation, delivery, site measure…). */
+export interface ServiceItem {
+  id: ID;
+  name: string;
+  /** what one is: day, hour, trip, visit, point, m², job… */
+  unit: string;
+  price: number;
 }
 
 /* -------------------------------------------------------------------- units */
@@ -611,6 +622,8 @@ export interface ExtraLine {
   description: string;
   qty: number;
   unitPrice: number;
+  /** unit shown next to the quantity (day, trip, m²…) */
+  unit?: string;
 }
 
 export interface Attachment {
@@ -663,6 +676,23 @@ export interface AssemblyPiece {
   rot: number;
   /** sits under the shared worktop (height set by the group) */
   underTop: boolean;
+  /** cabinet rows: space left before this piece (mm) */
+  gapBefore?: number;
+  /** wall slats fixed straight onto the wall (instead of a cabinet or appliance) */
+  slats?: SlatWall | null;
+}
+
+/** Slatted wall panelling glued (silicone) and anchored straight onto the wall. */
+export interface SlatWall {
+  width: number;
+  height: number;
+  /** bottom of the slats above the floor */
+  bottom: number;
+  slatWidth: number;
+  slatGap: number;
+  materialId: ID;
+  /** optional backing board behind the slats (e.g. black MDF), null = slats straight on the wall */
+  backerId: ID | null;
 }
 
 export interface Assembly {
@@ -671,6 +701,13 @@ export interface Assembly {
   qty: number;
   pieces: AssemblyPiece[];
   top: { countertopId: ID | null; height: number; overhang: Sides<number> };
+  /**
+   * free = every piece placed by hand; row = cabinets side by side along a wall in
+   * list order, like a kitchen run (wall-hung pieces go above the floor cabinet before them)
+   */
+  layout?: 'free' | 'row';
+  /** exposed finish boards, each one piece across the whole group (e.g. island ends and backs) */
+  panels?: Sides<boolean> & { materialId: ID | null };
   notes: string;
 }
 

@@ -6,6 +6,7 @@ import { Card, confirmAction, Field, Modal, NumInput, PageHeader, Select, Tabs, 
 import { usePageShortcuts } from '../app/shortcuts';
 import Viewer3D from '../components/Viewer3D';
 import ApplianceSelect from '../components/ApplianceSelect';
+import TopApplianceField from '../components/TopApplianceField';
 import { useMoney, useQuoteCalc } from '../hooks';
 import { activeLegs, retypeModule, cornerOwner, setCornerOwner, applyRunMaterials, CUSTOM_KINDS, customModule, ensureLegs, fillerHeight, legRemaining, BASE_TEMPLATES, type CustomKind, type CustomSpec, baseModule, GAP_TEMPLATES, gapModule, LEG_LABELS, legLength, RUN_SHAPE_LABELS, runUnits, setWallTemplate, syncRun, TALL_TEMPLATES, tallModule, WALL_TEMPLATES, type BaseTemplate, type GapTemplate, type TallTemplate, type WallTemplate } from '../lib/runs';
 import type { Catalog, Run, RunModule, RunShape } from '../lib/types';
@@ -553,6 +554,21 @@ export default function RunDesigner() {
                         </Field>
                       </>
                     )}
+                    {sel.m.kind === 'base' && sel.m.base && <TopApplianceField unit={sel.m.base} up={(fn) => up((r) => { const b = findMod(r, sel.m.id)!.m.base; if (b) fn(b); })} />}
+                    {(() => {
+                      // hob + downdraft deeper than the worktop: offer to deepen the kitchen's worktop
+                      const w = item.runBuild.pieces.find((p) => p.unit.id === sel.m.base?.id)?.build.warnings.find((x) => /needs a worktop at least/.test(x));
+                      const need = w ? Number(/at least (\d+)mm/.exec(w)?.[1]) : 0;
+                      if (!w || !need) return null;
+                      return (
+                        <div className="rounded-xl bg-amber-50 p-2 text-xs text-amber-900">
+                          {w}
+                          <button className="btn-secondary mt-1 w-full px-2 py-1 text-xs" onClick={() => up((r) => (r.counterOverhang = Math.max(r.counterOverhang, need - r.baseDepth)))}>
+                            Make the worktop {need} mm deep (front overhang {need - run.baseDepth} mm)
+                          </button>
+                        </div>
+                      );
+                    })()}
                     {sel.m.kind !== 'tall' && sel.m.kind !== 'filler' && (
                       <Field label="Extractor hood above">
                         <ApplianceSelect value={sel.m.hoodId} none="No hood" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.hoodId = v))} filter={(a) => a.category === 'hood'} />

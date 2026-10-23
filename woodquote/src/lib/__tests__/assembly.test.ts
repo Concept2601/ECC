@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assemblyBounds, buildAssembly, cloneAssembly, islandGroup, pieceFootprint, syncAssembly, turn } from '../assembly';
+import { buildAssembly, coreBounds, rowGroup, rowLength, slatCount, cloneAssembly, islandGroup, pieceFootprint, syncAssembly, turn } from '../assembly';
 import { defaultCatalog, defaultSettings } from '../defaults';
 import { createUnit, retypeUnit } from '../presets';
 import { baseModule, retypeModule } from '../runs';
@@ -16,7 +16,10 @@ describe('islands', () => {
       syncAssembly(g, cat);
       const b = buildAssembly(g, cat, pr);
       expect(b.extra.warnings.filter((w) => /overlaps/.test(w))).toEqual([]);
-      const bb = assemblyBounds(g, cat);
+      const bb = coreBounds(g, cat)!;
+      // exposed ends (and the back of one-sided islands) are single boards across the whole island
+      if (sides !== 4) expect(b.panels.map((p) => p.side).sort()).toEqual(sides === 1 ? ['back', 'left', 'right'] : ['left', 'right']);
+      for (const p of b.panels) if (p.side === 'left' || p.side === 'right') expect(Math.round(p.box.d)).toBe(1000);
       expect(Math.round(bb.x0)).toBe(0);
       expect(Math.round(bb.x1)).toBe(2400);
       expect(Math.round(bb.z0)).toBe(0);
@@ -77,5 +80,64 @@ describe('switching cabinet type', () => {
     retypeModule(m, 'gap', run);
     expect(m.kind).toBe('gap');
     expect(m.base).toBeNull();
+  });
+});
+
+describe('hobs and downdrafts', () => {
+  it('island hob sits on the shared worktop with its downdraft and cut-outs', () => {
+    const g = islandGroup({ width: 2400, depth: 1000, height: 900, sides: 2, countertopId: ct.id, seatingOverhang: 0 });
+    const front = g.pieces.find((p) => p.rot === 0)!;
+    front.unit!.topAppliances.push({ id: 'ta1', applianceId: 'ap-hob-gas4', bay: 0, frontGap: null, xOffset: null, downdraftId: 'ap-dd-600' });
+    syncAssembly(g, cat);
+    const b = buildAssembly(g, cat, pr);
+    const pb = b.pieces.find((p) => p.piece === front)!.build!;
+    const hob = pb.appliances.find((x) => x.applianceId === 'ap-hob-gas4')!;
+    const dd = pb.appliances.find((x) => x.applianceId === 'ap-dd-600')!;
+    expect(hob.box.y).toBe(900);
+    expect(dd).toBeTruthy();
+    expect(pb.warnings.filter((w) => /countertop|behind|front edge/.test(w))).toEqual([]);
+    expect(pb.hardware.filter((h) => h.accessoryId === 'sv-cutout').reduce((s, h) => s + h.qty, 0)).toBe(2);
+  });
+  it('kitchen hob gets a downdraft', () => {
+    const run = { installType: 'builtIn', counterHeight: 900 } as unknown as Run;
+    const m = baseModule('hob', run, 'none', 600);
+    expect(m.base!.topAppliances.length).toBeGreaterThan(0);
+  });
+});
+
+describe('cabinet rows', () => {
+  it('BIC wall fills the wall side by side', () => {
+    const g = rowGroup('bic', 2400, 2400);
+    syncAssembly(g, cat);
+    const xs = g.pieces.map((p) => p.x);
+    expect(xs[0]).toBe(0);
+    for (let i = 1; i < g.pieces.length; i++) expect(xs[i]).toBe(xs[i - 1] + g.pieces[i - 1].unit!.width);
+    expect(rowLength(g, cat)).toBe(2400);
+    expect(buildAssembly(g, cat, pr).extra.warnings.filter((w) => /overlaps/.test(w))).toEqual([]);
+  });
+  it('TV wall: shelf hangs centred above the TV stand', () => {
+    const g = rowGroup('tv', 3000, 2400);
+    syncAssembly(g, cat);
+    const stand = g.pieces.find((p) => p.unit!.type === 'tv_stand')!;
+    const shelf = g.pieces.find((p) => p.unit!.mount === 'wall')!;
+    expect(shelf.x).toBe(stand.x);
+    expect(rowLength(g, cat)).toBe(3000);
+  });
+});
+
+describe('wall slats', () => {
+  it('slats are counted, cut, anchored and siliconed; cabinets stand in front of them', () => {
+    const g = rowGroup('tv', 3000, 2400);
+    syncAssembly(g, cat);
+    const sp = g.pieces.find((p) => p.slats)!;
+    const stand = g.pieces.find((p) => p.unit?.type === 'tv_stand')!;
+    expect(sp.x).toBe(stand.x);
+    const b = buildAssembly(g, cat, pr);
+    const sb = b.pieces.find((p) => p.piece === sp)!.build!;
+    const slat = sb.parts.find((p) => p.key === 'slat')!;
+    expect(slat.qty).toBe(slatCount(sp.slats!));
+    expect(sb.hardware.find((h) => h.accessoryId === 'fx-anchor')!.qty).toBeGreaterThan(slat.qty);
+    expect(sb.hardware.find((h) => h.accessoryId === 'fx-silicone')!.qty).toBeGreaterThanOrEqual(1);
+    expect(b.extra.warnings.filter((w) => /overlaps/.test(w))).toEqual([]);
   });
 });

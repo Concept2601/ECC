@@ -17,6 +17,7 @@ import type { Quote, QuoteStatus } from '../lib/types';
 import { deepClone, uid } from '../lib/util';
 import { quotePdf, saveOrShare, workshopPdf } from '../pdf/pdf';
 import MaterialHub from '../components/MaterialHub';
+import ServicesCard from '../components/ServicesCard';
 import { usePageShortcuts } from '../app/shortcuts';
 import { useStore } from '../store';
 
@@ -147,7 +148,7 @@ export default function QuoteEditor() {
                     <div className="flex items-start justify-between gap-2">
                       <Link to={link} className="font-bold hover:text-brand-700">
                         {isRun && <span className="chip mr-1 bg-violet-100 text-violet-800">Kitchen</span>}
-                        {isGroup && <span className="chip mr-1 bg-sky-100 text-sky-800">{it.assembly!.pieces.some((p) => p.unit) ? 'Group' : 'Appliance'}</span>}
+                        {isGroup && <span className="chip mr-1 bg-sky-100 text-sky-800">{it.assembly!.pieces.some((p) => p.unit) ? 'Group' : it.assembly!.pieces.some((p) => p.slats) ? 'Wall slats' : 'Appliance'}</span>}
                         {it.name}
                       </Link>
                       <div className="text-right">
@@ -225,9 +226,10 @@ export default function QuoteEditor() {
                 <LayoutPanelTop size={18} /> Add whole kitchen (straight / L / U)
               </button>
               <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-sky-700 hover:border-sky-400 sm:col-span-2" onClick={() => setAddingGroup(true)}>
-                <Boxes size={18} /> Add island, custom multi-cabinet unit or loose appliance
+                <Boxes size={18} /> Add island, cabinet row (BIC / TV wall / wardrobes), wall slats, custom unit or loose appliance
               </button>
             </div>
+            <ServicesCard quote={quote} up={up} />
           </div>
         )}
 
@@ -369,7 +371,7 @@ export default function QuoteEditor() {
               <div className="my-2 border-t" />
               <Row label="Units" value={fmt(calc.unitsSell)} />
               {calc.transport > 0 && <Row label="Transport" value={fmt(calc.transport)} />}
-              {calc.extras > 0 && <Row label="Extras" value={fmt(calc.extras)} />}
+              {calc.extras > 0 && <Row label="Services & other items" value={fmt(calc.extras)} />}
               <Row label="Subtotal" value={fmt(calc.subtotal)} />
               {calc.discount > 0 && <Row label="Discount" value={`-${fmt(calc.discount)}`} />}
               {quote.applyTax && <Row label={settings.pricing.taxLabel} value={fmt(calc.tax)} />}
@@ -379,29 +381,7 @@ export default function QuoteEditor() {
                 Estimated gross profit: <b>{fmt(calc.total - calc.tax - calc.materialsCost - calc.transport)}</b> (labour + markup − discount)
               </p>
             </Card>
-            <Card
-              title="Extra items"
-              className="md:col-span-2"
-              actions={
-                <button className="btn-secondary px-3 py-1.5" onClick={() => up((q) => q.extras.push({ id: uid('x'), description: '', qty: 1, unitPrice: 0 }))}>
-                  <Plus size={14} /> Add line
-                </button>
-              }
-            >
-              {!quote.extras.length && <p className="text-sm text-stone-500">Add anything not covered by the units — e.g. removal of old cabinets, LED lighting, appliances, site visit.</p>}
-              <div className="space-y-2">
-                {quote.extras.map((e, i) => (
-                  <div key={e.id} className="grid grid-cols-[1fr_70px_110px_auto] items-center gap-2">
-                    <input className="input" placeholder="Description" value={e.description} onChange={(ev) => up((q) => (q.extras[i].description = ev.target.value))} />
-                    <NumInput value={e.qty} min={0} onChange={(v) => up((q) => (q.extras[i].qty = v))} />
-                    <NumInput value={e.unitPrice} min={0} onChange={(v) => up((q) => (q.extras[i].unitPrice = v))} />
-                    <button className="btn-ghost px-2 text-red-600" onClick={() => up((q) => q.extras.splice(i, 1))} aria-label="Remove">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </Card>
+            <ServicesCard quote={quote} up={up} className="md:col-span-2" />
           </div>
         )}
 

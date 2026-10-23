@@ -135,6 +135,7 @@ export function normalizeData(raw: any): AppData {
       pricing: { ...d.pricing, ...s.pricing },
       doc: { ...d.doc, ...s.doc },
       ai: { ...d.ai, ...s.ai },
+      services: Array.isArray(s.services) ? s.services : d.services,
     },
     catalog: p.catalog ? mergeCatalog(p.catalog) : defaultCatalog(),
     quotes,
@@ -242,7 +243,7 @@ export const useStore = create<AppState>()(
         }));
         const tr = settings.pricing.transportOptions.find((t) => t.id === q.transportId);
         if (calc.transport > 0) lines.push({ id: uid('l'), description: tr ? `Transport – ${tr.name}` : 'Transport', qty: 1, unitPrice: calc.transport });
-        for (const e of q.extras) lines.push({ id: uid('l'), description: e.description, qty: e.qty, unitPrice: e.unitPrice });
+        for (const e of q.extras) lines.push({ id: uid('l'), description: e.unit ? `${e.description} (per ${e.unit})` : e.description, qty: e.qty, unitPrice: e.unitPrice });
         const n = counters.invoice + 1;
         const date = todayISO();
         const inv: Invoice = {

@@ -1,4 +1,4 @@
-import type { Accessory, Appliance, Catalog, Settings } from './types';
+import type { ServiceItem, Accessory, Appliance, Catalog, Settings } from './types';
 
 const acc = (a: Omit<Accessory, 'packQty' | 'unit'> & Partial<Pick<Accessory, 'packQty' | 'unit'>>): Accessory => ({ unit: 'pc', packQty: 1, ...a });
 
@@ -57,7 +57,7 @@ export const defaultAppliances = (): Appliance[] => [
 ];
 
 /** Built-in library items added after 2.1, offered once to libraries saved by older versions. */
-export const DEFAULTS_ADDED_LATER = ['ap-washer-top', 'ap-dryer', 'ap-freezer-chest', 'ap-bin-pedal', 'ap-bin-twin', 'ap-tv-55'];
+export const DEFAULTS_ADDED_LATER = ['fx-anchor', 'fx-silicone', 'ap-washer-top', 'ap-dryer', 'ap-freezer-chest', 'ap-bin-pedal', 'ap-bin-twin', 'ap-tv-55'];
 
 
 export const defaultCatalog = (): Catalog => ({
@@ -179,6 +179,8 @@ export const defaultCatalog = (): Catalog => ({
     acc({ id: 'fx-hanger', category: 'fixing', name: 'Wall cabinet hanger bracket', size: 'adjustable, pair', unit: 'pair', price: 3.5 }),
     acc({ id: 'fx-rail', category: 'fixing', name: 'Wall hanging rail', size: 'per metre', unit: 'm', price: 4 }),
     acc({ id: 'fx-bracket', category: 'fixing', name: 'Wall fixing bracket (built-in)', size: 'L-bracket', price: 0.6 }),
+    acc({ id: 'fx-anchor', category: 'fixing', name: 'Wall anchor (8mm plug + screw)', size: 'pack of 100', packQty: 100, price: 9 }),
+    acc({ id: 'fx-silicone', category: 'fixing', name: 'Silicone / construction adhesive 300ml', size: 'tube', price: 6 }),
     acc({ id: 'sv-cutout', category: 'service', name: 'Countertop cut-out (sink / hob)', size: 'per cut-out', price: 25 }),
     acc({ id: 'sv-notch', category: 'service', name: 'Handle notch machining', size: 'per door', price: 2 }),
     acc({ id: 'jn-dowel', category: 'fixing', name: 'Beech dowels 8x35 (panel joints)', size: 'pack of 100', packQty: 100, price: 4 }),
@@ -246,4 +248,24 @@ export const defaultSettings = (): Settings => ({
     receiptPrefix: 'RCT-',
   },
   ai: { apiKey: '', model: 'claude-opus-5-5' },
+  services: defaultServices(),
 });
+
+/** Starter list of services; prices are placeholders to edit in Settings › Material pricing hub › Services. */
+export function defaultServices(): ServiceItem[] {
+  const list: [string, string, string, number][] = [
+    ['svc-measure', 'Site measure & consultation', 'visit', 30],
+    ['svc-design', 'Design & 3D drawings', 'job', 50],
+    ['svc-install', 'Installation', 'day', 80],
+    ['svc-carpenter', 'Carpenter labour', 'hour', 10],
+    ['svc-delivery', 'Delivery', 'trip', 40],
+    ['svc-removal', 'Removal & disposal of old cabinets', 'job', 60],
+    ['svc-plumbing', 'Plumbing connection (sink / dishwasher / washer)', 'point', 35],
+    ['svc-electrical', 'Electrical connection (hob / oven / lights)', 'point', 35],
+    ['svc-template', 'Worktop templating', 'job', 40],
+    ['svc-wallprep', 'Wall preparation / patching', 'm²', 10],
+    ['svc-painting', 'Painting', 'm²', 8],
+    ['svc-repair', 'Repairs / adjustments', 'hour', 12],
+  ];
+  return list.map(([id, name, unit, price]) => ({ id, name, unit, price }));
+}

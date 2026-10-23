@@ -54,6 +54,8 @@ export interface BuildContext {
   topY?: number;
   /** front edge of the shared worktop (z) for hob / sink positioning */
   topFront?: number;
+  /** back edge of the shared worktop (z, ≤ 0 when it runs on behind the unit, e.g. islands) */
+  topBack?: number;
 }
 
 export function topThickness(u: Unit, cat: Catalog): number {
@@ -526,11 +528,16 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
     else if (!topBoard) warnings.push(`${a.name} needs a countertop.`);
     // worktop edges in unit coordinates
     const frontEdge = ctx.topFront ?? D + u.overhang.front;
-    const backEdge = ctx.topY != null ? 0 : -fpT('back') - u.overhang.back;
+    const backEdge = ctx.topY != null ? (ctx.topBack ?? 0) : -fpT('back') - u.overhang.back;
     const x0 = ta.xOffset != null ? ta.xOffset : g.x + g.w / 2 - a.width / 2;
     // centred on the worktop, but kept 50 mm clear of the front edge where the worktop allows it
     const centred = (frontEdge + backEdge) / 2 - a.depth / 2;
-    const z0 = ta.frontGap != null ? frontEdge - ta.frontGap - a.depth : Math.max(backEdge, Math.min(centred, frontEdge - 50 - a.depth));
+    const dd = appl(ta.downdraftId ?? null);
+    // with a downdraft the hob moves forward to leave room for it behind (20 mm from the back, 15 mm gap)
+    const ddNeed = dd ? 20 + dd.depth + 15 : 0;
+    let z0 = ta.frontGap != null ? frontEdge - ta.frontGap - a.depth : Math.max(backEdge + ddNeed, Math.min(centred, frontEdge - 50 - a.depth));
+    // never past the front edge
+    z0 = Math.min(z0, frontEdge - a.depth);
     applR.push({ applianceId: a.id, box: { x: x0, y: surfaceY, z: z0, w: a.width, h: a.height, d: a.depth } });
     const toFront = Math.round(frontEdge - (z0 + a.depth));
     if (toFront < 50) warnings.push(`${a.name} is only ${toFront}mm from the worktop front edge (50mm minimum).`);
@@ -539,12 +546,13 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
       if (oR - (x0 + a.width) < 50) warnings.push(`${a.name} is only ${Math.round(oR - x0 - a.width)}mm from the right edge of the top.`);
     }
     if (a.width > g.w + 2 * t + 40 && ta.xOffset == null) warnings.push(`${a.name} is wider than bay ${ta.bay + 1} below it.`);
-    const dd = appl(ta.downdraftId ?? null);
     if (dd) {
       useAppliance(dd);
       if (counter || ctx.topY != null) addHw('cutout', 'sv-cutout', 1, `Cut-out for ${dd.name}`);
       const dz = z0 - dd.depth - 15;
-      if (dz < backEdge + 20) warnings.push(`Not enough worktop behind ${a.name} for the ${dd.name} — move the hob forward.`);
+      const need = Math.ceil(a.depth + ddNeed + 50);
+      const have = Math.round(frontEdge - backEdge);
+      if (have < need) warnings.push(`${a.name} with ${dd.name} needs a worktop at least ${need}mm deep (this one is ${have}mm).`);
       applR.push({ applianceId: dd.id, box: { x: x0 + (a.width - dd.width) / 2, y: surfaceY, z: dz, w: dd.width, h: dd.height, d: dd.depth } });
     }
   }

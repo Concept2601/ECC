@@ -61,7 +61,7 @@ export default function Invoices() {
               <button
                 key={q.id}
                 className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-stone-50 disabled:opacity-40"
-                disabled={!q.units.length && !q.runs.length && !q.assemblies?.length}
+                disabled={!q.units.length && !q.runs.length && !q.assemblies?.length && !q.extras.length}
                 onClick={() => {
                   const id = createInvoiceFromQuote(q.id);
                   closePick();

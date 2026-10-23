@@ -2,7 +2,7 @@ import { ChevronDown, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { confirmAction, Field, NumInput, PageHeader, Tabs, Toggle } from '../components/ui';
 import { useMoney } from '../hooks';
-import { ACCESSORY_CATEGORIES, ACCESSORY_LABELS, APPLIANCE_CATEGORIES, APPLIANCE_LABELS, type Catalog, type TransportOption } from '../lib/types';
+import { ACCESSORY_CATEGORIES, ACCESSORY_LABELS, APPLIANCE_CATEGORIES, APPLIANCE_LABELS, type Catalog, type ServiceItem, type TransportOption } from '../lib/types';
 import { uid } from '../lib/util';
 import { useStore } from '../store';
 
@@ -77,7 +77,7 @@ function EditableList<T extends { id: string; name: string }>({
   );
 }
 
-type Tab = 'boards' | 'edging' | 'glass' | 'aluminium' | 'countertops' | 'accessories' | 'appliances' | 'transport';
+type Tab = 'boards' | 'edging' | 'glass' | 'aluminium' | 'countertops' | 'accessories' | 'appliances' | 'transport' | 'services';
 
 export default function Library({ embedded = false }: { embedded?: boolean }) {
   const { catalog, updateCatalog, resetCatalog, settings, updateSettings } = useStore();
@@ -127,6 +127,7 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
             { value: 'accessories', label: 'Accessories' },
             { value: 'appliances', label: 'Appliances' },
             { value: 'transport', label: 'Transport' },
+            { value: 'services', label: 'Services' },
           ]}
         />
 
@@ -291,6 +292,20 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
             onChange={(i, patch) => updateSettings((s) => Object.assign(s.pricing.transportOptions[i], patch))}
             onRemove={(i) => updateSettings((s) => s.pricing.transportOptions.splice(i, 1))}
             onAdd={() => updateSettings((s) => s.pricing.transportOptions.push({ id: uid('tr-'), name: 'New transport option', price: 50 }))}
+          />
+        )}
+        {tab === 'services' && (
+          <EditableList<ServiceItem>
+            items={settings.services ?? []}
+            summary={(t) => `${fmt(t.price)} per ${t.unit}`}
+            fields={[
+              { key: 'name', label: 'Service / item', type: 'text' },
+              { key: 'unit', label: 'Charged per (day, trip, m²…)', type: 'text', half: true },
+              { key: 'price', label: 'Price', type: 'number', half: true },
+            ]}
+            onChange={(i, patch) => updateSettings((s) => Object.assign((s.services ??= [])[i], patch))}
+            onRemove={(i) => updateSettings((s) => (s.services ??= []).splice(i, 1))}
+            onAdd={() => updateSettings((s) => (s.services ??= []).push({ id: uid('svc-'), name: 'New service', unit: 'job', price: 0 }))}
           />
         )}
       </div>

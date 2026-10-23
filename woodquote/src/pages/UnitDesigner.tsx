@@ -981,7 +981,7 @@ export default function UnitDesigner() {
                       <Plus size={14} /> Sink
                     </button>
                   </div>
-                  {!unit.countertopId && !inRun && unit.topAppliances.length > 0 && <p className="text-xs text-amber-700">Add a countertop in “Top & base” for hobs and sinks.</p>}
+                  {!unit.countertopId && !inRun && !(loc?.piece?.underTop && loc.assembly?.top.countertopId) && unit.topAppliances.length > 0 && <p className="text-xs text-amber-700">Add a countertop in “Top & base” for hobs and sinks.</p>}
                 </div>
               </Card>
               <Card title="In compartments">

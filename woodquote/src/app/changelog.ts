@@ -11,6 +11,28 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '2.3.0',
+    date: '2026-10-23',
+    title: "Cabinet rows, wall slats, services, hobs with downdrafts",
+    added: [
+      "Cabinet rows: BIC walls, wardrobe walls, TV wall units and display walls built like a kitchen run – cabinets side by side in order, + to add one anywhere, move left / right, gaps, wall-hung pieces above",
+      "Wall slats fixed straight onto the wall with silicone and wall anchors: slat width, gap, board and optional backing board; slats, anchors and silicone are counted and priced; on their own or behind TV stands, kitchens and BICs",
+      "Services & other items on every quotation (installation, delivery, site measure, plumbing, electrical, removal…), picked from a saved price list with units (day, trip, m²…) or typed in",
+      "Services price list in Settings › Material pricing hub › Services",
+      "Hob or sink and its downdraft extractor can be chosen right on a kitchen cabinet and on island / group cabinets",
+    ],
+    updated: [
+      "Islands: exposed ends (and the back of one-sided islands) are one board across the whole island instead of separate cabinet sides; panels can be switched on or off per side",
+      "Island hobs and sinks sit in the shared worktop with their cut-outs charged",
+      "Hobs with a downdraft move forward to leave room behind; if the worktop is too shallow the app says how deep it must be and can deepen the kitchen worktop in one tap",
+      "Library: wall anchors and silicone / construction adhesive",
+    ],
+    fixed: [
+      "Hobs were missing from the appliance choices on kitchens and islands",
+      "Rebuilding an island no longer makes it grow",
+    ],
+  },
+  {
     version: '2.2.0',
     date: '2026-10-23',
     title: "Islands, cabinet groups and room-first quoting",

@@ -2,18 +2,23 @@
 // of the quote data so they are not undone, exported or restored with backups.
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { Trade } from '../lib/types';
 
 export interface Prefs {
   /** Minutes between automatic save points; 0 = off. */
   autoSaveMinutes: number;
   /** How many automatic save points to keep. */
   keepAutoSaves: number;
-  /** Also write each save to Documents\WoodQuote\Backups (Windows app). */
+  /** Also write each save to Documents\En-Quote\Backups (Windows app). */
   backupFiles: boolean;
   /** 3D render quality: how much of the graphics card and screen resolution to use. */
   renderQuality: RenderQuality;
   /** Custom key bindings by action id (missing = default keys). */
   shortcuts: Record<string, string[]>;
+  /** workspace in use: joinery, ceilings or tiling */
+  trade: Trade;
+  /** show the workspace chooser every time the app opens */
+  showLauncher: boolean;
 }
 
 export type RenderQuality = 'saver' | 'balanced' | 'high' | 'max';
@@ -52,6 +57,8 @@ export const usePrefs = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
       backupFiles: true,
       renderQuality: defaultQuality(),
       shortcuts: {},
+      trade: 'joinery',
+      showLauncher: true,
       set: (p) => set(p),
     }),
     { name: 'woodquote-prefs', storage: safeStorage, partialize: ({ set: _s, ...rest }) => rest },

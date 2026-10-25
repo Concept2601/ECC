@@ -1,4 +1,4 @@
-// Settings › Developer information: who made WoodQuote, the licence, version
+// Settings › Developer information: who made En-Quote, the licence, version
 // history, usage and privacy policies, documentation and hardware specs.
 import { BookOpen, ChevronDown, Cpu, FileText, Heart, History, Keyboard, Loader2, Shield, ShieldCheck } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -186,7 +186,7 @@ export default function DeveloperInfo() {
 
       <Fold title="Usage policy" icon={<FileText size={16} />}>
         <ul className="list-disc space-y-1 pl-5">
-          <li>WoodQuote is licensed, not sold. Each licence is for the email address it was issued to and is valid for {LICENSE_DAYS} days per code; it renews with a new code from the developer.</li>
+          <li>En-Quote is licensed, not sold. Each licence is for the email address it was issued to and is valid for {LICENSE_DAYS} days per code; it renews with a new code from the developer.</li>
           <li>Do not share, resell, copy, decompile or modify the software, or try to get round the licence check.</li>
           <li>Quotations, cutting lists and measurements are worked out from the information you enter. Check sizes on site and review every quotation before sending it — the developer is not responsible for losses from incorrect inputs, prices or measurements.</li>
           <li>AI readers can misread drawings; always check what they produce.</li>

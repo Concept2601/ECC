@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>WoodQuote by 2601</string>
+        <string>En-Quote</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,7 +23,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Take photos of plans and sketches so WoodQuote can read the measurements, and attach site photos to quotations.</string>
+	<string>Take photos of plans and sketches so En-Quote can read the measurements, and attach site photos to quotations.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose plans, sketches and site photos to read or attach to quotations.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

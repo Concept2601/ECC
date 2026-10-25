@@ -61,7 +61,7 @@ function Toast() {
   }, [message]);
   if (!message) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex justify-center px-4" role="status">
+    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] md:left-64 flex justify-center px-4" role="status">
       <div className="max-w-md truncate rounded-xl bg-stone-900/90 px-4 py-2 text-sm text-white shadow-lg">{message}</div>
     </div>
   );

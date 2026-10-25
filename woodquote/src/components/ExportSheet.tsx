@@ -1,6 +1,7 @@
 import { Download, Loader2, Share2 } from 'lucide-react';
 import { useState } from 'react';
-import { downloadPdf, sharePdf, usePdfExport } from '../pdf/pdf';
+import { downloadPdf, sharePdf } from '../pdf/pdf';
+import { usePdfExport } from '../pdf/exportState';
 import { Modal } from './ui';
 
 /** Shown whenever a quotation / invoice / receipt / cut list PDF is ready. */

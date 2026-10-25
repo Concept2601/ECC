@@ -1,6 +1,11 @@
 import { AlertTriangle, Boxes, Camera, Home, Copy, FileDown, Hammer, ImagePlus, LayoutPanelTop, Minus, MoreVertical, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { TRADES } from '../app/brand';
+import { usePrefs } from '../app/prefs';
+import CeilingsEditor from '../components/CeilingsEditor';
+import TilingEditor from '../components/TilingEditor';
+import type { Trade } from '../lib/types';
 import AddUnitModal from '../components/AddUnitModal';
 import AddGroupModal from '../components/AddGroupModal';
 import { cloneAssembly } from '../lib/assembly';
@@ -31,6 +36,9 @@ export default function QuoteEditor() {
   const calc = useQuoteCalc(quote);
   const fmt = useMoney();
   const [tab, setTab] = useState<Tab>('design');
+  const [search] = useSearchParams();
+  const prefTrade = usePrefs((s) => s.trade);
+  const [section, setSection] = useState<Trade>(() => (search.get('section') as Trade) || quote?.trade || prefTrade);
   const [adding, setAdding] = useState(false);
   const [addingRun, setAddingRun] = useState(false);
   const [addingGroup, setAddingGroup] = useState(false);
@@ -108,7 +116,7 @@ export default function QuoteEditor() {
           onChange={setTab}
           tabs={[
             { value: 'client', label: 'Client details' },
-            { value: 'design', label: `Design (${calc.items.length})` },
+            { value: 'design', label: `Design (${calc.items.length + (calc.ceilings?.areas.length ?? 0) + (calc.tiling?.areas.length ?? 0)})` },
             { value: 'hub', label: 'Material hub' },
             { value: 'costing', label: 'Costing' },
             { value: 'schedule', label: 'Material schedule' },
@@ -128,6 +136,28 @@ export default function QuoteEditor() {
         )}
 
         {tab === 'design' && (
+          <div className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1">
+            {TRADES.map((t) => {
+              const Icon = t.icon;
+              const v = t.id === 'joinery' ? calc.unitsSell : t.id === 'ceilings' ? (calc.ceilings?.sell ?? 0) : (calc.tiling?.sell ?? 0);
+              const on = section === t.id;
+              return (
+                <button key={t.id} onClick={() => setSection(t.id)} className={`flex min-w-[130px] flex-1 items-center gap-2 rounded-2xl border p-2.5 text-left transition ${on ? 'border-transparent text-white shadow-md' : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300'}`} style={on ? { background: t.accent } : undefined}>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ background: on ? 'rgba(255,255,255,.18)' : t.soft, color: on ? '#fff' : t.ink }}>
+                    <Icon size={17} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">{t.label}</span>
+                    <span className={`block text-xs tabular-nums ${on ? 'text-white/80' : 'text-stone-500'}`}>{v ? fmt(v) : 'Not quoted'}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {tab === 'design' && section === 'ceilings' && <CeilingsEditor quote={quote} calc={calc} up={up} />}
+        {tab === 'design' && section === 'tiling' && <TilingEditor quote={quote} calc={calc} up={up} />}
+        {tab === 'design' && section === 'joinery' && (
           <div className="space-y-3">
             {calc.items.map((it) => {
               const link = it.kind === 'run' ? `/quotes/${quote.id}/runs/${it.id}` : it.kind === 'assembly' ? `/quotes/${quote.id}/groups/${it.id}` : `/quotes/${quote.id}/units/${it.id}`;
@@ -229,9 +259,9 @@ export default function QuoteEditor() {
                 <Boxes size={18} /> Add island, cabinet row (BIC / TV wall / wardrobes), wall slats, custom unit or loose appliance
               </button>
             </div>
-            <ServicesCard quote={quote} up={up} />
           </div>
         )}
+        {tab === 'design' && <ServicesCard quote={quote} up={up} />}
 
         {tab === 'design' && (
           <div className="space-y-3">
@@ -363,13 +393,16 @@ export default function QuoteEditor() {
               </div>
             </Card>
             <Card title="Summary">
+              {(calc.ceilings || calc.tiling) && <div className="label">Joinery</div>}
               <Row label="Materials & hardware (cost)" value={fmt(calc.materialsCost - calc.appliancesCost)} />
               {calc.appliancesCost > 0 && <Row label="Appliances (cost)" value={fmt(calc.appliancesCost)} />}
               <Row label={`Labour (${settings.pricing.labourMode === 'percent' ? `${settings.pricing.labourPercent}%` : 'per unit'})`} value={fmt(calc.labour)} />
               {calc.installation > 0 && <Row label="Installation" value={fmt(calc.installation)} />}
               <Row label={`Markup (${quote.markupPercent}%)`} value={fmt(calc.markup)} />
               <div className="my-2 border-t" />
-              <Row label="Units" value={fmt(calc.unitsSell)} />
+              <Row label="Joinery" value={fmt(calc.unitsSell)} />
+              {calc.ceilings && <Row label={`Ceilings (${calc.ceilings.size} m², markup ${calc.ceilings.markupPercent}%)`} value={fmt(calc.ceilings.sell)} />}
+              {calc.tiling && <Row label={`Tiling (${calc.tiling.size} m², markup ${calc.tiling.markupPercent}%)`} value={fmt(calc.tiling.sell)} />}
               {calc.transport > 0 && <Row label="Transport" value={fmt(calc.transport)} />}
               {calc.extras > 0 && <Row label="Services & other items" value={fmt(calc.extras)} />}
               <Row label="Subtotal" value={fmt(calc.subtotal)} />
@@ -378,13 +411,37 @@ export default function QuoteEditor() {
               <div className="my-2 border-t" />
               <Row strong label="Total" value={fmt(calc.total)} />
               <p className="mt-2 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800">
-                Estimated gross profit: <b>{fmt(calc.total - calc.tax - calc.materialsCost - calc.transport)}</b> (labour + markup − discount)
+                Estimated gross profit: <b>{fmt(calc.total - calc.tax - calc.materialsCost - calc.transport - (calc.ceilings?.materials ?? 0) - (calc.tiling?.materials ?? 0))}</b> (labour + markup + services − discount)
               </p>
             </Card>
             <ServicesCard quote={quote} up={up} className="md:col-span-2" />
           </div>
         )}
 
+        {tab === 'schedule' && (calc.ceilings || calc.tiling) && (
+          <div className="space-y-3">
+            {[calc.ceilings, calc.tiling].map(
+              (t) =>
+                t && (
+                  <Card key={t.trade} title={`${t.title} – materials to buy`} actions={<span className="text-sm font-bold">{fmt(t.materials)}</span>}>
+                    <div className="divide-y divide-stone-100">
+                      {t.schedule.map((l) => (
+                        <div key={l.description + l.unitPrice} className="flex items-center justify-between gap-3 py-2 text-sm">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">{l.description}</div>
+                            <div className="text-xs text-stone-500">
+                              {l.qty} {l.unit} × {fmt(l.unitPrice)}
+                            </div>
+                          </div>
+                          <span className="font-semibold tabular-nums">{fmt(l.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                ),
+            )}
+          </div>
+        )}
         {tab === 'schedule' && (
           <div className="space-y-3">
             {COST_GROUPS.map((g) => {
@@ -471,7 +528,7 @@ export default function QuoteEditor() {
                 <button className="btn-secondary justify-start" disabled={!calc.items.length || !!busy} onClick={captureViews}>
                   <Camera size={16} /> {busy === 'capture' ? 'Rendering…' : 'Add 3D render views to the PDF'}
                 </button>
-                <button className="btn-secondary justify-start" disabled={!calc.items.length} onClick={() => { const iid = createInvoiceFromQuote(quote.id); if (iid) nav(`/invoices/${iid}`); }}>
+                <button className="btn-secondary justify-start" disabled={!calc.subtotal} onClick={() => { const iid = createInvoiceFromQuote(quote.id); if (iid) nav(`/invoices/${iid}`); }}>
                   <Receipt size={16} /> Create invoice from this quotation
                 </button>
                 <button className="btn-secondary justify-start" onClick={() => nav(`/quotes/${quote.id}/room`)}>
@@ -501,7 +558,7 @@ export default function QuoteEditor() {
         )}
       </div>
 
-      <div className="safe-bottom fixed inset-x-0 bottom-[60px] z-30 border-t border-stone-200 bg-white/95 backdrop-blur">
+      <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 md:left-64 border-t border-stone-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2">
           <div>
             <div className="text-[11px] font-semibold uppercase text-stone-500">Quotation total</div>
@@ -510,7 +567,7 @@ export default function QuoteEditor() {
           <span className={`chip ${STATUS_STYLE[quote.status]}`}>{quote.status}</span>
           <button
             className="btn-secondary"
-            disabled={!calc.items.length}
+            disabled={!calc.subtotal}
             onClick={() => {
               const iid = createInvoiceFromQuote(quote.id);
               if (iid) nav(`/invoices/${iid}`);
@@ -564,7 +621,7 @@ export default function QuoteEditor() {
           <button className="btn-secondary justify-start" disabled={!calc.items.length} onClick={() => { setMenu(false); exportPdf('workshop'); }}>
             <Hammer size={16} /> Workshop cut list & materials PDF
           </button>
-          <button className="btn-secondary justify-start" disabled={!calc.items.length} onClick={() => { const iid = createInvoiceFromQuote(quote.id); if (iid) nav(`/invoices/${iid}`); }}>
+          <button className="btn-secondary justify-start" disabled={!calc.subtotal} onClick={() => { const iid = createInvoiceFromQuote(quote.id); if (iid) nav(`/invoices/${iid}`); }}>
             <Receipt size={16} /> Create invoice from this quotation
           </button>
           <button className="btn-secondary justify-start" onClick={() => { const nid = duplicateQuote(quote.id); setMenu(false); if (nid) nav(`/quotes/${nid}`); }}>

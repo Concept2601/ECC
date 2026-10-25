@@ -1,4 +1,4 @@
-name: WoodQuote iPhone app
+name: En-Quote iPhone app
 
 on:
   push:
@@ -62,12 +62,12 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
           mkdir -p out/Payload
           cp -R build/Build/Products/Release-iphoneos/App.app out/Payload/
-          (cd out && zip -qry WoodQuote-unsigned.ipa Payload)
+          (cd out && zip -qry En-Quote-unsigned.ipa Payload)
 
       - uses: actions/upload-artifact@v4
         with:
-          name: WoodQuote-iOS-unsigned
-          path: woodquote/ios/App/out/WoodQuote-unsigned.ipa
+          name: En-Quote-iOS-unsigned
+          path: woodquote/ios/App/out/En-Quote-unsigned.ipa
 
       - name: Install signing certificate and profile
         if: env.IOS_P12_BASE64 != '' && env.IOS_PROFILE_BASE64 != '' && env.IOS_TEAM_ID != ''
@@ -112,7 +112,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: env.PROFILE_NAME != ''
         with:
-          name: WoodQuote-iOS-AppStore
+          name: En-Quote-iOS-AppStore
           path: woodquote/ios/App/out/signed/*.ipa
 
       - name: Upload to TestFlight

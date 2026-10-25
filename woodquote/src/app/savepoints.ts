@@ -66,7 +66,7 @@ export async function saveNow(kind: 'manual' | 'auto' = 'manual', label?: string
     let message = kind === 'auto' ? 'Auto-saved' : 'Saved';
     if (window.woodquoteDesktop?.saveBackup && usePrefs.getState().backupFiles) {
       try {
-        const file = await window.woodquoteDesktop.saveBackup(`WoodQuote-${stamp(new Date(at))}${kind === 'auto' ? '-auto' : ''}.json`, json);
+        const file = await window.woodquoteDesktop.saveBackup(`En-Quote-${stamp(new Date(at))}${kind === 'auto' ? '-auto' : ''}.json`, json);
         message += ` · ${file}`;
       } catch {
         /* file backup is a bonus */

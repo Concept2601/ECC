@@ -1,4 +1,4 @@
-import type { ServiceItem, Accessory, Appliance, Catalog, Settings } from './types';
+import type { CeilingProduct, CeilingRates, PresetItem, ServiceItem, TileProduct, TileSupply, TilingRates, Accessory, Appliance, Catalog, Settings } from './types';
 
 const acc = (a: Omit<Accessory, 'packQty' | 'unit'> & Partial<Pick<Accessory, 'packQty' | 'unit'>>): Accessory => ({ unit: 'pc', packQty: 1, ...a });
 
@@ -101,6 +101,9 @@ export const defaultCatalog = (): Catalog => ({
     { id: 'c-wood', name: 'Solid hardwood top 40mm', thickness: 40, pricePerSqm: 140, color: '#a8743f', finish: 'satin' },
   ],
   appliances: defaultAppliances(),
+  ceilingProducts: defaultCeilingProducts(),
+  tiles: defaultTiles(),
+  tileSupplies: defaultTileSupplies(),
   accessories: [
     // hinges
     ...hingeFamily('h-soft', 'Soft-close', 'Soft-close clip-on hinge', { overlay: 2.5, half: 2.6, inset: 2.8 }),
@@ -243,12 +246,18 @@ export const defaultSettings = (): Settings => ({
     showElevations: true,
     quoteDetail: 'units',
     signatureLine: true,
+    showTradeMaterials: true,
     quotePrefix: 'QUO-',
     invoicePrefix: 'INV-',
     receiptPrefix: 'RCT-',
   },
   ai: { apiKey: '', model: 'claude-opus-5-5' },
   services: defaultServices(),
+  ceilingRates: defaultCeilingRates(),
+  ceilingDesigns: defaultCeilingDesigns(),
+  ceilingExtras: defaultCeilingExtras(),
+  tilingRates: defaultTilingRates(),
+  tilingExtras: defaultTilingExtras(),
 });
 
 /** Starter list of services; prices are placeholders to edit in Settings › Material pricing hub › Services. */
@@ -269,3 +278,109 @@ export function defaultServices(): ServiceItem[] {
   ];
   return list.map(([id, name, unit, price]) => ({ id, name, unit, price }));
 }
+
+/* Ceilings and tiling: prices are placeholders – set your own in Settings › Material pricing hub. */
+
+export function defaultCeilingProducts(): CeilingProduct[] {
+  return [
+    { id: 'c-rhino-64-3000', kind: 'board', name: 'Rhinoboard 6.4mm 3000 × 1200', unit: 'sheet', price: 9.5, length: 3000, width: 1200, system: 'rhino' },
+    { id: 'c-rhino-64-2700', kind: 'board', name: 'Rhinoboard 6.4mm 2700 × 1200', unit: 'sheet', price: 8.5, length: 2700, width: 1200, system: 'rhino' },
+    { id: 'c-rhino-9-3000', kind: 'board', name: 'Rhinoboard 9mm 3000 × 1200', unit: 'sheet', price: 12, length: 3000, width: 1200, system: 'rhino' },
+    { id: 'c-pvc-white', kind: 'pvc', name: 'PVC ceiling strip white 250mm × 6m', unit: 'strip', price: 6.5, length: 6000, width: 250, colour: '#f8fafc', system: 'pvc' },
+    { id: 'c-pvc-wood', kind: 'pvc', name: 'PVC ceiling strip wood grain 250mm × 6m', unit: 'strip', price: 7.5, length: 6000, width: 250, colour: '#b88a5a', system: 'pvc' },
+    { id: 'c-pvc-grey', kind: 'pvc', name: 'PVC ceiling strip grey 250mm × 6m', unit: 'strip', price: 7, length: 6000, width: 250, colour: '#9ca3af', system: 'pvc' },
+    { id: 'c-pvc-gloss', kind: 'pvc', name: 'PVC ceiling strip white gloss 200mm × 5.95m', unit: 'strip', price: 7, length: 5950, width: 200, colour: '#ffffff', system: 'pvc' },
+    { id: 'c-brand-38', kind: 'brandering', name: 'Brandering 38 × 38 pine 6.6m', unit: 'length', price: 5.5, length: 6600, system: 'both' },
+    { id: 'c-brand-38-4', kind: 'brandering', name: 'Brandering 38 × 38 pine 4.2m', unit: 'length', price: 3.6, length: 4200, system: 'both' },
+    { id: 'c-cornice-cove', kind: 'cornice', name: 'Cove cornice 75mm 3.66m', unit: 'length', price: 3.5, length: 3660, system: 'rhino' },
+    { id: 'c-cornice-ornate', kind: 'cornice', name: 'Ornate cornice 110mm 3m', unit: 'length', price: 6, length: 3000, system: 'rhino' },
+    { id: 'c-pvc-angle', kind: 'trim', name: 'PVC wall angle / cornice 6m', unit: 'length', price: 3, length: 6000, system: 'pvc' },
+    { id: 'c-nails-75', kind: 'fixing', name: 'Wire nails 75mm (brandering) 1kg', unit: 'box', price: 3, coverage: 200, system: 'both' },
+    { id: 'c-screws-25', kind: 'fixing', name: 'Drywall screws 25mm (box of 1000)', unit: 'box', price: 8, coverage: 1000, system: 'rhino' },
+    { id: 'c-screws-pvc', kind: 'fixing', name: 'PVC ceiling screws / clips (box of 500)', unit: 'box', price: 5, coverage: 500, system: 'pvc' },
+    { id: 'c-tape', kind: 'tape', name: 'Joint tape 90m', unit: 'roll', price: 4, coverage: 90, system: 'rhino' },
+    { id: 'c-filler', kind: 'filler', name: 'Jointing / skim compound 20kg', unit: 'bag', price: 14, coverage: 40, system: 'rhino' },
+    { id: 'c-cornice-adh', kind: 'adhesive', name: 'Cornice adhesive 5kg', unit: 'tub', price: 7, coverage: 30, system: 'rhino' },
+    { id: 'c-paint-20', kind: 'paint', name: 'Ceiling paint white 20L', unit: 'tin', price: 45, coverage: 160, system: 'rhino' },
+    { id: 'c-paint-5', kind: 'paint', name: 'Ceiling paint white 5L', unit: 'tin', price: 14, coverage: 40, system: 'rhino' },
+    { id: 'c-insulation', kind: 'insulation', name: 'Ceiling insulation 135mm roll (10m²)', unit: 'roll', price: 28, coverage: 10, system: 'both' },
+  ];
+}
+
+export const defaultCeilingRates = (): CeilingRates => ({ rhinoPerM2: 4.5, pvcPerM2: 4, cornicePerM: 1, paintPerM2: 1.5, insulationPerM2: 0.8, demolitionPerM2: 2, downlightEach: 3, markupPercent: 25, wastePercent: 10 });
+
+export const defaultCeilingDesigns = (): PresetItem[] => [
+  { id: 'cd-bulkhead', name: 'Bulkhead', unit: 'm', price: 18 },
+  { id: 'cd-tray', name: 'Tray / coffered edge', unit: 'm', price: 22 },
+  { id: 'cd-shadow', name: 'Shadow-line recess', unit: 'm', price: 9 },
+  { id: 'cd-cove', name: 'LED cove with strip light', unit: 'm', price: 15 },
+  { id: 'cd-twolevel', name: 'Two-level (drop) ceiling', unit: 'm²', price: 12 },
+  { id: 'cd-hatch', name: 'Access hatch', unit: 'item', price: 15 },
+  { id: 'cd-rose', name: 'Ceiling rose / medallion', unit: 'item', price: 10 },
+];
+
+export const defaultCeilingExtras = (): PresetItem[] => [
+  { id: 'ce-pendant', name: 'Pendant light – supply & fit', unit: 'item', price: 35 },
+  { id: 'ce-pendant-fit', name: 'Pendant light – fit only', unit: 'item', price: 10 },
+  { id: 'ce-chandelier', name: 'Chandelier – install', unit: 'item', price: 40 },
+  { id: 'ce-downlight', name: 'LED downlight – supply & fit', unit: 'item', price: 12 },
+  { id: 'ce-fan', name: 'Ceiling fan – install', unit: 'item', price: 25 },
+  { id: 'ce-transport', name: 'Transport', unit: 'trip', price: 30 },
+  { id: 'ce-rubble', name: 'Rubble removal', unit: 'load', price: 25 },
+  { id: 'ce-scaffold', name: 'Scaffolding / trestles hire', unit: 'day', price: 20 },
+  { id: 'ce-repair', name: 'Roof leak / truss repair', unit: 'job', price: 40 },
+];
+
+export function defaultTiles(): TileProduct[] {
+  return [
+    { id: 't-por-600-grey', name: 'Porcelain 600 × 600 grey matt', type: 'porcelain', width: 600, height: 600, thickness: 9, perBox: 4, price: 22, colour: '#9ca3af', finish: 'matt' },
+    { id: 't-por-600-white', name: 'Porcelain 600 × 600 white polished', type: 'porcelain', width: 600, height: 600, thickness: 9, perBox: 4, price: 24, colour: '#f5f5f4', finish: 'polished' },
+    { id: 't-por-1200-marble', name: 'Porcelain 600 × 1200 marble look', type: 'porcelain', width: 600, height: 1200, thickness: 9, perBox: 2, price: 38, colour: '#e7e5e4', finish: 'polished' },
+    { id: 't-plank-wood', name: 'Wood-look plank 200 × 1200', type: 'porcelain', width: 200, height: 1200, thickness: 9, perBox: 6, price: 30, colour: '#a16207', finish: 'textured' },
+    { id: 't-cer-400-beige', name: 'Ceramic floor 400 × 400 beige', type: 'ceramic', width: 400, height: 400, thickness: 8, perBox: 9, price: 12, colour: '#d6c4a8', finish: 'matt' },
+    { id: 't-cer-500-grey', name: 'Ceramic floor 500 × 500 grey', type: 'ceramic', width: 500, height: 500, thickness: 8, perBox: 6, price: 14, colour: '#a8a29e', finish: 'matt' },
+    { id: 't-wall-300x600', name: 'Wall tile 300 × 600 white gloss', type: 'ceramic', width: 300, height: 600, thickness: 8, perBox: 8, price: 13, colour: '#fafaf9', finish: 'gloss' },
+    { id: 't-wall-250x400', name: 'Wall tile 250 × 400 cream', type: 'ceramic', width: 250, height: 400, thickness: 7, perBox: 15, price: 11, colour: '#f3ead6', finish: 'gloss' },
+    { id: 't-subway', name: 'Subway tile 75 × 150 white', type: 'ceramic', width: 75, height: 150, thickness: 7, perBox: 88, price: 14, colour: '#ffffff', finish: 'gloss' },
+    { id: 't-mosaic', name: 'Mosaic sheet 300 × 300', type: 'mosaic', width: 300, height: 300, thickness: 6, perBox: 11, price: 25, colour: '#94a3b8', finish: 'gloss' },
+  ];
+}
+
+export function defaultTileSupplies(): TileSupply[] {
+  return [
+    { id: 'ts-adh', kind: 'adhesive', name: 'Tile adhesive standard 20kg', unit: 'bag', price: 8, coverage: 20 },
+    { id: 'ts-adh-flex', kind: 'adhesive', name: 'Flexible adhesive (porcelain / large tiles) 20kg', unit: 'bag', price: 12, coverage: 20 },
+    { id: 'ts-grout-5', kind: 'grout', name: 'Grout 5kg', unit: 'bag', price: 7, coverage: 5 },
+    { id: 'ts-grout-2', kind: 'grout', name: 'Grout 2kg', unit: 'bag', price: 3.5, coverage: 2 },
+    { id: 'ts-spacer-2', kind: 'spacers', name: 'Tile spacers 2mm (250)', unit: 'pack', price: 1.5, coverage: 250 },
+    { id: 'ts-spacer-3', kind: 'spacers', name: 'Tile spacers 3mm (250)', unit: 'pack', price: 1.5, coverage: 250 },
+    { id: 'ts-level', kind: 'levelling', name: 'Tile levelling clips (100)', unit: 'pack', price: 6, coverage: 100 },
+    { id: 'ts-trim-alu', kind: 'trim', name: 'Aluminium tile trim 2.5m', unit: 'length', price: 3, coverage: 2.5 },
+    { id: 'ts-trim-pvc', kind: 'trim', name: 'PVC tile trim 2.5m', unit: 'length', price: 1.5, coverage: 2.5 },
+    { id: 'ts-wp', kind: 'waterproofing', name: 'Waterproofing membrane 5L', unit: 'tub', price: 18, coverage: 4 },
+    { id: 'ts-primer', kind: 'primer', name: 'Tile primer 5L', unit: 'tin', price: 10, coverage: 25 },
+    { id: 'ts-silicone', kind: 'silicone', name: 'Sanitary silicone 280ml', unit: 'tube', price: 5, coverage: 8 },
+    { id: 'ts-screed', kind: 'screed', name: 'Self-levelling compound 25kg', unit: 'bag', price: 14, coverage: 5 },
+  ];
+}
+
+export const defaultTilingRates = (): TilingRates => ({
+  floorPerM2: 6,
+  wallPerM2: 7,
+  skirtingPerM: 1.5,
+  demolitionPerM2: 2.5,
+  screedPerM2: 2,
+  waterproofPerM2: 2,
+  patternExtra: { straight: 0, brick: 5, diagonal: 15, herringbone: 30, chevron: 30 },
+  largeFormatExtra: 15,
+  markupPercent: 25,
+});
+
+export const defaultTilingExtras = (): PresetItem[] => [
+  { id: 'te-transport', name: 'Transport', unit: 'trip', price: 30 },
+  { id: 'te-rubble', name: 'Rubble removal', unit: 'load', price: 25 },
+  { id: 'te-cutting', name: 'Special cuts / mitred edges', unit: 'm', price: 4 },
+  { id: 'te-steps', name: 'Tiling steps (per step)', unit: 'step', price: 12 },
+  { id: 'te-niche', name: 'Shower niche', unit: 'item', price: 35 },
+  { id: 'te-sealing', name: 'Sealing natural stone', unit: 'm²', price: 3 },
+];

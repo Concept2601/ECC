@@ -2,7 +2,6 @@ import { Capacitor } from '@capacitor/core';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { jsPDF } from 'jspdf';
-import { create } from 'zustand';
 import { autoTable, type RowInput } from 'jspdf-autotable';
 import { elevation } from '../lib/generate';
 import type { BoardPlan } from '../lib/optimizer';
@@ -14,7 +13,8 @@ import { renderAssemblyImage, renderRoomImage, renderRunImage, renderUnitImage }
 import { footprints, inwardNormal, placeXZ, roomExtents, vertices, wallDir } from '../lib/room';
 import { cellRects } from '../lib/sections';
 
-export const usePdfExport = create<{ doc: jsPDF | null; filename: string; result: string | null }>(() => ({ doc: null, filename: '', result: null }));
+import { usePdfExport } from './exportState';
+export { usePdfExport };
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -42,96 +42,136 @@ function ensureSpace(doc: Doc, y: number, needed: number, s: Settings): number {
   return y;
 }
 
+const INK: [number, number, number] = [28, 25, 23];
+const MUTED: [number, number, number] = [120, 113, 108];
+const HAIR: [number, number, number] = [226, 222, 218];
+
+/** Thin running header on continuation pages. */
 function drawMiniHeader(doc: Doc, s: Settings): number {
   const accent = hexToRgb(s.doc.accentColor);
   doc.setFillColor(...accent);
-  doc.rect(0, 0, PAGE_W, 3, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(120);
-  doc.text(s.company.name, M, 10);
-  doc.setTextColor(0);
-  return 18;
-}
-
-/** Customisable letterhead. Returns y below header. */
-function drawHeader(doc: Doc, s: Settings, title: string, meta: [string, string][]): number {
-  const accent = hexToRgb(s.doc.accentColor);
-  const c = s.company;
-  doc.setFillColor(...accent);
-  doc.rect(0, 0, PAGE_W, 4, 'F');
-
-  let y = 12;
-  const pos = s.doc.logoPosition;
-  let textX = M;
-  let align: 'left' | 'center' | 'right' = 'left';
-  let logoH = 0;
-  if (c.logo) {
+  doc.rect(0, 0, PAGE_W, 1.6, 'F');
+  let x = M;
+  if (s.company.logo) {
     try {
-      const props = doc.getImageProperties(c.logo);
-      const h = 20;
-      const w = Math.min(50, (props.width / props.height) * h);
-      const x = pos === 'left' ? M : pos === 'center' ? PAGE_W / 2 - w / 2 : PAGE_W - M - w;
-      doc.addImage(c.logo, imgFormat(c.logo), x, y - 2, w, h);
-      logoH = h;
-      if (pos === 'left') textX = M + w + 5;
+      const pr = doc.getImageProperties(s.company.logo);
+      const h = 6;
+      const w = Math.min(22, (pr.width / pr.height) * h);
+      doc.addImage(s.company.logo, imgFormat(s.company.logo), M, 5.5, w, h);
+      x = M + w + 3;
     } catch {
       /* ignore broken logo */
     }
   }
-  if (pos === 'center') {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...INK);
+  doc.text(s.company.name, x, 10);
+  doc.setDrawColor(...HAIR);
+  doc.setLineWidth(0.2);
+  doc.line(M, 14, PAGE_W - M, 14);
+  doc.setTextColor(0);
+  return 20;
+}
+
+/**
+ * Letterhead: the logo is sized into the header next to (or above) the company
+ * details rather than pasted on top, the document title sits opposite in
+ * spaced capitals with its reference block, and a hairline closes it.
+ */
+function drawHeader(doc: Doc, s: Settings, title: string, meta: [string, string][]): number {
+  const accent = hexToRgb(s.doc.accentColor);
+  const c = s.company;
+  doc.setFillColor(...accent);
+  doc.rect(0, 0, PAGE_W, 2.2, 'F');
+  const pos = s.doc.logoPosition;
+  const top = 13;
+
+  // logo: fitted into a 22 mm tall slot, never wider than 52 mm
+  let logo: { w: number; h: number } | null = null;
+  if (c.logo) {
+    try {
+      const pr = doc.getImageProperties(c.logo);
+      const k = Math.min(52 / pr.width, 22 / pr.height);
+      logo = { w: pr.width * k, h: pr.height * k };
+    } catch {
+      logo = null;
+    }
+  }
+  const lines = [...c.address.split('\n'), [c.phone, c.email].filter(Boolean).join('   ·   '), c.website, c.taxNumber ? `Tax no. ${c.taxNumber}` : '', ...s.doc.headerFields.filter((f) => f.label || f.value).map((f) => `${f.label}${f.label && f.value ? ': ' : ''}${f.value}`)].filter(Boolean);
+
+  let textX = M;
+  let align: 'left' | 'center' = 'left';
+  let y = top;
+  if (logo && pos === 'center') {
+    doc.addImage(c.logo!, imgFormat(c.logo!), PAGE_W / 2 - logo.w / 2, y - 3, logo.w, logo.h);
+    y += logo.h + 4;
     textX = PAGE_W / 2;
     align = 'center';
-    y += logoH ? logoH + 4 : 0;
-  } else if (pos === 'right') {
-    textX = M;
+  } else if (logo) {
+    const lx = pos === 'right' ? PAGE_W - M - logo.w : M;
+    doc.addImage(c.logo!, imgFormat(c.logo!), lx, y - 3, logo.w, logo.h);
+    if (pos === 'left') {
+      textX = M + logo.w + 6;
+      // a fine rule between the logo and the company details
+      doc.setDrawColor(...HAIR);
+      doc.setLineWidth(0.25);
+      doc.line(M + logo.w + 3, y - 2, M + logo.w + 3, y + Math.max(logo.h, 12) - 4);
+    }
   }
-
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(...accent);
-  doc.text(c.name, textX, y + 4, { align });
-  doc.setTextColor(90);
+  doc.setFontSize(15);
+  doc.setTextColor(...INK);
+  doc.text(c.name, textX, y + 3, { align });
+  let ly = y + 7.5;
+  if (c.tagline) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...accent);
+    spaced(doc, c.tagline.toUpperCase(), textX, ly, 0.35, align);
+    ly += 4.6;
+  }
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  let ly = y + 9;
-  const lines = [c.tagline, ...c.address.split('\n'), [c.phone, c.email].filter(Boolean).join('  ·  '), c.website, c.taxNumber ? `Tax no: ${c.taxNumber}` : '', ...s.doc.headerFields.filter((f) => f.label || f.value).map((f) => `${f.label}${f.label && f.value ? ': ' : ''}${f.value}`)].filter(Boolean);
+  doc.setFontSize(8);
+  doc.setTextColor(...MUTED);
   for (const l of lines) {
     doc.text(l, textX, ly, { align });
-    ly += 3.8;
+    ly += 3.7;
   }
   if (s.doc.headerText) {
     doc.setFont('helvetica', 'italic');
-    for (const l of doc.splitTextToSize(s.doc.headerText, pos === 'center' ? 160 : 100)) {
+    for (const l of doc.splitTextToSize(s.doc.headerText, pos === 'center' ? 160 : 95)) {
       doc.text(l, textX, ly, { align });
-      ly += 3.8;
+      ly += 3.7;
     }
-    doc.setFont('helvetica', 'normal');
   }
 
-  // title + meta box
-  const boxTop = pos === 'center' ? ly + 2 : 12;
-  doc.setTextColor(30);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.text(title, PAGE_W - M, boxTop + 6, { align: 'right' });
-  doc.setFontSize(9);
-  let my = boxTop + 12;
+  // title and reference block
+  const right = PAGE_W - M;
+  let ty = pos === 'center' ? ly + 6 : pos === 'right' && logo ? top + logo.h + 4 : top + 2;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(21);
+  doc.setTextColor(...accent);
+  spaced(doc, title.toUpperCase(), right, ty + 4, 1.2, 'right');
+  ty += 10;
+  doc.setFontSize(7);
   for (const [k, v] of meta) {
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(110);
-    doc.text(k, PAGE_W - M - 34, my, { align: 'right' });
+    doc.setTextColor(...MUTED);
+    spaced(doc, k.toUpperCase(), right - 36, ty, 0.3, 'right');
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30);
-    doc.text(v, PAGE_W - M, my, { align: 'right' });
-    my += 4.5;
+    doc.setFontSize(9);
+    doc.setTextColor(...INK);
+    doc.text(v, right, ty, { align: 'right' });
+    doc.setFontSize(7);
+    ty += 4.6;
   }
-  const bottom = Math.max(ly, my, y + logoH) + 3;
-  doc.setDrawColor(...accent);
-  doc.setLineWidth(0.4);
+  const bottom = Math.max(ly, ty, top + (logo?.h ?? 0)) + 2;
+  doc.setDrawColor(...HAIR);
+  doc.setLineWidth(0.3);
   doc.line(M, bottom, PAGE_W - M, bottom);
   doc.setTextColor(0);
-  return bottom + 6;
+  return bottom + 7;
 }
 
 function drawFooters(doc: Doc, s: Settings) {
@@ -139,75 +179,95 @@ function drawFooters(doc: Doc, s: Settings) {
   const accent = hexToRgb(s.doc.accentColor);
   for (let i = 1; i <= n; i++) {
     doc.setPage(i);
-    doc.setDrawColor(220);
+    doc.setDrawColor(...HAIR);
     doc.setLineWidth(0.2);
-    doc.line(M, PAGE_H - 18, PAGE_W - M, PAGE_H - 18);
-    doc.setFontSize(8);
-    doc.setTextColor(110);
+    doc.line(M, PAGE_H - 17, PAGE_W - M, PAGE_H - 17);
+    doc.setFontSize(7.5);
+    doc.setTextColor(...MUTED);
     doc.setFont('helvetica', 'normal');
-    const lines = doc.splitTextToSize(s.doc.footerText || '', PAGE_W - 2 * M - 25).slice(0, 3);
-    lines.forEach((l: string, k: number) => doc.text(l, M, PAGE_H - 13 + k * 3.6));
-    if (s.doc.showPageNumbers) doc.text(`Page ${i} of ${n}`, PAGE_W - M, PAGE_H - 13, { align: 'right' });
+    const lines = doc.splitTextToSize(s.doc.footerText || '', PAGE_W - 2 * M - 30).slice(0, 3);
+    lines.forEach((l: string, k: number) => doc.text(l, M, PAGE_H - 12.5 + k * 3.4));
+    if (s.doc.showPageNumbers) doc.text(`${i} / ${n}`, PAGE_W - M, PAGE_H - 12.5, { align: 'right' });
     doc.setFillColor(...accent);
-    doc.rect(0, PAGE_H - 3, PAGE_W, 3, 'F');
+    doc.rect(0, PAGE_H - 1.6, PAGE_W, 1.6, 'F');
   }
   doc.setTextColor(0);
 }
 
-function partyBlock(doc: Doc, label: string, client: Quote['client'], y: number, right?: { label: string; lines: string[] }): number {
-  doc.setFontSize(8);
-  doc.setTextColor(120);
+/** Letter-spaced text; jsPDF leaves the spacing out when aligning, so place it by hand. */
+function spaced(doc: Doc, text: string, x: number, y: number, cs: number, align: 'left' | 'center' | 'right' = 'left') {
+  const w = doc.getTextWidth(text) + cs * Math.max(0, text.length - 1);
+  const x0 = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  doc.text(text, x0, y, { charSpace: cs });
+}
+
+function label(doc: Doc, text: string, x: number, y: number, s?: Settings) {
   doc.setFont('helvetica', 'bold');
-  doc.text(label.toUpperCase(), M, y);
-  doc.setTextColor(20);
-  doc.setFontSize(10);
-  doc.text(client.name || '—', M, y + 5);
+  doc.setFontSize(7);
+  doc.setTextColor(...(s ? hexToRgb(s.doc.accentColor) : MUTED));
+  doc.text(text.toUpperCase(), x, y, { charSpace: 0.45 });
+}
+
+function partyBlock(doc: Doc, title: string, client: Quote['client'], y: number, right?: { label: string; lines: string[] }): number {
+  label(doc, title, M, y);
+  doc.setTextColor(...INK);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.text(client.name || '—', M, y + 5.5);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  let yy = y + 9.5;
+  doc.setFontSize(8.5);
+  doc.setTextColor(80);
+  let yy = y + 10;
   for (const l of [...client.address.split('\n'), client.phone, client.email].filter(Boolean)) {
     doc.text(l, M, yy);
-    yy += 4;
+    yy += 3.9;
   }
   if (right) {
-    doc.setFontSize(8);
-    doc.setTextColor(120);
-    doc.setFont('helvetica', 'bold');
-    doc.text(right.label.toUpperCase(), PAGE_W / 2 + 10, y);
-    doc.setTextColor(20);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    let ry = y + 5;
-    for (const l of right.lines) {
-      for (const w of doc.splitTextToSize(l, PAGE_W / 2 - 24)) {
-        doc.text(w, PAGE_W / 2 + 10, ry);
-        ry += 4;
+    const rx = PAGE_W / 2 + 6;
+    label(doc, right.label, rx, y);
+    let ry = y + 5.5;
+    right.lines.forEach((l, k) => {
+      doc.setFont('helvetica', k === 0 ? 'bold' : 'normal');
+      doc.setFontSize(k === 0 ? 10.5 : 8.5);
+      doc.setTextColor(...(k === 0 ? INK : ([80, 80, 80] as [number, number, number])));
+      for (const w of doc.splitTextToSize(l, PAGE_W / 2 - M - 6)) {
+        doc.text(w, rx, ry);
+        ry += k === 0 ? 4.5 : 3.9;
       }
-    }
+    });
     yy = Math.max(yy, ry);
   }
-  return yy + 4;
+  return yy + 5;
 }
 
 function totalsBlock(doc: Doc, rows: [string, string, boolean?][], y: number, s: Settings): number {
-  const x0 = PAGE_W - M - 80;
+  const w = 84;
+  const x0 = PAGE_W - M - w;
   const accent = hexToRgb(s.doc.accentColor);
-  y = ensureSpace(doc, y, rows.length * 6 + 6, s);
+  y = ensureSpace(doc, y, rows.length * 6 + 8, s);
   for (const [k, v, strong] of rows) {
     if (strong) {
+      y += 1.5;
       doc.setFillColor(...accent);
-      doc.rect(x0 - 2, y - 4.2, 82, 7, 'F');
+      doc.roundedRect(x0, y - 5, w, 8.5, 1.6, 1.6, 'F');
       doc.setTextColor(255);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10.5);
+      doc.text(k, x0 + 3.5, y + 0.6, { charSpace: 0.3 });
+      doc.text(v, PAGE_W - M - 3.5, y + 0.6, { align: 'right' });
+      y += 9.5;
     } else {
-      doc.setTextColor(60);
+      doc.setTextColor(...MUTED);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
+      doc.setFontSize(8.8);
+      doc.text(k, x0 + 3.5, y);
+      doc.setTextColor(...INK);
+      doc.text(v, PAGE_W - M - 3.5, y, { align: 'right' });
+      doc.setDrawColor(...HAIR);
+      doc.setLineWidth(0.15);
+      doc.line(x0 + 3.5, y + 1.8, PAGE_W - M - 3.5, y + 1.8);
+      y += 5.6;
     }
-    doc.text(k, x0, y);
-    doc.text(v, PAGE_W - M - 1, y, { align: 'right' });
-    y += strong ? 8 : 5.5;
   }
   doc.setTextColor(0);
   return y + 2;
@@ -215,38 +275,47 @@ function totalsBlock(doc: Doc, rows: [string, string, boolean?][], y: number, s:
 
 function textSection(doc: Doc, title: string, text: string, y: number, s: Settings): number {
   if (!text.trim()) return y;
+  doc.setFontSize(8.3);
   const lines = doc.splitTextToSize(text, PAGE_W - 2 * M);
-  y = ensureSpace(doc, y, 8 + lines.length * 4, s);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...hexToRgb(s.doc.accentColor));
-  doc.text(title.toUpperCase(), M, y);
+  y = ensureSpace(doc, y, 8 + Math.min(lines.length, 6) * 3.8, s);
+  label(doc, title, M, y, s);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(60);
-  doc.setFontSize(8.5);
-  y += 4.5;
+  doc.setTextColor(85);
+  doc.setFontSize(8.3);
+  y += 4.6;
   for (const l of lines) {
     y = ensureSpace(doc, y, 4, s);
     doc.text(l, M, y);
-    y += 3.9;
+    y += 3.75;
   }
   doc.setTextColor(0);
-  return y + 3;
+  return y + 3.5;
 }
 
 function signatures(doc: Doc, y: number, s: Settings, left: string, right: string): number {
   if (!s.doc.signatureLine) return y;
   y = ensureSpace(doc, y + 6, 22, s) + 12;
-  doc.setDrawColor(150);
+  doc.setDrawColor(170);
   doc.setLineWidth(0.2);
   doc.line(M, y, M + 70, y);
   doc.line(PAGE_W - M - 70, y, PAGE_W - M, y);
-  doc.setFontSize(8);
-  doc.setTextColor(110);
+  doc.setFontSize(7.5);
+  doc.setTextColor(...MUTED);
   doc.text(left, M, y + 4);
   doc.text(right, PAGE_W - M - 70, y + 4);
   doc.setTextColor(0);
   return y + 8;
+}
+
+/** Shared table look: light header, hairline rows, quiet numbers. */
+function tableStyle(s: Settings) {
+  const accent = hexToRgb(s.doc.accentColor);
+  return {
+    theme: 'plain' as const,
+    headStyles: { fillColor: [247, 245, 242] as [number, number, number], textColor: accent, fontStyle: 'bold' as const, fontSize: 7.5, cellPadding: { top: 2.4, bottom: 2.4, left: 2, right: 2 } },
+    styles: { fontSize: 8.5, cellPadding: { top: 2.2, bottom: 2.2, left: 2, right: 2 }, valign: 'top' as const, textColor: INK, lineColor: HAIR, lineWidth: { bottom: 0.15 } },
+    margin: { left: M, right: M, top: 20, bottom: 24 },
+  };
 }
 
 /** Draw one unit's front at a given scale. X0 = left edge, Yfloor = page y of the floor line. */
@@ -453,6 +522,7 @@ export function drawRunLeg(doc: Doc, run: Run, leg: number, cat: Catalog, x: num
 export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' }) as Doc;
   const fm = (n: number) => money(n, s.pricing.currency);
+  const accent = hexToRgb(s.doc.accentColor);
   let y = drawHeader(doc, s, s.doc.quoteTitle, [
     ['Quote no.', q.number],
     ['Date', fmtDate(q.date)],
@@ -460,39 +530,121 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
   ]);
   y = partyBlock(doc, 'Prepared for', q.client, y, { label: 'Project', lines: [q.title, ...(q.notes ? [q.notes] : [])] });
 
-  const body: RowInput[] = [];
-  if (s.doc.quoteDetail === 'units') {
-    calc.items.forEach((it, i) => {
-      body.push([String(i + 1), { content: `${it.name}\n${it.lines.join('\n')}`, styles: { fontSize: 8 } }, String(it.qty), fm(it.sellEach), fm(it.sell)]);
+  const desc = (title: string, lines: string[]) => ({ content: `${title}${lines.length ? `\n${lines.join('\n')}` : ''}`, styles: { fontSize: 8.5 } });
+  const st = tableStyle(s);
+  const sections: { title: string; total: number }[] = [];
+  let n = 0;
+  /** numbered section heading with a fine rule */
+  const heading = (title: string, sub: string) => {
+    y = ensureSpace(doc, y, 22, s);
+    n += 1;
+    doc.setFillColor(...accent);
+    doc.circle(M + 3, y - 1.2, 3, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255);
+    doc.text(String(n), M + 3, y + 0.1, { align: 'center' });
+    doc.setTextColor(...INK);
+    doc.setFontSize(11);
+    doc.text(title.toUpperCase(), M + 8.5, y + 0.2, { charSpace: 0.6 });
+    if (sub) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text(sub, PAGE_W - M, y + 0.2, { align: 'right' });
+    }
+    doc.setDrawColor(...accent);
+    doc.setLineWidth(0.35);
+    doc.line(M, y + 3, PAGE_W - M, y + 3);
+    y += 5;
+  };
+  const table = (body: RowInput[], subtotal: number, label2: string) => {
+    body.push([{ content: '', colSpan: 3, styles: { lineWidth: 0 } }, { content: label2, styles: { halign: 'right', textColor: MUTED, fontSize: 8, lineWidth: 0 } }, { content: fm(subtotal), styles: { halign: 'right', fontStyle: 'bold', lineWidth: 0 } }]);
+    autoTable(doc, {
+      ...st,
+      startY: y,
+      head: [['#', 'Description', 'Qty', 'Rate', 'Amount']],
+      body,
+      columnStyles: { 0: { cellWidth: 8, textColor: MUTED }, 2: { cellWidth: 20, halign: 'center' }, 3: { cellWidth: 26, halign: 'right' }, 4: { cellWidth: 28, halign: 'right' } },
+      didDrawPage: (d) => {
+        if (d.pageNumber > 1) drawMiniHeader(doc, s);
+      },
     });
-  } else {
-    const mk = 1 + q.markupPercent / 100;
-    let i = 1;
-    calc.items.forEach((it) => body.push([String(i++), { content: `${it.name}\n${it.lines.join('\n')}`, styles: { fontSize: 8 } }, String(it.qty), '', '']));
-    for (const l of calc.costLines) if (l.total > 0) body.push([String(i++), `${l.group}: ${l.description}`, `${l.qty} ${l.unit}`, fm(l.unitPrice * mk), fm(l.total * mk)]);
-    if (calc.labour) body.push([String(i++), 'Labour & manufacturing', '1', fm(calc.labour * mk), fm(calc.labour * mk)]);
-    if (calc.installation) body.push([String(i++), 'Installation', '1', fm(calc.installation * mk), fm(calc.installation * mk)]);
-  }
-  const tr = s.pricing.transportOptions.find((t) => t.id === q.transportId);
-  if (calc.transport) body.push([String(body.length + 1), tr ? `Transport – ${tr.name}` : 'Transport', '1', fm(calc.transport), fm(calc.transport)]);
-  for (const e of q.extras) body.push([String(body.length + 1), e.description, `${e.qty}${e.unit ? ` ${e.unit}` : ''}`, fm(e.unitPrice), fm(e.qty * e.unitPrice)]);
-  const supplied = calc.costLines.filter((l) => l.group === 'Appliances' && l.total === 0);
+    y = lastY(doc, y) + 8;
+  };
 
-  autoTable(doc, {
-    startY: y,
-    head: [['#', 'Description', 'Qty', 'Unit price', 'Amount']],
-    body,
-    theme: 'striped',
-    headStyles: { fillColor: hexToRgb(s.doc.accentColor), fontSize: 9 },
-    styles: { fontSize: 8.5, cellPadding: 2, valign: 'top' },
-    columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 18, halign: 'center' }, 3: { cellWidth: 26, halign: 'right' }, 4: { cellWidth: 28, halign: 'right' } },
-    margin: { left: M, right: M, top: 18, bottom: 24 },
-    didDrawPage: (d) => {
-      if (d.pageNumber > 1) drawMiniHeader(doc, s);
-    },
-  });
-  y = lastY(doc, y) + 6;
-  const rows: [string, string, boolean?][] = [['Subtotal', fm(calc.subtotal)]];
+  // 1. Joinery
+  if (calc.items.length) {
+    const body: RowInput[] = [];
+    if (s.doc.quoteDetail === 'units') {
+      calc.items.forEach((it, i) => body.push([String(i + 1), desc(it.name, it.lines), String(it.qty), fm(it.sellEach), fm(it.sell)]));
+    } else {
+      const mk = 1 + q.markupPercent / 100;
+      let i = 1;
+      calc.items.forEach((it) => body.push([String(i++), desc(it.name, it.lines), String(it.qty), '', '']));
+      for (const l of calc.costLines) if (l.total > 0) body.push([String(i++), `${l.group}: ${l.description}`, `${l.qty} ${l.unit}`, fm(l.unitPrice * mk), fm(l.total * mk)]);
+      if (calc.labour) body.push([String(i++), 'Labour & manufacturing', '1', fm(calc.labour * mk), fm(calc.labour * mk)]);
+      if (calc.installation) body.push([String(i++), 'Installation', '1', fm(calc.installation * mk), fm(calc.installation * mk)]);
+    }
+    heading('Joinery', `${calc.items.length} item${calc.items.length === 1 ? '' : 's'}`);
+    table(body, calc.unitsSell, 'Joinery subtotal');
+    sections.push({ title: 'Joinery', total: calc.unitsSell });
+  }
+
+  // 2 / 3. Ceilings and Tiling: one line per room, then add-ons, then what is included
+  for (const t of [calc.ceilings, calc.tiling]) {
+    if (!t) continue;
+    const job = t.trade === 'ceilings' ? q.ceilings : q.tiling;
+    const body: RowInput[] = [];
+    t.areas.forEach((a, i) => {
+      const notes = (job?.areas.find((x) => x.id === a.id)?.notes ?? '').trim();
+      body.push([String(i + 1), desc(a.name, [a.summary, ...(notes ? [notes] : [])]), `${a.size} m²`, a.size ? fm((a.sell ?? 0) / a.size) : '', fm(a.sell ?? 0)]);
+    });
+    t.extras.forEach((e, i) => body.push([String(t.areas.length + i + 1), e.description, `${e.qty}${e.unit ? ` ${e.unit}` : ''}`, fm(e.unitPrice), fm(e.qty * e.unitPrice)]));
+    heading(t.title, `${t.size} m²`);
+    table(body, t.sell, `${t.title} subtotal`);
+    if (s.doc.showTradeMaterials !== false && t.schedule.length) {
+      y = ensureSpace(doc, y - 3, 16, s);
+      label(doc, `${t.title} – materials included`, M, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.6);
+      doc.setTextColor(95);
+      const items = t.schedule.map((l) => `${l.qty} × ${l.unit} ${l.description}`);
+      const colW = (PAGE_W - 2 * M) / 2;
+      let yy = y + 4.2;
+      for (let k = 0; k < items.length; k += 2) {
+        yy = ensureSpace(doc, yy, 4, s);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.6);
+        doc.setTextColor(95);
+        for (let c = 0; c < 2 && k + c < items.length; c++) doc.text(`·  ${doc.splitTextToSize(items[k + c], colW - 6)[0]}`, M + c * colW, yy);
+        yy += 3.6;
+      }
+      y = yy + 5;
+    }
+    sections.push({ title: t.title, total: t.sell });
+  }
+
+  // services, transport and other items
+  const tr = s.pricing.transportOptions.find((t) => t.id === q.transportId);
+  const other: RowInput[] = [];
+  if (calc.transport) other.push([String(other.length + 1), tr ? `Transport – ${tr.name}` : 'Transport', '1', fm(calc.transport), fm(calc.transport)]);
+  for (const e of q.extras) other.push([String(other.length + 1), e.description, `${e.qty}${e.unit ? ` ${e.unit}` : ''}`, fm(e.unitPrice), fm(e.qty * e.unitPrice)]);
+  if (other.length) {
+    heading('Services & other items', '');
+    table(other, calc.transport + calc.extras, 'Services subtotal');
+    sections.push({ title: 'Services & other items', total: calc.transport + calc.extras });
+  }
+  if (!sections.length) {
+    doc.setFontSize(9);
+    doc.setTextColor(...MUTED);
+    doc.text('No items quoted yet.', M, y);
+    y += 8;
+  }
+
+  const supplied = calc.costLines.filter((l) => l.group === 'Appliances' && l.total === 0);
+  const rows: [string, string, boolean?][] = sections.length > 1 ? sections.map((x) => [x.title, fm(x.total)] as [string, string]) : [];
+  rows.push(['Subtotal', fm(calc.subtotal)]);
   if (calc.discount) rows.push([`Discount${q.discountType === 'percent' ? ` (${q.discountValue}%)` : ''}`, `-${fm(calc.discount)}`]);
   if (q.applyTax) rows.push([`${s.pricing.taxLabel} (${s.pricing.taxRate}%)`, fm(calc.tax)]);
   rows.push(['TOTAL', fm(calc.total), true]);
@@ -504,7 +656,7 @@ export function quotePdf(q: Quote, calc: QuoteCalc, s: Settings, cat: Catalog): 
   y = signatures(doc, y, s, 'Client acceptance & date', `For ${s.company.name}`);
 
   // design pages
-  if (s.doc.showRenders || s.doc.showElevations) {
+  if ((s.doc.showRenders || s.doc.showElevations) && calc.items.length) {
     doc.addPage();
     y = drawMiniHeader(doc, s);
     doc.setFont('helvetica', 'bold');
@@ -926,11 +1078,11 @@ export function invoicePdf(inv: Invoice, s: Settings): jsPDF {
     startY: y,
     head: [['#', 'Description', 'Qty', 'Unit price', 'Amount']],
     body: inv.lines.map((l, i) => [String(i + 1), l.kind === 'deviation' ? `${l.credit || l.unitPrice < 0 ? 'Credit' : 'Extra'} (deviation from quotation): ${l.description}${l.reason ? ` — ${l.reason}` : ''}` : l.description, String(l.qty), fm(l.unitPrice), fm(l.qty * l.unitPrice)]),
-    theme: 'striped',
-    headStyles: { fillColor: hexToRgb(s.doc.accentColor), fontSize: 9 },
-    styles: { fontSize: 8.5, cellPadding: 2 },
-    columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 26, halign: 'right' }, 4: { cellWidth: 28, halign: 'right' } },
-    margin: { left: M, right: M, top: 18, bottom: 24 },
+    ...tableStyle(s),
+    columnStyles: { 0: { cellWidth: 8, textColor: MUTED }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 26, halign: 'right' }, 4: { cellWidth: 28, halign: 'right' } },
+    didDrawPage: (d) => {
+      if (d.pageNumber > 1) drawMiniHeader(doc, s);
+    },
   });
   y = lastY(doc, y) + 6;
   const rows: [string, string, boolean?][] = [['Subtotal', fm(c.subtotal)]];
@@ -1021,24 +1173,24 @@ export async function saveOrShare(doc: jsPDF, filename: string): Promise<void> {
   usePdfExport.setState({ doc, filename: filename.replace(/[^\w.-]+/g, '_'), result: null });
 }
 
-/** Save a PDF to the device: Documents/WoodQuote on Android, Files on iPhone, a save dialog on Windows, Downloads in a browser. */
+/** Save a PDF to the device: Documents/En-Quote on Android, Files on iPhone, a save dialog on Windows, Downloads in a browser. */
 export async function downloadPdf(doc: jsPDF, filename: string): Promise<string> {
   if (!Capacitor.isNativePlatform()) {
     doc.save(filename);
-    return window.woodquoteDesktop ? `Choose where to save ${filename} (starts in Documents\\WoodQuote)` : `Downloaded ${filename}`;
+    return window.woodquoteDesktop ? `Choose where to save ${filename} (starts in Documents\\En-Quote)` : `Downloaded ${filename}`;
   }
   const data = doc.output('datauristring').split(',')[1];
   if (Capacitor.getPlatform() === 'ios') {
     // the app's Documents folder shows in the Files app
     await Filesystem.writeFile({ path: filename, data, directory: Directory.Documents, recursive: true });
-    return `Saved to Files › On My iPhone › WoodQuote › ${filename}`;
+    return `Saved to Files › On My iPhone › En-Quote › ${filename}`;
   }
   try {
     await Filesystem.requestPermissions().catch(() => undefined);
-    await Filesystem.writeFile({ path: `WoodQuote/${filename}`, data, directory: Directory.Documents, recursive: true });
-    return `Saved to Documents/WoodQuote/${filename}`;
+    await Filesystem.writeFile({ path: `En-Quote/${filename}`, data, directory: Directory.Documents, recursive: true });
+    return `Saved to Documents/En-Quote/${filename}`;
   } catch {
-    const res = await Filesystem.writeFile({ path: `WoodQuote/${filename}`, data, directory: Directory.External, recursive: true });
+    const res = await Filesystem.writeFile({ path: `En-Quote/${filename}`, data, directory: Directory.External, recursive: true });
     return `Saved to ${res.uri.replace('file://', '')}`;
   }
 }

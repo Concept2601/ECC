@@ -1,4 +1,4 @@
-// Licensing: WoodQuote opens only with a licence tied to an email address.
+// Licensing: En-Quote opens only with a licence tied to an email address.
 // The developer gives each customer a 6-digit code from an authenticator app
 // (Google / Microsoft Authenticator…); each customer email has its own secret
 // derived from the developer's master key, so a code only works for that
@@ -79,8 +79,8 @@ export async function checkCode(email: string, code: string, now = Date.now()): 
 /** otpauth:// link for adding a customer to an authenticator app (QR code). */
 export async function setupFor(email: string) {
   const secret = base32(await secretFor(email));
-  const label = encodeURIComponent(`WoodQuote:${normEmail(email)}`);
-  return { secret, uri: `otpauth://totp/${label}?secret=${secret}&issuer=WoodQuote&algorithm=SHA1&digits=6&period=30` };
+  const label = encodeURIComponent(`En-Quote:${normEmail(email)}`);
+  return { secret, uri: `otpauth://totp/${label}?secret=${secret}&issuer=En-Quote&algorithm=SHA1&digits=6&period=30` };
 }
 
 /* ------------------------------------------------------------ licence */

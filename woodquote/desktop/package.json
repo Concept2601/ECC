@@ -1,8 +1,8 @@
 {
   "name": "woodquote-desktop",
-  "productName": "WoodQuote by 2601",
-  "version": "2.3.0",
-  "description": "Wood joinery quotations, 3D designs, invoices and receipts",
+  "productName": "En-Quote",
+  "version": "3.0.0",
+  "description": "Joinery, ceilings and tiling quotations, 3D designs, invoices and receipts",
   "author": "Zusly Projects",
   "private": true,
   "main": "main.cjs",
@@ -17,7 +17,7 @@
   },
   "build": {
     "appId": "zw.co.zuslyprojects.woodquote",
-    "productName": "WoodQuote by 2601",
+    "productName": "En-Quote",
     "copyright": "\u00a9 Zusly Projects",
     "directories": {
       "output": "release",
@@ -52,11 +52,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "WoodQuote by 2601",
-      "artifactName": "WoodQuote-Setup-${version}-x64.${ext}"
+      "shortcutName": "En-Quote",
+      "artifactName": "En-Quote-Setup-${version}-x64.${ext}"
     },
     "portable": {
-      "artifactName": "WoodQuote-Portable-${version}-x64.${ext}"
+      "artifactName": "En-Quote-Portable-${version}-x64.${ext}"
     }
   }
 }

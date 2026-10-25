@@ -21,7 +21,7 @@ export function SavingCard() {
         <div className="space-y-3 text-sm">
           <p className="text-stone-600">
             Every change is kept on this device as you work. <b>Save</b> (Ctrl+S) also makes a save point you can go back to, and auto-save makes one on a timer while there are changes.
-            {window.woodquoteDesktop ? ' On this PC each save is also written to Documents\\WoodQuote\\Backups.' : ''}
+            {window.woodquoteDesktop ? ' On this PC each save is also written to Documents\\En-Quote\\Backups.' : ''}
           </p>
           <div className="flex items-center gap-2">
             <button className="btn-primary" disabled={saving} onClick={() => void saveNow('manual')}>

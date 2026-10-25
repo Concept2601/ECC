@@ -3,12 +3,13 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Empty, Modal, PageHeader } from '../components/ui';
 import { STATUS_STYLE, useMoney } from '../hooks';
-import { calculateInvoice, calculateQuote } from '../lib/pricing';
+import { calculateInvoice } from '../lib/pricing';
+import { quoteTotal } from '../app/totals';
 import { fmtDate } from '../lib/util';
 import { useStore } from '../store';
 
 export default function Invoices() {
-  const { invoices, settings, catalog, quotes, createInvoice, createInvoiceFromQuote } = useStore();
+  const { invoices, settings, quotes, createInvoice, createInvoiceFromQuote } = useStore();
   const nav = useNavigate();
   const fmt = useMoney();
   const [params, setParams] = useSearchParams();
@@ -61,7 +62,7 @@ export default function Invoices() {
               <button
                 key={q.id}
                 className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-stone-50 disabled:opacity-40"
-                disabled={!q.units.length && !q.runs.length && !q.assemblies?.length && !q.extras.length}
+                disabled={!q.units.length && !q.runs.length && !q.assemblies?.length && !q.extras.length && !q.ceilings?.areas.length && !q.tiling?.areas.length}
                 onClick={() => {
                   const id = createInvoiceFromQuote(q.id);
                   closePick();
@@ -78,7 +79,7 @@ export default function Invoices() {
                     {invoiced.has(q.id) ? ' · already invoiced' : ''}
                   </span>
                 </span>
-                <span className="shrink-0 text-sm font-bold tabular-nums">{fmt(calculateQuote(q, catalog, settings).total)}</span>
+                <span className="shrink-0 text-sm font-bold tabular-nums">{fmt(quoteTotal(q))}</span>
               </button>
             ))}
             {!quotes.length && <p className="p-4 text-sm text-stone-500">No quotations yet.</p>}

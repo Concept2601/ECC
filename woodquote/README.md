@@ -1,4 +1,6 @@
-# WoodQuote by 2601 — joinery quotation app for Android
+# En-Quote — joinery, ceilings and tiling quotations
+
+En-Quote (formerly WoodQuote by 2601) runs on Android, iPhone, Windows and the web.
 
 WoodQuote by 2601 prices TV stands, kitchen cabinets, kitchen centre islands, built-in cabinets, fitted wardrobes (hinged or sliding), bookshelves, vanities and custom units. It also produces 3D renders, cut plans, quotations, invoices and receipts.
 
@@ -8,6 +10,9 @@ It is a React + TypeScript app packaged for Android with Capacitor. All data sta
 
 | Area | What it does |
 | --- | --- |
+| **Workspaces** | A loading page prepares everything, then you choose **Joinery**, **Ceilings** or **Tiling**. A left side bar switches workspace and moves around the app. One quotation can hold all three trades, each in its own section. |
+| **Ceilings** | Rhinoboard and PVC ceilings per room: boards / strips, brandering and nails, screws or clips, jointing, cornices or trims, paint, insulation, designs (bulkheads, trays, shadow lines, LED coves), light cut-outs, removal of old ceilings, and add-ons like pendants, chandeliers and transport. |
+| **Tiling** | Floors and walls per room: tile type, size, colour and price per box, laying pattern and waste, boxes, adhesive and grout by weight, spacers, levelling clips, trims, skirting, waterproofing, silicone, screed, removal of old tiles, labour and add-ons. |
 | **Single units** | 11 templates: TV stand, kitchen base / wall / tall, centre island, built-in cabinet, hinged and sliding wardrobes, bookshelf, vanity and custom. Each unit can be **built-in** (fixed to walls) or **standalone**. It can stand on the **floor** (kick board, legs, or no legs so it sits straight on the floor) or hang on a **wall** at a height you set. |
 | **Corner cupboards** | Base and wall-hung corner cupboards with a separate width on each wall (Width A and Width B), L-shaped with two doors or diagonal with one door, return on either side. Use them alone or at the corners of L and U kitchens. |
 | **Islands & cabinet groups** | Islands with cupboards on **four sides, two sides or one side** (back panel or seating overhang). Any unit made of several cabinets: each cabinet placed anywhere and facing **front, back, left, right or any angle**, under one shared worktop, quoted as one item. Loose free-standing appliances (fridge, stove, washing machine, dryer, bins, TV…) are items too. |
@@ -88,6 +93,9 @@ npm run build
 * `src/pages/RoomDesigner.tsx`: the room planner
 * `desktop/`: Windows desktop shell (Electron)
 * `ios/`, `android/`: native iPhone and Android projects (Capacitor)
+* `src/lib/ceilings.ts`, `src/lib/tiling.ts`, `src/lib/trades.ts`: ceilings and tiling quantities and costs
+* `src/components/CeilingsEditor.tsx`, `src/components/TilingEditor.tsx`: their quotation sections
+* `src/components/Splash.tsx`, `Launcher.tsx`, `Sidebar.tsx`: loading page, workspace chooser and side bar
 * `src/lib/runs.ts`: kitchen runs (straight, L and U shapes, modules, worktops, layout)
 * `src/lib/assembly.ts`: cabinet groups and islands (pieces facing any way, shared worktop)
 * `src/pages/AssemblyDesigner.tsx`: the island / cabinet group designer

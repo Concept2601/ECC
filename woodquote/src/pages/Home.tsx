@@ -1,13 +1,17 @@
 // Dashboard: where the business stands — open, draft and closed quotations,
 // invoices and receipts, quick tools — with a + button for a new quotation.
-import { FileCheck2, FilePen, FileText, LayoutDashboard, Map as MapIcon, Plus, Receipt, Ruler, ScanLine, ShieldCheck, TrendingUp } from 'lucide-react';
+import { BookOpen, Menu, FileCheck2, FilePen, FileText, LayoutDashboard, Map as MapIcon, Plus, Receipt, Ruler, ScanLine, ShieldCheck, TrendingUp } from 'lucide-react';
+import { TRADES, tradeMeta } from '../app/brand';
+import { usePrefs } from '../app/prefs';
+import { quoteTotal } from '../app/totals';
+import { newQuoteFor, useDrawer } from '../components/Sidebar';
 import { useMemo, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import EditTools from '../components/EditTools';
 import { useLicence } from '../components/Licence';
 import { Stat } from '../components/ui';
 import { STATUS_STYLE, useMoney } from '../hooks';
-import { calculateInvoice, calculateQuote } from '../lib/pricing';
+import { calculateInvoice } from '../lib/pricing';
 import type { Quote } from '../lib/types';
 import { fmtDate } from '../lib/util';
 import { useStore } from '../store';
@@ -32,11 +36,15 @@ function Section({ title, icon, link, children, empty }: { title: string; icon: 
 }
 
 export default function Home() {
-  const { quotes, invoices, settings, catalog, createQuote } = useStore();
+  const { quotes, invoices, settings, catalog } = useStore();
+  const trade = usePrefs((s) => s.trade);
+  const meta = tradeMeta(trade);
   const nav = useNavigate();
   const fmt = useMoney();
   const lic = useLicence();
-  const totals = useMemo(() => new Map(quotes.map((q) => [q.id, calculateQuote(q, catalog, settings).total])), [quotes, catalog, settings]);
+  // remembered per quotation (worked out on the loading page), so the dashboard opens instantly
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const totals = useMemo(() => new Map(quotes.map((q) => [q.id, quoteTotal(q)])), [quotes, catalog, settings]);
   const inv = useMemo(() => invoices.map((i) => ({ i, c: calculateInvoice(i, settings) })), [invoices, settings]);
   const open = quotes.filter((q) => q.status === 'sent' || q.status === 'accepted');
   const drafts = quotes.filter((q) => q.status === 'draft');
@@ -59,7 +67,12 @@ export default function Home() {
   const row = (q: Quote) => (
     <Link key={q.id} to={`/quotes/${q.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-stone-50">
       <div className="min-w-0">
-        <div className="truncate font-semibold">{q.title}</div>
+        <div className="flex items-center gap-1.5 truncate font-semibold">
+          {q.title}
+          {TRADES.filter((t) => (t.id === 'joinery' ? q.units.length + q.runs.length + (q.assemblies?.length ?? 0) > 0 : t.id === 'ceilings' ? (q.ceilings?.areas.length ?? 0) > 0 : (q.tiling?.areas.length ?? 0) > 0)).map((t) => (
+            <span key={t.id} title={t.label} className="h-2 w-2 shrink-0 rounded-full" style={{ background: t.accent }} />
+          ))}
+        </div>
         <div className="text-xs text-stone-500">
           {q.number} · {q.client.name || 'No client'} · {fmtDate(q.date)}
         </div>
@@ -73,13 +86,19 @@ export default function Home() {
 
   return (
     <div>
-      <div className="safe-top bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 px-4 pb-16 pt-6 text-white">
-        <div className="mx-auto max-w-5xl">
+      <div className="safe-top relative overflow-hidden bg-[#14161a] px-4 pb-16 pt-6 text-white">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full opacity-40 blur-3xl" style={{ background: meta.accent }} />
+        <div className="relative mx-auto max-w-5xl">
           <div className="flex items-center gap-3">
-            {settings.company.logo ? <img src={settings.company.logo} className="h-10 w-10 rounded-xl bg-white object-contain p-1" /> : <img src="./favicon.svg" className="h-10 w-10" />}
+            <button className="-ml-1 rounded-xl p-2 text-stone-300 hover:bg-white/10 md:hidden" aria-label="Menu" onClick={() => useDrawer.setState({ open: true })}>
+              <Menu size={22} />
+            </button>
+            {settings.company.logo ? <img src={settings.company.logo} className="h-11 w-11 rounded-xl bg-white object-contain p-1" /> : null}
             <div>
-              <div className="text-xs uppercase tracking-widest text-brand-100">Dashboard</div>
-              <div className="text-xl font-bold">{settings.company.name}</div>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-stone-400">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: meta.accent }} /> {meta.label} workspace
+              </div>
+              <div className="text-2xl font-semibold tracking-tight">{settings.company.name}</div>
             </div>
             <div className="ml-auto">
               <EditTools light />
@@ -87,7 +106,7 @@ export default function Home() {
           </div>
         </div>
       </div>
-      <div className="mx-auto -mt-12 max-w-5xl space-y-4 px-3">
+      <div className="relative z-10 mx-auto -mt-12 max-w-5xl space-y-4 px-3">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label="Open quotations" value={fmt(sumQ(open) + sumQ(drafts))} />
           <Stat label="Invoiced" value={fmt(inv.reduce((a, x) => a + x.c.total, 0))} />
@@ -109,7 +128,7 @@ export default function Home() {
             <div className="flex h-32 items-end gap-2">
               {months.map((m) => (
                 <div key={m.key} className="flex flex-1 flex-col items-center gap-1" title={fmt(m.value)}>
-                  <div className="w-full rounded-t-md bg-brand-500" style={{ height: `${Math.max(2, (m.value / maxM) * 100)}%` }} />
+                  <div className="w-full rounded-t-md" style={{ background: meta.accent, height: `${Math.max(2, (m.value / maxM) * 100)}%` }} />
                   <span className="text-[10px] text-stone-500">{m.label}</span>
                 </div>
               ))}
@@ -127,26 +146,26 @@ export default function Home() {
             </div>
           </section>
           <section className="card grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
-            <button className="flex flex-col items-start gap-1 rounded-xl p-2 text-left hover:bg-stone-50" onClick={() => nav(`/quotes/${createQuote({ title: 'Room design' })}/room?start=1`)}>
-              <LayoutDashboard className="text-brand-600" />
-              <span className="text-sm font-bold">Start from a room</span>
-              <span className="text-[11px] text-stone-500">Draw the room, place everything, get the quote</span>
-            </button>
-            <Link to="/reader" className="flex flex-col items-start gap-1 rounded-xl p-2 hover:bg-stone-50">
-              <ScanLine className="text-brand-600" />
-              <span className="text-sm font-bold">Diagram reader</span>
-              <span className="text-[11px] text-stone-500">Sketch, plan or 3D → quote</span>
-            </Link>
-            <Link to="/plan" className="flex flex-col items-start gap-1 rounded-xl p-2 hover:bg-stone-50">
-              <MapIcon className="text-brand-600" />
-              <span className="text-sm font-bold">Plan reader</span>
-              <span className="text-[11px] text-stone-500">PDF plan → room & joinery</span>
-            </Link>
-            <Link to="/fit" className="flex flex-col items-start gap-1 rounded-xl p-2 hover:bg-stone-50">
-              <Ruler className="text-brand-600" />
-              <span className="text-sm font-bold">Measure a space</span>
-              <span className="text-[11px] text-stone-500">What fits W × H × D</span>
-            </Link>
+            {(trade === 'joinery'
+              ? [
+                  { to: '/start-room', icon: LayoutDashboard, title: 'Start from a room', hint: 'Draw the room, place everything, get the quote' },
+                  { to: '/reader', icon: ScanLine, title: 'Diagram reader', hint: 'Sketch, plan or 3D → quote' },
+                  { to: '/plan', icon: MapIcon, title: 'Plan reader', hint: 'PDF plan → room & joinery' },
+                  { to: '/fit', icon: Ruler, title: 'Measure a space', hint: 'What fits W × H × D' },
+                ]
+              : [
+                  { to: '/settings/materials', icon: BookOpen, title: `${meta.label} price list`, hint: trade === 'ceilings' ? 'Boards, PVC, brandering, cornices, paint' : 'Tiles, adhesive, grout, trims' },
+                  { to: '/settings/customization', icon: Ruler, title: 'Labour & markup rates', hint: `Your ${meta.label.toLowerCase()} rates per m²` },
+                  { to: '/plan', icon: MapIcon, title: 'Plan reader', hint: 'Room sizes from a PDF plan' },
+                  { to: '/quotes', icon: FileText, title: 'All quotations', hint: 'Combine trades in one quotation' },
+                ]
+            ).map((t) => (
+              <Link key={t.to + t.title} to={t.to} className="flex flex-col items-start gap-1 rounded-xl p-2 hover:bg-stone-50">
+                <t.icon style={{ color: meta.accent }} />
+                <span className="text-sm font-bold">{t.title}</span>
+                <span className="text-[11px] text-stone-500">{t.hint}</span>
+              </Link>
+            ))}
           </section>
         </div>
 
@@ -187,8 +206,8 @@ export default function Home() {
         </div>
         <div className="h-16" />
       </div>
-      <button className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg hover:bg-brand-700 md:right-[max(1.25rem,calc(50vw-30rem))]" aria-label="New quotation" title="New quotation (Ctrl+N)" onClick={() => nav(`/quotes/${createQuote()}`)}>
-        <Plus size={28} />
+      <button className="fixed bottom-6 right-5 z-30 flex h-14 items-center justify-center gap-2 rounded-full px-5 font-semibold text-white shadow-xl transition hover:brightness-110" style={{ background: meta.accent }} aria-label="New quotation" title="New quotation (Ctrl+N)" onClick={() => newQuoteFor(trade, nav)}>
+        <Plus size={22} /> <span className="hidden sm:inline">New {meta.label.toLowerCase()} quotation</span>
       </button>
     </div>
   );

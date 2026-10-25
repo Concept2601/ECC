@@ -1,4 +1,4 @@
-name: WoodQuote Windows app
+name: En-Quote Windows app
 
 on:
   push:
@@ -51,6 +51,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: WoodQuote-Windows-x64
+          name: En-Quote-Windows-x64
           path: |
             woodquote/desktop/release/*.exe

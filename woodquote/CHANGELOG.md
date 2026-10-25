@@ -1,4 +1,26 @@
-# WoodQuote by 2601 — version history
+# En-Quote — version history
+
+_En-Quote was called WoodQuote by 2601 up to version 2.3._
+
+## 3.0.0 — En-Quote: Joinery, Ceilings and Tiling in one app (2026-10-25)
+
+### Added
+- New name and look: En-Quote, with a new logo, app icons and launch screens
+- Loading page that opens your data, loads every screen and works out all quotation totals before the app opens
+- Workspace chooser when the app opens: Joinery, Ceilings or Tiling (can be skipped), and a left side bar to switch workspaces and move around (slides in on phones)
+- Ceilings: rhinoboard and PVC ceilings per room – boards or strips, brandering at your centres with nails into the trusses, screws / clips, joint tape and filler, cornices or PVC wall trims with adhesive, paint and coats with colour, insulation, light cut-outs, designs (bulkheads, trays, shadow lines, LED coves, access hatches…), removal of old ceilings, and add-ons such as pendants, chandeliers, downlights, fans, transport, rubble removal and scaffolding
+- Tiling: floors and walls per room – tile type, size, colour, finish and price per box, laying pattern with matching waste, tiles and boxes, adhesive and grout by weight, spacers, levelling clips, trims, tile skirting, waterproofing, primer, silicone, screed, removal of old tiles, and add-ons such as transport, steps, niches and sealing
+- Labour rates, markup, waste and price lists for ceilings and tiling in Settings › Price lists
+- One quotation can hold Joinery, Ceilings and Tiling; the quotation PDF shows each as its own numbered section with a subtotal, and a summary of all sections
+- Invoices made from a quotation include every ceiling and tiling room and their add-ons
+
+### Updated
+- Quotation PDF redesigned: the logo is set into the letterhead beside the company details, title in spaced capitals with a neat reference block, clean tables, numbered sections and a refined totals panel; invoices and receipts share the new look
+- Dashboard and quotation lists show which trades each quotation includes, with filters
+
+### Upgraded
+- Much faster start-up: screens, the 3D engine and the PDF engine load only when needed (the start-up download is about a fifth of its old size)
+- Lists no longer recalculate every quotation each time they open – totals are remembered until something changes
 
 ## 2.3.0 — Cabinet rows, wall slats, services, hobs with downdrafts (2026-10-23)
 

@@ -1,4 +1,4 @@
-// Core data model for WoodQuote. All dimensions are millimetres, money is in the
+// Core data model for En-Quote. All dimensions are millimetres, money is in the
 // configured currency (stored as plain numbers).
 
 export type ID = string;
@@ -177,6 +177,12 @@ export interface Catalog {
    * delete stay deleted and your prices are never replaced.
    */
   defaultsSeen?: string[];
+  /** ceilings: boards, PVC strips, brandering, cornices, trims, fixings, jointing, paint… */
+  ceilingProducts?: CeilingProduct[];
+  /** tiling: tiles (size, type, colour, per box) */
+  tiles?: TileProduct[];
+  /** tiling: adhesive, grout, spacers, trims, waterproofing… */
+  tileSupplies?: TileSupply[];
 }
 
 /* ----------------------------------------------------------------- settings */
@@ -236,6 +242,8 @@ export interface DocTemplate {
   showElevations: boolean;
   quoteDetail: 'units' | 'itemised';
   signatureLine: boolean;
+  /** list the materials (boxes, bags, lengths…) of ceilings and tiling on the quotation */
+  showTradeMaterials?: boolean;
   quotePrefix: string;
   invoicePrefix: string;
   receiptPrefix: string;
@@ -257,6 +265,11 @@ export interface Settings {
   ai: AISettings;
   /** saved services and other non-design items with their usual price */
   services?: ServiceItem[];
+  ceilingRates?: CeilingRates;
+  ceilingDesigns?: PresetItem[];
+  ceilingExtras?: PresetItem[];
+  tilingRates?: TilingRates;
+  tilingExtras?: PresetItem[];
 }
 
 /** A service or other non-design item you charge for (installation, delivery, site measure…). */
@@ -645,6 +658,12 @@ export interface Quote {
   runs: Run[];
   /** Cabinet groups: islands, peninsulas, free-standing groups and loose appliances, each piece facing any way. */
   assemblies?: Assembly[];
+  /** Ceilings section (rhinoboard / PVC) */
+  ceilings?: CeilingJob;
+  /** Tiling section */
+  tiling?: TilingJob;
+  /** which trade the quotation was started in (decides what opens first) */
+  trade?: Trade;
   extras: ExtraLine[];
   attachments: Attachment[];
   includeAppliances: boolean; // appliances supplied by us (priced) or by the client
@@ -815,4 +834,180 @@ export interface Counters {
   quote: number;
   invoice: number;
   receipt: number;
+}
+
+/* =============================================================== trades */
+
+export type Trade = 'joinery' | 'ceilings' | 'tiling';
+
+/** A priced extra you pick from a list (ceiling designs, pendants, demolition, transport…). */
+export interface PresetItem {
+  id: ID;
+  name: string;
+  unit: string;
+  price: number;
+}
+
+/* -------------------------------------------------------------- ceilings */
+
+export type CeilingSystem = 'rhino' | 'pvc';
+export type CeilingProductKind = 'board' | 'pvc' | 'brandering' | 'cornice' | 'trim' | 'fixing' | 'tape' | 'filler' | 'adhesive' | 'paint' | 'insulation' | 'other';
+
+export interface CeilingProduct {
+  id: ID;
+  kind: CeilingProductKind;
+  name: string;
+  /** what it is sold as: sheet, strip, length, box, roll, bag, tub, tin */
+  unit: string;
+  price: number;
+  /** boards, strips and lengths (mm) */
+  length?: number;
+  width?: number;
+  /** paint / insulation / filler: m² per unit · tape / adhesive: m per unit · fixings: pieces per box */
+  coverage?: number;
+  colour?: string;
+  system?: CeilingSystem | 'both';
+}
+
+export interface CeilingDesignLine {
+  id: ID;
+  name: string;
+  qty: number;
+  unit: string;
+  price: number;
+}
+
+export interface CeilingArea {
+  id: ID;
+  name: string;
+  /** room size (mm) */
+  length: number;
+  width: number;
+  /** override the area (m²) / perimeter (m) for odd-shaped rooms */
+  area?: number | null;
+  perimeter?: number | null;
+  system: CeilingSystem;
+  boardId: ID | null;
+  branderingId: ID | null;
+  /** brandering centres (mm) */
+  branderingSpacing: number;
+  /** roof truss centres (mm) the brandering is nailed to */
+  trussSpacing: number;
+  corniceId: ID | null;
+  paintId: ID | null;
+  coats: number;
+  colour: string;
+  insulationId: ID | null;
+  downlights: number;
+  /** renovation: take the old ceiling down first */
+  demolish: boolean;
+  designs: CeilingDesignLine[];
+  notes: string;
+}
+
+export interface CeilingJob {
+  areas: CeilingArea[];
+  extras: ExtraLine[];
+  markupPercent: number;
+  wastePercent: number;
+}
+
+export interface CeilingRates {
+  rhinoPerM2: number;
+  pvcPerM2: number;
+  cornicePerM: number;
+  paintPerM2: number;
+  insulationPerM2: number;
+  demolitionPerM2: number;
+  downlightEach: number;
+  markupPercent: number;
+  wastePercent: number;
+}
+
+/* ---------------------------------------------------------------- tiling */
+
+export type TileType = 'ceramic' | 'porcelain' | 'stone' | 'mosaic' | 'vinyl' | 'other';
+export type TileFinish = 'matt' | 'gloss' | 'polished' | 'textured';
+
+export interface TileProduct {
+  id: ID;
+  name: string;
+  type: TileType;
+  /** tile size (mm) */
+  width: number;
+  height: number;
+  thickness: number;
+  /** tiles in a box */
+  perBox: number;
+  /** price per box */
+  price: number;
+  colour: string;
+  finish: TileFinish;
+}
+
+export type TileSupplyKind = 'adhesive' | 'grout' | 'spacers' | 'levelling' | 'trim' | 'waterproofing' | 'primer' | 'silicone' | 'screed' | 'other';
+
+export interface TileSupply {
+  id: ID;
+  kind: TileSupplyKind;
+  name: string;
+  unit: string;
+  price: number;
+  /** adhesive / grout: kg per bag · spacers / clips: pieces per pack · trim: m per length · waterproofing / primer / screed: m² per unit · silicone: m per tube */
+  coverage: number;
+}
+
+export type TilePattern = 'straight' | 'brick' | 'diagonal' | 'herringbone' | 'chevron';
+
+export interface TileArea {
+  id: ID;
+  name: string;
+  surface: 'floor' | 'wall';
+  /** floor: length × width · wall: wall length × tiled height (mm) */
+  length: number;
+  width: number;
+  /** m² not tiled (doors, windows, built-in units) */
+  deduct: number;
+  tileId: ID | null;
+  pattern: TilePattern;
+  /** waste % (blank = by pattern) */
+  waste?: number | null;
+  /** joint width (mm) */
+  joint: number;
+  adhesiveId: ID | null;
+  groutId: ID | null;
+  spacersId: ID | null;
+  levelling: boolean;
+  /** edge / corner trims (m) */
+  trimLength: number;
+  trimId: ID | null;
+  /** floors: skirting cut from the same tile */
+  skirting: boolean;
+  skirtingHeight: number;
+  waterproof: boolean;
+  primer: boolean;
+  silicone: boolean;
+  demolish: boolean;
+  screed: boolean;
+  notes: string;
+}
+
+export interface TilingJob {
+  areas: TileArea[];
+  extras: ExtraLine[];
+  markupPercent: number;
+}
+
+export interface TilingRates {
+  floorPerM2: number;
+  wallPerM2: number;
+  skirtingPerM: number;
+  demolitionPerM2: number;
+  screedPerM2: number;
+  waterproofPerM2: number;
+  /** extra labour % for harder layouts */
+  patternExtra: Record<TilePattern, number>;
+  /** extra labour % for tiles 600 mm and larger on any side */
+  largeFormatExtra: number;
+  markupPercent: number;
 }

@@ -79,7 +79,7 @@ interface AppState extends AppData {
 }
 
 /** Add catalog items / fields introduced by newer app versions, keeping user edits. */
-export const defaultIds = (d: Catalog = defaultCatalog()) => [d.boards, d.countertops, d.edging, d.glass, d.aluminium, d.accessories, d.appliances].flatMap((l) => l.map((x) => x.id));
+export const defaultIds = (d: Catalog = defaultCatalog()) => [d.boards, d.countertops, d.edging, d.glass, d.aluminium, d.accessories, d.appliances, d.ceilingProducts ?? [], d.tiles ?? [], d.tileSupplies ?? []].flatMap((l) => l.map((x) => x.id));
 
 /**
  * Your library always wins: your prices and names are kept as they are and
@@ -104,7 +104,7 @@ export function mergeCatalog(c: Partial<Catalog>): Catalog {
   // a library with no boards at all cannot price anything, so that one list is refilled
   const boards = (c.boards?.length ? mergeList(c.boards, d.boards) : d.boards).map((b) => ({ ...b, finish: b.finish ?? (/gloss/i.test(b.name) ? 'gloss' : 'matte') }));
   const countertops = mergeList(c.countertops, d.countertops).map((t) => ({ ...t, finish: t.finish ?? 'satin' }));
-  return { boards, countertops, edging: mergeList(c.edging, d.edging), glass: mergeList(c.glass, d.glass), aluminium: mergeList(c.aluminium, d.aluminium), accessories: mergeList(c.accessories, d.accessories), appliances: mergeList(c.appliances, d.appliances), defaultsSeen: [...new Set([...seen, ...all])] };
+  return { boards, countertops, edging: mergeList(c.edging, d.edging), glass: mergeList(c.glass, d.glass), aluminium: mergeList(c.aluminium, d.aluminium), accessories: mergeList(c.accessories, d.accessories), appliances: mergeList(c.appliances, d.appliances), ceilingProducts: mergeList(c.ceilingProducts, d.ceilingProducts ?? []), tiles: mergeList(c.tiles, d.tiles ?? []), tileSupplies: mergeList(c.tileSupplies, d.tileSupplies ?? []), defaultsSeen: [...new Set([...seen, ...all])] };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -136,6 +136,11 @@ export function normalizeData(raw: any): AppData {
       doc: { ...d.doc, ...s.doc },
       ai: { ...d.ai, ...s.ai },
       services: Array.isArray(s.services) ? s.services : d.services,
+      ceilingRates: { ...d.ceilingRates!, ...s.ceilingRates },
+      ceilingDesigns: Array.isArray(s.ceilingDesigns) ? s.ceilingDesigns : d.ceilingDesigns,
+      ceilingExtras: Array.isArray(s.ceilingExtras) ? s.ceilingExtras : d.ceilingExtras,
+      tilingRates: { ...d.tilingRates!, ...s.tilingRates, patternExtra: { ...d.tilingRates!.patternExtra, ...s.tilingRates?.patternExtra } },
+      tilingExtras: Array.isArray(s.tilingExtras) ? s.tilingExtras : d.tilingExtras,
     },
     catalog: p.catalog ? mergeCatalog(p.catalog) : defaultCatalog(),
     quotes,
@@ -241,6 +246,12 @@ export const useStore = create<AppState>()(
           qty: it.qty,
           unitPrice: it.sellEach,
         }));
+        // ceilings and tiling: one line per room, then their add-ons
+        for (const t of [calc.ceilings, calc.tiling])
+          if (t) {
+            for (const ar of t.areas) lines.push({ id: uid('l'), description: `${t.title} – ${ar.name}: ${ar.summary}`, qty: 1, unitPrice: ar.sell ?? 0 });
+            for (const e of t.extras) lines.push({ id: uid('l'), description: `${t.title} – ${e.description}${e.unit ? ` (per ${e.unit})` : ''}`, qty: e.qty, unitPrice: e.unitPrice });
+          }
         const tr = settings.pricing.transportOptions.find((t) => t.id === q.transportId);
         if (calc.transport > 0) lines.push({ id: uid('l'), description: tr ? `Transport – ${tr.name}` : 'Transport', qty: 1, unitPrice: calc.transport });
         for (const e of q.extras) lines.push({ id: uid('l'), description: e.unit ? `${e.description} (per ${e.unit})` : e.description, qty: e.qty, unitPrice: e.unitPrice });

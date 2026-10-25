@@ -2,7 +2,11 @@ import { ChevronDown, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { confirmAction, Field, NumInput, PageHeader, Tabs, Toggle } from '../components/ui';
 import { useMoney } from '../hooks';
-import { ACCESSORY_CATEGORIES, ACCESSORY_LABELS, APPLIANCE_CATEGORIES, APPLIANCE_LABELS, type Catalog, type ServiceItem, type TransportOption } from '../lib/types';
+import { ACCESSORY_CATEGORIES, ACCESSORY_LABELS, APPLIANCE_CATEGORIES, APPLIANCE_LABELS, type Catalog, type CeilingProduct, type CeilingRates, type PresetItem, type ServiceItem, type TileProduct, type TilePattern, type TileSupply, type TilingRates, type Trade, type TransportOption } from '../lib/types';
+import { TRADES } from '../app/brand';
+import { usePrefs } from '../app/prefs';
+import { ceilingRates } from '../lib/ceilings';
+import { TILE_PATTERNS, tilingRates } from '../lib/tiling';
 import { uid } from '../lib/util';
 import { useStore } from '../store';
 
@@ -77,18 +81,22 @@ function EditableList<T extends { id: string; name: string }>({
   );
 }
 
-type Tab = 'boards' | 'edging' | 'glass' | 'aluminium' | 'countertops' | 'accessories' | 'appliances' | 'transport' | 'services';
+type Tab = 'boards' | 'edging' | 'glass' | 'aluminium' | 'countertops' | 'accessories' | 'appliances' | 'transport' | 'services' | 'cProducts' | 'cDesigns' | 'cExtras' | 'cRates' | 'tTiles' | 'tSupplies' | 'tExtras' | 'tRates';
+
+const FIRST_TAB: Record<Trade, Tab> = { joinery: 'boards', ceilings: 'cProducts', tiling: 'tTiles' };
 
 export default function Library({ embedded = false }: { embedded?: boolean }) {
   const { catalog, updateCatalog, resetCatalog, settings, updateSettings } = useStore();
   const fmt = useMoney();
-  const [tab, setTab] = useState<Tab>('boards');
+  const prefTrade = usePrefs((s) => s.trade);
+  const [trade, setTrade] = useState<Trade>(prefTrade);
+  const [tab, setTab] = useState<Tab>(FIRST_TAB[prefTrade]);
   const [cat, setCat] = useState<string>('all');
   const [appCat, setAppCat] = useState<string>('all');
 
   function listProps<K extends keyof Catalog>(key: K) {
     return {
-      items: catalog[key] as Catalog[K],
+      items: (catalog[key] ?? []) as NonNullable<Catalog[K]>,
       onChange: (i: number, patch: object) => updateCatalog((c) => Object.assign((c[key] as object[])[i], patch)),
       onRemove: (i: number) => updateCatalog((c) => void (c[key] as object[]).splice(i, 1)),
     };
@@ -115,7 +123,38 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
             </button>
           </div>
         )}
-        <Tabs<Tab>
+        <div className="flex gap-1 rounded-2xl bg-stone-200/70 p-1">
+          {TRADES.map((t) => (
+            <button key={t.id} className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold ${trade === t.id ? 'bg-white shadow' : 'text-stone-600'}`} style={trade === t.id ? { color: t.ink } : undefined} onClick={() => (setTrade(t.id), setTab(FIRST_TAB[t.id]))}>
+              <t.icon size={16} /> {t.label}
+            </button>
+          ))}
+        </div>
+        {trade === 'ceilings' && (
+          <Tabs<Tab>
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { value: 'cProducts', label: 'Boards, PVC & materials' },
+              { value: 'cDesigns', label: 'Designs' },
+              { value: 'cExtras', label: 'Add-ons & services' },
+              { value: 'cRates', label: 'Labour & markup' },
+            ]}
+          />
+        )}
+        {trade === 'tiling' && (
+          <Tabs<Tab>
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { value: 'tTiles', label: 'Tiles' },
+              { value: 'tSupplies', label: 'Adhesive, grout & supplies' },
+              { value: 'tExtras', label: 'Add-ons & services' },
+              { value: 'tRates', label: 'Labour & markup' },
+            ]}
+          />
+        )}
+        {trade === 'joinery' && <Tabs<Tab>
           value={tab}
           onChange={setTab}
           tabs={[
@@ -129,7 +168,7 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
             { value: 'transport', label: 'Transport' },
             { value: 'services', label: 'Services' },
           ]}
-        />
+        />}
 
         {tab === 'boards' && (
           <EditableList
@@ -294,6 +333,113 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
             onAdd={() => updateSettings((s) => s.pricing.transportOptions.push({ id: uid('tr-'), name: 'New transport option', price: 50 }))}
           />
         )}
+        {tab === 'cProducts' && (
+          <EditableList<CeilingProduct>
+            {...listProps('ceilingProducts')}
+            swatch={(p) => p.colour}
+            summary={(p) => `${p.kind} · ${fmt(p.price)} per ${p.unit}${p.length ? ` · ${p.length}${p.width ? ` × ${p.width}` : ''} mm` : ''}${p.coverage ? ` · covers ${p.coverage}` : ''} · ${p.system === 'pvc' ? 'PVC' : p.system === 'rhino' ? 'Rhinoboard' : 'both'}`}
+            fields={[
+              { key: 'name', label: 'Name', type: 'text' },
+              { key: 'kind', label: 'What it is', type: 'select', half: true, options: ['board', 'pvc', 'brandering', 'cornice', 'trim', 'fixing', 'tape', 'filler', 'adhesive', 'paint', 'insulation', 'other'].map((v) => ({ value: v, label: v })) },
+              { key: 'system', label: 'Used for', type: 'select', half: true, options: [{ value: 'rhino', label: 'Rhinoboard' }, { value: 'pvc', label: 'PVC' }, { value: 'both', label: 'Both' }] },
+              { key: 'unit', label: 'Sold per (sheet, strip, length, box…)', type: 'text', half: true },
+              { key: 'price', label: 'Price', type: 'number', half: true },
+              { key: 'length', label: 'Length', type: 'number', suffix: 'mm', half: true },
+              { key: 'width', label: 'Width', type: 'number', suffix: 'mm', half: true },
+              { key: 'coverage', label: 'Covers (m² paint/insulation/filler · m tape/adhesive · pcs per box)', type: 'number' },
+              { key: 'colour', label: 'Colour', type: 'color', half: true },
+            ]}
+            onAdd={() => updateCatalog((c) => (c.ceilingProducts ??= []).push({ id: uid('c-'), kind: 'board', name: 'New ceiling product', unit: 'sheet', price: 10, length: 3000, width: 1200, system: 'rhino', colour: '#f5f5f4' }))}
+          />
+        )}
+        {(tab === 'cDesigns' || tab === 'cExtras' || tab === 'tExtras') && (
+          <EditableList<PresetItem>
+            items={(tab === 'cDesigns' ? settings.ceilingDesigns : tab === 'cExtras' ? settings.ceilingExtras : settings.tilingExtras) ?? []}
+            summary={(t) => `${fmt(t.price)} per ${t.unit}`}
+            fields={[
+              { key: 'name', label: 'Name', type: 'text' },
+              { key: 'unit', label: 'Charged per (m, m², item, trip…)', type: 'text', half: true },
+              { key: 'price', label: 'Price', type: 'number', half: true },
+            ]}
+            onChange={(i, patch) => updateSettings((s) => Object.assign((tab === 'cDesigns' ? (s.ceilingDesigns ??= []) : tab === 'cExtras' ? (s.ceilingExtras ??= []) : (s.tilingExtras ??= []))[i], patch))}
+            onRemove={(i) => updateSettings((s) => (tab === 'cDesigns' ? (s.ceilingDesigns ??= []) : tab === 'cExtras' ? (s.ceilingExtras ??= []) : (s.tilingExtras ??= [])).splice(i, 1))}
+            onAdd={() => updateSettings((s) => (tab === 'cDesigns' ? (s.ceilingDesigns ??= []) : tab === 'cExtras' ? (s.ceilingExtras ??= []) : (s.tilingExtras ??= [])).push({ id: uid('p-'), name: 'New item', unit: tab === 'cDesigns' ? 'm' : 'item', price: 0 }))}
+          />
+        )}
+        {tab === 'cRates' && (
+          <RatesForm<CeilingRates>
+            values={ceilingRates(settings)}
+            onChange={(k, v) => updateSettings((s) => (s.ceilingRates = { ...ceilingRates(s), [k]: v }))}
+            fields={[
+              ['rhinoPerM2', 'Install rhinoboard ceiling incl. brandering', 'per m²'],
+              ['pvcPerM2', 'Install PVC ceiling incl. brandering', 'per m²'],
+              ['cornicePerM', 'Fit cornice / wall trim', 'per m'],
+              ['paintPerM2', 'Paint ceiling', 'per m²'],
+              ['insulationPerM2', 'Lay insulation', 'per m²'],
+              ['demolitionPerM2', 'Remove old ceiling (renovations)', 'per m²'],
+              ['downlightEach', 'Light cut-out', 'each'],
+              ['markupPercent', 'Default markup on new ceiling quotations', '%'],
+              ['wastePercent', 'Default waste on boards / strips', '%'],
+            ]}
+          />
+        )}
+        {tab === 'tTiles' && (
+          <EditableList<TileProduct>
+            {...listProps('tiles')}
+            swatch={(t) => t.colour}
+            summary={(t) => `${t.width} × ${t.height} × ${t.thickness} mm ${t.type}, ${t.finish} · ${t.perBox} per box (${Math.round(((t.perBox * t.width * t.height) / 1e6) * 100) / 100} m²) · ${fmt(t.price)}/box`}
+            fields={[
+              { key: 'name', label: 'Name', type: 'text' },
+              { key: 'type', label: 'Type', type: 'select', half: true, options: ['ceramic', 'porcelain', 'stone', 'mosaic', 'vinyl', 'other'].map((v) => ({ value: v, label: v })) },
+              { key: 'finish', label: 'Finish', type: 'select', half: true, options: ['matt', 'gloss', 'polished', 'textured'].map((v) => ({ value: v, label: v })) },
+              { key: 'width', label: 'Width', type: 'number', suffix: 'mm', half: true },
+              { key: 'height', label: 'Length', type: 'number', suffix: 'mm', half: true },
+              { key: 'thickness', label: 'Thickness', type: 'number', suffix: 'mm', half: true },
+              { key: 'perBox', label: 'Tiles per box', type: 'number', half: true },
+              { key: 'price', label: 'Price per box', type: 'number', half: true },
+              { key: 'colour', label: 'Colour', type: 'color', half: true },
+            ]}
+            onAdd={() => updateCatalog((c) => (c.tiles ??= []).push({ id: uid('t-'), name: 'New tile', type: 'porcelain', width: 600, height: 600, thickness: 9, perBox: 4, price: 20, colour: '#d6d3d1', finish: 'matt' }))}
+          />
+        )}
+        {tab === 'tSupplies' && (
+          <EditableList<TileSupply>
+            {...listProps('tileSupplies')}
+            summary={(t) => `${t.kind} · ${fmt(t.price)} per ${t.unit} · ${t.coverage} ${t.kind === 'adhesive' || t.kind === 'grout' ? 'kg' : t.kind === 'spacers' || t.kind === 'levelling' ? 'pcs' : t.kind === 'trim' || t.kind === 'silicone' ? 'm' : 'm²'} per ${t.unit}`}
+            fields={[
+              { key: 'name', label: 'Name', type: 'text' },
+              { key: 'kind', label: 'What it is', type: 'select', half: true, options: ['adhesive', 'grout', 'spacers', 'levelling', 'trim', 'waterproofing', 'primer', 'silicone', 'screed', 'other'].map((v) => ({ value: v, label: v })) },
+              { key: 'unit', label: 'Sold per (bag, pack, length…)', type: 'text', half: true },
+              { key: 'price', label: 'Price', type: 'number', half: true },
+              { key: 'coverage', label: 'Contents (kg per bag · pcs per pack · m per length/tube · m² per tub)', type: 'number' },
+            ]}
+            onAdd={() => updateCatalog((c) => (c.tileSupplies ??= []).push({ id: uid('ts-'), kind: 'other', name: 'New tiling supply', unit: 'each', price: 0, coverage: 1 }))}
+          />
+        )}
+        {tab === 'tRates' && (
+          <>
+            <RatesForm<Omit<TilingRates, 'patternExtra'>>
+              values={tilingRates(settings)}
+              onChange={(k, v) => updateSettings((s) => (s.tilingRates = { ...tilingRates(s), [k]: v }))}
+              fields={[
+                ['floorPerM2', 'Lay floor tiles', 'per m²'],
+                ['wallPerM2', 'Lay wall tiles', 'per m²'],
+                ['skirtingPerM', 'Cut and fix tile skirting', 'per m'],
+                ['demolitionPerM2', 'Remove old tiles (renovations)', 'per m²'],
+                ['screedPerM2', 'Screed / level floor', 'per m²'],
+                ['waterproofPerM2', 'Waterproofing', 'per m²'],
+                ['largeFormatExtra', 'Extra labour for tiles 600 mm and larger', '%'],
+                ['markupPercent', 'Default markup on new tiling quotations', '%'],
+              ]}
+            />
+            <RatesForm<Record<TilePattern, number>>
+              title="Extra labour by laying pattern"
+              values={tilingRates(settings).patternExtra}
+              onChange={(k, v) => updateSettings((s) => (s.tilingRates = { ...tilingRates(s), patternExtra: { ...tilingRates(s).patternExtra, [k]: v } }))}
+              fields={(Object.keys(TILE_PATTERNS) as TilePattern[]).map((p) => [p, TILE_PATTERNS[p].label, '%'])}
+            />
+          </>
+        )}
         {tab === 'services' && (
           <EditableList<ServiceItem>
             items={settings.services ?? []}
@@ -308,6 +454,22 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
             onAdd={() => updateSettings((s) => (s.services ??= []).push({ id: uid('svc-'), name: 'New service', unit: 'job', price: 0 }))}
           />
         )}
+      </div>
+    </div>
+  );
+}
+
+/** A short form of labour rates / percentages. */
+function RatesForm<T extends object>({ values, fields, onChange, title = 'Labour rates' }: { values: T; fields: [keyof T & string, string, string][]; onChange: (k: keyof T & string, v: number) => void; title?: string }) {
+  return (
+    <div className="card p-4">
+      <div className="label mb-3">{title}</div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {fields.map(([k, label, unit]) => (
+          <Field key={k} label={label}>
+            <NumInput value={Number(values[k] ?? 0)} min={0} suffix={unit} onChange={(v) => onChange(k, v)} />
+          </Field>
+        ))}
       </div>
     </div>
   );

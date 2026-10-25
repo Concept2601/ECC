@@ -9,6 +9,9 @@ import { buildAssembly, describeAssembly, pieceName, type AssemblyBuild } from '
 import { splitForStock, type JoinPlan } from './joinery';
 import type { Accessory, Assembly, Catalog, Invoice, PricingSettings, Quote, Run, Settings, Unit, UnitBuild } from './types';
 import { round2, sum } from './util';
+import { calculateCeilings } from './ceilings';
+import { calculateTiling } from './tiling';
+import type { TradeCalc } from './trades';
 
 export type CostGroup = 'Boards' | 'Edge banding' | 'Glass' | 'Aluminium' | 'Countertops' | 'Hardware' | 'Appliances';
 export const COST_GROUPS: CostGroup[] = ['Boards', 'Edge banding', 'Glass', 'Aluminium', 'Countertops', 'Hardware', 'Appliances'];
@@ -71,6 +74,10 @@ export interface QuoteCalc {
   installation: number;
   markup: number;
   unitsSell: number;
+  /** Ceilings and Tiling sections (null when the quotation has none) */
+  ceilings: TradeCalc | null;
+  tiling: TradeCalc | null;
+  tradesSell: number;
   transport: number;
   extras: number;
   subtotal: number;
@@ -291,11 +298,16 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
   const transportOpt = pr.transportOptions.find((t) => t.id === q.transportId);
   const transport = (transportOpt?.price ?? 0) + (q.transportCustom || 0);
   const extras = sum(q.extras.map((e) => e.qty * e.unitPrice));
-  const subtotal = round2(unitsSell + transport + extras);
+  const ceilings = calculateCeilings(q.ceilings, cat, settings);
+  const tiling = calculateTiling(q.tiling, cat, settings);
+  const tradesSell = round2((ceilings?.sell ?? 0) + (tiling?.sell ?? 0));
+  if (ceilings) warnings.push(...ceilings.warnings);
+  if (tiling) warnings.push(...tiling.warnings);
+  const subtotal = round2(unitsSell + tradesSell + transport + extras);
   const discount = round2(q.discountType === 'percent' ? (subtotal * q.discountValue) / 100 : Math.min(q.discountValue, subtotal));
   const taxable = subtotal - discount;
   const tax = q.applyTax ? round2((taxable * pr.taxRate) / 100) : 0;
-  return { items, entries, boardPlans, barPlans, joins, costLines, materialsCost, appliancesCost, labour, installation, markup, unitsSell, transport, extras, subtotal, discount, taxable, tax, total: round2(taxable + tax), warnings: [...new Set(warnings)] };
+  return { items, entries, boardPlans, barPlans, joins, costLines, materialsCost, appliancesCost, labour, installation, markup, unitsSell, ceilings, tiling, tradesSell, transport, extras, subtotal, discount, taxable, tax, total: round2(taxable + tax), warnings: [...new Set(warnings)] };
 }
 
 /* --------------------------------------------------------------- invoices */

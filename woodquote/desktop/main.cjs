@@ -1,4 +1,4 @@
-// WoodQuote desktop (Windows) shell: serves the built web app from the
+// En-Quote desktop (Windows) shell: serves the built web app from the
 // app:// scheme so storage, PDF export and the AI reader behave like the
 // mobile app, and opens outside links in the normal browser.
 const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } = require('electron');
@@ -22,6 +22,10 @@ app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${heapMb}`);
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 
+// Renamed to En-Quote: keep using the WoodQuote data folder so quotations, prices and the licence carry over
+const legacyData = path.join(app.getPath('appData'), 'WoodQuote by 2601');
+app.setPath('userData', fs.existsSync(legacyData) ? legacyData : path.join(app.getPath('appData'), 'En-Quote'));
+
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null;
@@ -34,14 +38,14 @@ function createWindow() {
     minHeight: 600,
     show: false,
     autoHideMenuBar: false,
-    title: 'WoodQuote by 2601',
+    title: 'En-Quote',
     backgroundColor: '#f5f5f4',
     icon: path.join(__dirname, 'app', 'icon-512.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, backgroundThrottling: false },
   });
   // never leave the user stuck on a frozen window
   win.on('unresponsive', async () => {
-    const { response } = await dialog.showMessageBox(win, { type: 'warning', title: 'WoodQuote is busy', message: 'WoodQuote is not responding.', detail: 'Your work is saved as you go. Reload to carry on, or wait a little longer.', buttons: ['Reload', 'Wait'], defaultId: 0, cancelId: 1 });
+    const { response } = await dialog.showMessageBox(win, { type: 'warning', title: 'En-Quote is busy', message: 'En-Quote is not responding.', detail: 'Your work is saved as you go. Reload to carry on, or wait a little longer.', buttons: ['Reload', 'Wait'], defaultId: 0, cancelId: 1 });
     if (response === 0) win.webContents.reloadIgnoringCache();
   });
   win.webContents.on('render-process-gone', (_e, d) => {
@@ -64,9 +68,9 @@ function createWindow() {
       shell.openExternal(url);
     }
   });
-  // PDFs and backups: ask where to save, starting in Documents\WoodQuote
+  // PDFs and backups: ask where to save, starting in Documents\En-Quote
   win.webContents.session.on('will-download', (_e, item) => {
-    const dir = path.join(app.getPath('documents'), 'WoodQuote');
+    const dir = path.join(app.getPath('documents'), 'En-Quote');
     fs.mkdirSync(dir, { recursive: true });
     item.setSaveDialogOptions({ defaultPath: path.join(dir, item.getFilename()) });
   });
@@ -100,7 +104,7 @@ function buildMenu() {
       submenu: [...list('refresh', '-', 'goHome', 'goQuotes', 'goInvoices', 'goPrices', 'goSettings', 'goReader', '-', 'back', '-'), { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' }, { role: 'togglefullscreen' }, { type: 'separator' }, { role: 'toggleDevTools' }],
     },
     { label: '&Design', submenu: list('addUnit', 'addKitchen', 'room', '-', 'prev', 'next', 'moveLeft', 'moveRight', 'edit') },
-    { label: '&Help', submenu: [...list('help'), { label: 'About WoodQuote', click: () => dialog.showMessageBox(win, { type: 'info', title: 'WoodQuote by 2601', message: `WoodQuote by 2601\nVersion ${app.getVersion()}` }) }] },
+    { label: '&Help', submenu: [...list('help'), { label: 'About En-Quote', click: () => dialog.showMessageBox(win, { type: 'info', title: 'En-Quote', message: `En-Quote\nJoinery · Ceilings · Tiling\nVersion ${app.getVersion()}` }) }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -122,7 +126,7 @@ app.whenReady().then(() => {
   // "Share" on the desktop: open the PDF in the default viewer (print / email from there)
   ipcMain.handle('woodquote:open-file', async (_e, name, bytes) => {
     const safe = String(name).replace(/[^\w.-]+/g, '_');
-    const dir = path.join(os.tmpdir(), 'WoodQuote');
+    const dir = path.join(os.tmpdir(), 'En-Quote');
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, safe);
     fs.writeFileSync(file, Buffer.from(bytes));
@@ -135,13 +139,13 @@ app.whenReady().then(() => {
     buildMenu();
   });
 
-  // Save points also written as files: Documents\WoodQuote\Backups (newest 30 kept)
+  // Save points also written as files: Documents\En-Quote\Backups (newest 30 kept)
   ipcMain.handle('woodquote:save-backup', async (_e, name, json) => {
-    const dir = path.join(app.getPath('documents'), 'WoodQuote', 'Backups');
+    const dir = path.join(app.getPath('documents'), 'En-Quote', 'Backups');
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, String(name).replace(/[^\w.-]+/g, '_'));
     fs.writeFileSync(file, String(json));
-    const old = fs.readdirSync(dir).filter((f) => f.startsWith('WoodQuote-') && f.endsWith('.json')).sort().reverse().slice(30);
+    const old = fs.readdirSync(dir).filter((f) => (f.startsWith('En-Quote-') || f.startsWith('WoodQuote-')) && f.endsWith('.json')).sort().reverse().slice(30);
     for (const f of old) fs.rmSync(path.join(dir, f), { force: true });
     return file;
   });

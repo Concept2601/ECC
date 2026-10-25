@@ -1,13 +1,17 @@
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft, Menu, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent as RKeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EditTools from './EditTools';
+import { useDrawer } from './Sidebar';
 
 export function PageHeader({ title, subtitle, back, actions }: { title: string; subtitle?: string; back?: string | true; actions?: ReactNode }) {
   const nav = useNavigate();
   return (
     <header className="safe-top sticky top-0 z-30 border-b border-stone-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-3">
+        <button className="btn-ghost -ml-1 px-2 md:hidden" aria-label="Menu" onClick={() => useDrawer.setState({ open: true })}>
+          <Menu size={20} />
+        </button>
         {back && (
           <button className="btn-ghost -ml-1 px-2" aria-label="Back" onClick={() => (back === true ? nav(-1) : nav(back))}>
             <ArrowLeft size={20} />

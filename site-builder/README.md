@@ -2,6 +2,8 @@
 
 Design websites from inspiration, optimise them, and launch them with hosting and domain connection, all in one app.
 
+**Windows / iPhone:** see [INSTALL.md](INSTALL.md). On Windows, double-click `Start TDV Studio.bat`; on iPhone, add the studio to your Home Screen.
+
 ```
 npm install
 npm run dev        # studio on http://localhost:5173 + hosting/API server on :8787

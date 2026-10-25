@@ -10,6 +10,7 @@ import { promises as fs, createReadStream } from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import { analyse } from './inspect.js';
 import { deployToNetlify } from './netlify.js';
 
@@ -35,6 +36,7 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.webmanifest': 'application/manifest+json',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.gif': 'image/gif',
@@ -389,5 +391,8 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Think Different Visuals Studio server on http://localhost:${PORT}`);
+  // Other devices on the same Wi-Fi (e.g. an iPhone) reach the studio on these addresses.
+  const lan = Object.values(os.networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal);
+  for (const a of lan) console.log(`  On your phone or other devices (same Wi-Fi): http://${a.address}:${PORT}`);
   if (!TOKEN) console.log('  ⚠ BUILDER_TOKEN is not set — anyone who can reach this server can publish. Set it in production.');
 });

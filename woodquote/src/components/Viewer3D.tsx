@@ -1,4 +1,8 @@
-import { DoorClosed, DoorOpen, Eye, EyeOff, Lightbulb, LightbulbOff } from 'lucide-react';
+import { Camera, DoorClosed, DoorOpen, Eye, EyeOff, Lightbulb, LightbulbOff, Sparkles } from 'lucide-react';
+import { addRender, blobFromCanvas } from '../app/media';
+import { useSaves } from '../app/savepoints';
+import { currentQuoteId, useStudio } from '../render/studioState';
+import { useFinishTex } from '../render/finishTextures';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -34,6 +38,8 @@ interface Props {
   room?: Room;
   roomItems?: ItemPrice[];
   selectedItemId?: string | null;
+  /** name used for captures and renders */
+  title?: string;
 }
 
 const VIEWS: { v: ViewName; label: string }[] = [
@@ -64,9 +70,14 @@ export default function Viewer3D(props: Props) {
   );
 }
 
-function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, assemblyBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes, room, roomItems, selectedItemId }: Props & { onLost?: () => void }) {
+function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, assemblyBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes, room, roomItems, selectedItemId, title }: Props & { onLost?: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const ctx = useRef<{ renderer: THREE.WebGLRenderer; stage: ReturnType<typeof createStage>; controls: OrbitControls; key: string; invalidate: () => void } | null>(null);
+  /** rebuilds the model shown, for the render studio */
+  const sceneRef = useRef<{ make: (lit?: boolean) => THREE.Object3D; bounds: { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }; dir?: [number, number, number]; room: boolean } | null>(null);
+  const [capturing, setCapturing] = useState(false);
+  // redraw when a finish texture image has finished loading
+  const texVersion = useFinishTex((s) => s.version);
   const pickRef = useRef(onPick);
   const onLostRef = useRef(onLost);
   onLostRef.current = onLost;
@@ -95,6 +106,9 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
     const controls = new OrbitControls(stage.camera, renderer.domElement);
     controls.enableDamping = true;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    // zoom (wheel or pinch) towards the point under the pointer, not the middle of the view
+    controls.zoomToCursor = true;
+    controls.screenSpacePanning = true;
     // draw only when something changed, so an idle 3D view costs nothing
     let dirty = true;
     let visible = true;
@@ -140,8 +154,27 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
     };
     renderer.domElement.addEventListener('pointerdown', onDown);
     renderer.domElement.addEventListener('pointerup', onUp);
+    // double-click / double-tap a spot: it becomes the point the view turns and zooms around
+    let glide: { from: THREE.Vector3; to: THREE.Vector3; t: number } | null = null;
+    const onDbl = (e: MouseEvent) => {
+      const r = renderer.domElement.getBoundingClientRect();
+      ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), stage.camera);
+      const hit = ray.intersectObjects(stage.scene.children, true).find((h) => h.object.type === 'Mesh' && h.object.visible);
+      if (hit) glide = { from: controls.target.clone(), to: hit.point.clone(), t: 0 };
+    };
+    renderer.domElement.addEventListener('dblclick', onDbl);
 
     const loop = () => {
+      if (glide) {
+        glide.t = Math.min(1, glide.t + 0.08);
+        const k = glide.t * glide.t * (3 - 2 * glide.t);
+        const next = glide.from.clone().lerp(glide.to, k);
+        // move the camera with the target so the view slides rather than swings
+        stage.camera.position.add(next.clone().sub(controls.target));
+        controls.target.copy(next);
+        if (glide.t >= 1) glide = null;
+        dirty = true;
+      }
       const moving = controls.update();
       if ((dirty || moving) && visible) {
         renderer.render(stage.scene, stage.camera);
@@ -170,6 +203,7 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
       controls.removeEventListener('change', invalidate);
       renderer.domElement.removeEventListener('pointerdown', onDown);
       renderer.domElement.removeEventListener('pointerup', onUp);
+      renderer.domElement.removeEventListener('dblclick', onDbl);
       controls.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
@@ -181,31 +215,37 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
     const c = ctx.current;
     if (!c) return;
     const opt = { showFronts: fronts, openDoors: open, lightsOn: lights, highlight: highlight ?? null };
-    let obj: THREE.Object3D;
+    // clean = for the render studio: no selection outlines or highlights
+    let make: (clean: boolean, lit?: boolean) => THREE.Object3D;
     let bounds;
     let dir: [number, number, number] | undefined;
     if (room && roomItems) {
-      obj = buildRoomObject(room, roomItems, catalog, { ...opt, selectedItemId: selectedItemId ?? null });
+      make = (clean, lit = lights) => buildRoomObject(room, roomItems, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedItemId: clean ? null : (selectedItemId ?? null) });
       bounds = roomBounds(room);
       dir = ROOM_VIEW_DIR;
     } else if (run && runBuild) {
-      obj = buildRunObject(run, runBuild, catalog, { ...opt, selectedUnitId: selectedUnitId ?? null, room: view !== 'back' && view !== 'top' });
+      make = (clean, lit = lights) => buildRunObject(run, runBuild, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedUnitId: clean ? null : (selectedUnitId ?? null), room: view !== 'back' && view !== 'top' });
       bounds = runBounds(runBuild);
       dir = runViewDir(run);
     } else if (assembly && assemblyBuild) {
-      obj = buildAssemblyObject(assembly, assemblyBuild, catalog, { ...opt, selectedUnitId: selectedUnitId ?? null });
+      make = (clean, lit = lights) => buildAssemblyObject(assembly, assemblyBuild, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedUnitId: clean ? null : (selectedUnitId ?? null) });
       bounds = assemblyBounds3(assemblyBuild);
       dir = view === '3d' ? [0.7, 0.75, 1] : undefined;
     } else if (unit && build) {
-      obj = buildUnitObject(unit, build, catalog, opt);
-      for (const xb of extraBoxes ?? []) {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(xb.box.w, xb.box.h, xb.box.d), new THREE.MeshStandardMaterial({ color: xb.color, roughness: 0.4 }));
-        m.position.set(xb.box.x + xb.box.w / 2, xb.box.y + xb.box.h / 2, xb.box.z + xb.box.d / 2);
-        obj.add(m);
-      }
-      if (unit.installType === 'builtIn' && view !== 'back' && view !== 'top') addUnitRoom(obj as THREE.Group, unitExtents(unit, catalog));
+      make = (clean, lit = lights) => {
+        const o = buildUnitObject(unit, build, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight });
+        for (const xb of extraBoxes ?? []) {
+          const m = new THREE.Mesh(new THREE.BoxGeometry(xb.box.w, xb.box.h, xb.box.d), new THREE.MeshStandardMaterial({ color: xb.color, roughness: 0.4 }));
+          m.position.set(xb.box.x + xb.box.w / 2, xb.box.y + xb.box.h / 2, xb.box.z + xb.box.d / 2);
+          o.add(m);
+        }
+        if (unit.installType === 'builtIn' && view !== 'back' && view !== 'top') addUnitRoom(o as THREE.Group, unitExtents(unit, catalog));
+        return o;
+      };
       bounds = unitBounds(unit, catalog);
     } else return;
+    const obj = make(false);
+    sceneRef.current = { make: (lit?: boolean) => make(true, lit), bounds, dir, room: !!room };
     c.stage.setNight(lights);
     c.stage.setContent(obj, bounds);
     const key = `${view}|${room ? 'room' : assembly ? 'group' : run?.shape ?? ''}|${Math.round(bounds.x1 - bounds.x0)}|${Math.round(bounds.y1)}|${Math.round(bounds.z1 - bounds.z0)}`;
@@ -217,7 +257,50 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
     }
     c.controls.update();
     c.invalidate();
-  }, [unit, build, run, runBuild, assembly, assemblyBuild, catalog, fronts, open, lights, highlight, selectedUnitId, view, extraBoxes, room, roomItems, selectedItemId]);
+  }, [unit, build, run, runBuild, assembly, assemblyBuild, catalog, fronts, open, lights, highlight, selectedUnitId, view, extraBoxes, room, roomItems, selectedItemId, texVersion]);
+
+  /** The camera as it is now, so the capture can be re-rendered from the same angle. */
+  const cameraNow = () => {
+    const c = ctx.current!;
+    const off = c.stage.scene.children.find((o) => o.userData.content)?.position ?? new THREE.Vector3();
+    // stored in model coordinates (the stage centres the model)
+    const p = c.stage.camera.position.clone().sub(off);
+    const t = c.controls.target.clone().sub(off);
+    return { position: p.toArray() as [number, number, number], target: t.toArray() as [number, number, number], fov: c.stage.camera.fov };
+  };
+  const name = title ?? unit?.name ?? run?.name ?? assembly?.name ?? (room ? 'Room layout' : '3D view');
+  /** Save the view as a high-resolution picture to the renders library. */
+  const capture = async () => {
+    const c = ctx.current;
+    if (!c) return;
+    setCapturing(true);
+    try {
+      const el = host.current!;
+      const aspect = (el.clientWidth || 4) / (el.clientHeight || 3);
+      const long = /Android|iPhone|iPad/i.test(navigator.userAgent) ? 1920 : 2560;
+      const w = aspect >= 1 ? long : Math.round(long * aspect);
+      const h = aspect >= 1 ? Math.round(long / aspect) : long;
+      const pr = c.renderer.getPixelRatio();
+      c.renderer.setPixelRatio(1);
+      c.renderer.setSize(w, h, false);
+      c.renderer.render(c.stage.scene, c.stage.camera);
+      const blob = await blobFromCanvas(c.renderer.domElement, 'image/jpeg', 0.94);
+      c.renderer.setPixelRatio(pr);
+      c.renderer.setSize(el.clientWidth || 300, el.clientHeight || 300, false);
+      c.invalidate();
+      await addRender({ kind: 'capture', title: name, quoteId: currentQuoteId(), width: w, height: h, mime: 'image/jpeg', blob, camera: cameraNow() });
+      useSaves.setState({ message: 'View captured – find it in the quotation’s Renders' });
+    } catch (e) {
+      useSaves.setState({ message: `Could not capture: ${(e as Error).message}` });
+    } finally {
+      setCapturing(false);
+    }
+  };
+  const openStudio = () => {
+    const sc = sceneRef.current;
+    if (!sc || !ctx.current) return;
+    useStudio.setState({ scene: { title: name, quoteId: currentQuoteId(), make: sc.make, bounds: sc.bounds, dir: sc.dir, camera: cameraNow(), night: lights, room: sc.room } });
+  };
 
   const chip = (active: boolean) => `rounded-lg px-2 py-1 text-[11px] font-semibold ${active ? 'bg-brand-600 text-white' : 'bg-white/90 text-stone-700'}`;
   return (
@@ -230,6 +313,16 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
           </button>
         ))}
       </div>
+      {!compact && (
+        <div className="absolute bottom-1.5 left-1.5 flex gap-1">
+          <button className={chip(capturing)} disabled={capturing} onClick={() => void capture()} title="Capture this view (saved to Renders)" aria-label="Capture view">
+            <Camera size={14} />
+          </button>
+          <button className={chip(false)} onClick={openStudio} title="Render studio: photo-quality images and videos" aria-label="Render studio">
+            <Sparkles size={14} />
+          </button>
+        </div>
+      )}
       {!compact && (
         <div className="absolute bottom-1.5 right-1.5 flex gap-1">
           <button className={chip(!fronts)} onClick={() => setFronts(!fronts)} title={fronts ? 'Hide doors' : 'Show doors'} aria-label="Toggle doors">

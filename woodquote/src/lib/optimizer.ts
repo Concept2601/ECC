@@ -172,14 +172,21 @@ export function packSheets(pieces: Piece[], sheetLength: number, sheetWidth: num
 
   // Try several orderings/heuristics; keep the plan with the fewest sheets and,
   // on a tie, the biggest reusable leftover on the last sheet.
+  // Very big jobs (many repeated kitchens) get one pass that only looks at the
+  // most recently opened sheets, so the work grows in step with the parts
+  // instead of exploding; the sheet count is practically the same.
+  const big = valid.length > 1500;
+  const window = big ? 40 : Infinity;
   let bins: (GuillotineBin | MaxRectsBin)[] = [];
   let bestScore = Infinity;
-  for (const sortFn of sorts) {
+  for (const sortFn of big ? sorts.slice(0, 1) : sorts) {
     const sorted = [...valid].sort(sortFn);
-    for (const h of heuristics) {
+    for (const h of big ? heuristics.slice(0, 1) : heuristics) {
       const trial: (GuillotineBin | MaxRectsBin)[] = [];
       for (const p of sorted) {
-        if (trial.some((b) => insert(b, p, opt.kerf, h))) continue;
+        let placed = false;
+        for (let i = Math.max(0, trial.length - window); i < trial.length && !placed; i++) placed = insert(trial[i], p, opt.kerf, h);
+        if (placed) continue;
         const b = { free: [{ x: 0, y: 0, w: L, h: Wd }], placements: [] };
         insert(b, p, opt.kerf, h);
         trial.push(b);

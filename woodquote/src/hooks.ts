@@ -1,5 +1,6 @@
-import { useDeferredValue, useMemo } from 'react';
-import { calculateInvoice, calculateQuote } from './lib/pricing';
+import { useEffect, useMemo, useState } from 'react';
+import { lastCalc, peekCalc, requestCalc } from './calc/client';
+import { calculateInvoice, type QuoteCalc } from './lib/pricing';
 import type { Invoice, Quote } from './lib/types';
 import { money } from './lib/util';
 import { useStore } from './store';
@@ -9,12 +10,28 @@ export const useMoney = () => {
   return (n: number) => money(n, cur);
 };
 
+/**
+ * The quotation's prices, cut lists and 3D builds, worked out in the
+ * background. While a change is being worked out the previous result stays on
+ * screen, so typing and dragging never wait; null only until the first result.
+ */
 export function useQuoteCalc(q: Quote | undefined) {
   const catalog = useStore((s) => s.catalog);
   const settings = useStore((s) => s.settings);
-  // typing stays responsive: the totals catch up a moment later if needed
-  const dq = useDeferredValue(q);
-  return useMemo(() => (dq ? calculateQuote(dq, catalog, settings) : null), [dq, catalog, settings]);
+  const [state, setState] = useState<{ id: string | null; calc: QuoteCalc | null }>(() => ({ id: q?.id ?? null, calc: q ? peekCalc(q, catalog, settings) : null }));
+  useEffect(() => {
+    if (!q) return;
+    let alive = true;
+    void requestCalc(q, catalog, settings).then((calc) => alive && setState({ id: q.id, calc }));
+    return () => {
+      alive = false;
+    };
+  }, [q, catalog, settings]);
+  if (!q) return null;
+  const now = peekCalc(q, catalog, settings);
+  if (now) return now;
+  // still working out the newest change: keep showing the last figures
+  return (state.id === q.id ? state.calc : null) ?? lastCalc(q.id);
 }
 
 export function useInvoiceCalc(i: Invoice | undefined) {

@@ -8,7 +8,7 @@ import { warmTotals } from '../app/totals';
 import { useStore } from '../store';
 import { LogoMark, Wordmark } from './Logo';
 
-const STEPS = ['Opening your data', 'Loading workspaces', 'Preparing quotations', 'Ready'];
+const STEPS = ['Opening your data', 'Loading workspaces', 'Loading finish textures', 'Preparing quotations', 'Ready'];
 
 export default function Splash({ preload, onDone }: { preload: () => Promise<unknown>[]; onDone: () => void }) {
   const hydrated = useStore((s) => s.hydrated);
@@ -27,8 +27,16 @@ export default function Splash({ preload, onDone }: { preload: () => Promise<unk
       let n = 0;
       await Promise.all(jobs.map((j) => j.then(() => setPct(15 + Math.round((++n / jobs.length) * 35))).catch(() => undefined)));
       setStep(2);
-      await warmTotals((d, t) => setPct(50 + Math.round((t ? d / t : 1) * 45)));
+      // the finish library's photo textures, so 3D views show them straight away
+      const texIds = (useStore.getState().catalog.finishes ?? []).map((f) => f.textureId).filter(Boolean);
+      if (texIds.length) {
+        const { preloadFinishTextures } = await import('../render/finishTextures');
+        await preloadFinishTextures(texIds).catch(() => undefined);
+      }
+      setPct(55);
       setStep(3);
+      await warmTotals((d, t) => setPct(55 + Math.round((t ? d / t : 1) * 40)));
+      setStep(4);
       setPct(100);
       // short pause so the page does not flash past on fast machines
       const wait = Math.max(0, 700 - (performance.now() - t0));

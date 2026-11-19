@@ -3,7 +3,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import ElevationEditor, { type EditorView, type Sel, type SidePick } from '../components/ElevationEditor';
 import { choices, FIT_ICONS, FIT_LABELS, FRONT_ICONS, FRONT_LABELS, IconChoice, MATERIAL_ICONS, MATERIAL_LABELS, OPENING_ICONS, OPENING_LABELS, PANEL_ICONS, PANEL_LABELS, SLIDE_ICONS, SLIDE_LABELS } from '../components/OptionIcons';
-import { Card, Field, NumInput, OptNumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
+import { Calculating, Card, Field, NumInput, OptNumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import Viewer3D from '../components/Viewer3D';
 import ApplianceSelect from '../components/ApplianceSelect';
 import { useMoney, useQuoteCalc } from '../hooks';
@@ -12,6 +12,8 @@ import { locateUnit } from '../lib/locate';
 import { PRODUCT_LABELS, PRODUCT_ORDER, QUICK_TYPES, retypeUnit, sec } from '../lib/presets';
 import { retypeModule, syncRun } from '../lib/runs';
 import { replaceUnit } from '../lib/locate';
+import FinishPicker from '../components/FinishPicker';
+import SinkDesigner from '../components/SinkDesigner';
 import { syncAssembly } from '../lib/assembly';
 import { cellRects, getSection, mergeSection, sameRef, splitSection } from '../lib/sections';
 import { ACCESSORY_LABELS, type AccessoryCategory, type FrontKind, type LightLocation, type ProductType, type SectionRef, type Unit } from '../lib/types';
@@ -157,6 +159,7 @@ export default function UnitDesigner() {
   const [view2d, setView2d] = useState<EditorView>('front');
   const [extraAcc, setExtraAcc] = useState('');
   const [trace, setTrace] = useState(false);
+  const [sinkEdit, setSinkEdit] = useState<string | null>(null);
 
   const loc = quote ? locateUnit(quote, unitId) : null;
   const unit = loc?.unit;
@@ -170,7 +173,8 @@ export default function UnitDesigner() {
     return [{ box: { x: 0, y: runRef.counterHeight - c.thickness, z: 0, w: unit.width, h: c.thickness, d: unit.depth + runRef.counterOverhang }, color: c.color }];
   }, [runRef, unit, catalog]);
 
-  if (!quote || !unit || !build || !elev || !item) return <PageHeader title="Unit not found" back />;
+  if (!quote || !unit) return <PageHeader title="Unit not found" back />;
+  if (!build || !elev || !item) return <Calculating title={unit.name} back={quote ? `/quotes/${quote.id}` : true} />;
   const inRun = !!loc?.run;
   const backTo = inRun ? `/quotes/${quote.id}/runs/${loc!.run!.id}` : loc?.assembly ? `/quotes/${quote.id}/groups/${loc.assembly.id}` : `/quotes/${quote.id}`;
 
@@ -705,6 +709,19 @@ export default function UnitDesigner() {
 
           {tab === 'materials' && (
             <div className="grid gap-3 md:grid-cols-2">
+              <Card title="Finish – colour & texture">
+                <div className="space-y-4">
+                  <div>
+                    <span className="label">Fronts (doors, drawer fronts, panels)</span>
+                    <FinishPicker value={unit.frontFinishId} onChange={(id) => up((u) => (u.frontFinishId = id))} />
+                  </div>
+                  <div>
+                    <span className="label">Carcass (sides, shelves, backs)</span>
+                    <FinishPicker value={unit.carcassFinishId} onChange={(id) => up((u) => (u.carcassFinishId = id))} />
+                  </div>
+                  <p className="text-xs text-stone-500">Add colours and your own PNG / JPG textures in Price lists › Finishes & textures. The boards below still set the price.</p>
+                </div>
+              </Card>
               <Card title="Boards">
                 <div className="space-y-3">
                   {(
@@ -917,6 +934,14 @@ export default function UnitDesigner() {
             </div>
           )}
 
+          {sinkEdit && (
+            <SinkDesigner
+              open
+              onClose={() => setSinkEdit(null)}
+              base={sinkEdit === 'new' ? null : (catalog.appliances.find((a) => a.id === sinkEdit) ?? null)}
+              onSaved={(id) => sinkEdit === 'new' && up((u) => u.topAppliances.push({ id: uid('ta'), applianceId: id, bay: Math.floor(u.bays.length / 2), frontGap: null, xOffset: null, downdraftId: null }))}
+            />
+          )}
           {tab === 'appliances' && (
             <div className="grid gap-3 md:grid-cols-2">
               <Card title="On the top (hob / sink)">
@@ -926,7 +951,7 @@ export default function UnitDesigner() {
                     const isHob = ap?.category === 'hob';
                     return (
                       <div key={t.id} className="space-y-2 rounded-xl border border-stone-200 p-2">
-                        <div className="grid grid-cols-[1fr_90px_auto] items-center gap-2">
+                        <div className="grid grid-cols-[1fr_90px_auto_auto] items-center gap-2">
                           <ApplianceSelect value={t.applianceId} onChange={(v) => v && up((u) => (u.topAppliances[i].applianceId = v))} filter={(a) => a.placement === 'top' && a.category !== 'downdraft'} />
                           <select className="input" value={t.bay} onChange={(e) => up((u) => (u.topAppliances[i].bay = Number(e.target.value)))}>
                             {unit.bays.map((_, b) => (
@@ -935,6 +960,11 @@ export default function UnitDesigner() {
                               </option>
                             ))}
                           </select>
+                          {ap?.category === 'sink' && (
+                            <button className="btn-ghost px-2 text-xs" title="Edit this sink's layout" onClick={() => setSinkEdit(ap.id)}>
+                              Layout
+                            </button>
+                          )}
                           <button className="btn-ghost px-2 text-red-600" onClick={() => up((u) => u.topAppliances.splice(i, 1))}>
                             <Trash2 size={16} />
                           </button>
@@ -979,6 +1009,9 @@ export default function UnitDesigner() {
                     </button>
                     <button className="btn-secondary px-3 py-1.5 text-xs" onClick={() => up((u) => u.topAppliances.push({ id: uid('ta'), applianceId: 'ap-sink-single', bay: 0 }))}>
                       <Plus size={14} /> Sink
+                    </button>
+                    <button className="btn-secondary px-3 py-1.5 text-xs" onClick={() => setSinkEdit('new')}>
+                      <Plus size={14} /> Custom sink…
                     </button>
                   </div>
                   {!unit.countertopId && !inRun && !(loc?.piece?.underTop && loc.assembly?.top.countertopId) && unit.topAppliances.length > 0 && <p className="text-xs text-amber-700">Add a countertop in “Top & base” for hobs and sinks.</p>}

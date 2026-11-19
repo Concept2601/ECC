@@ -10,7 +10,7 @@ import AddUnitModal from '../components/AddUnitModal';
 import AddGroupModal from '../components/AddGroupModal';
 import { cloneAssembly } from '../lib/assembly';
 import { BarPlanCard, BoardPlanCard } from '../components/CutPlanView';
-import { Card, confirmAction, Field, Modal, NumInput, PageHeader, Row, Select, Tabs, TextInput, Toggle } from '../components/ui';
+import { Calculating, Card, confirmAction, Field, Modal, NumInput, PageHeader, Row, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import UnitThumb from '../components/UnitThumb';
 import { imageFileToJpeg } from '../lib/images';
 import { STATUS_STYLE, useMoney, useQuoteCalc } from '../hooks';
@@ -23,6 +23,7 @@ import { deepClone, uid } from '../lib/util';
 import { quotePdf, saveOrShare, workshopPdf } from '../pdf/pdf';
 import MaterialHub from '../components/MaterialHub';
 import ServicesCard from '../components/ServicesCard';
+import RendersCard from '../components/RendersCard';
 import { usePageShortcuts } from '../app/shortcuts';
 import { useStore } from '../store';
 
@@ -47,7 +48,8 @@ export default function QuoteEditor() {
   const [busy, setBusy] = useState('');
   const keys = usePageShortcuts();
 
-  if (!quote || !calc) return <PageHeader title="Quotation not found" back="/quotes" />;
+  if (!quote) return <PageHeader title="Quotation not found" back="/quotes" />;
+  if (!calc) return <Calculating title={quote.title || 'Quotation'} back="/quotes" />;
   const up = (fn: (q: Quote) => void) => updateQuote(quote.id, fn);
 
   const exportPdf = async (kind: 'quote' | 'workshop') => {
@@ -262,6 +264,7 @@ export default function QuoteEditor() {
           </div>
         )}
         {tab === 'design' && <ServicesCard quote={quote} up={up} />}
+        {tab === 'design' && <RendersCard quote={quote} up={up} />}
 
         {tab === 'design' && (
           <div className="space-y-3">

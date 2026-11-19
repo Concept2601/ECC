@@ -5,7 +5,10 @@ import { Capacitor } from '@capacitor/core';
 import App from './App';
 import LicenceGate from './components/Licence';
 import './index.css';
-import { flushSave } from './store';
+import { flushSave, loadData } from './store';
+
+// open the saved data while the licence and loading screens appear
+void loadData();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

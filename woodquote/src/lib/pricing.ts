@@ -10,11 +10,12 @@ import { splitForStock, type JoinPlan } from './joinery';
 import type { Accessory, Assembly, Catalog, Invoice, PricingSettings, Quote, Run, Settings, Unit, UnitBuild } from './types';
 import { round2, sum } from './util';
 import { calculateCeilings } from './ceilings';
+import { partFinish } from './finishes';
 import { calculateTiling } from './tiling';
 import type { TradeCalc } from './trades';
 
-export type CostGroup = 'Boards' | 'Edge banding' | 'Glass' | 'Aluminium' | 'Countertops' | 'Hardware' | 'Appliances';
-export const COST_GROUPS: CostGroup[] = ['Boards', 'Edge banding', 'Glass', 'Aluminium', 'Countertops', 'Hardware', 'Appliances'];
+export type CostGroup = 'Boards' | 'Finishes' | 'Edge banding' | 'Glass' | 'Aluminium' | 'Countertops' | 'Hardware' | 'Appliances';
+export const COST_GROUPS: CostGroup[] = ['Boards', 'Finishes', 'Edge banding', 'Glass', 'Aluminium', 'Countertops', 'Hardware', 'Appliances'];
 
 export interface CostLine {
   key: string;
@@ -202,12 +203,24 @@ export function calculateQuote(q: Quote, cat: Catalog, settings: Settings): Quot
       if (p.edgingId && p.edgeLength > 0) use(`edge:${p.edgingId}`, ei, p.edgeLength * n);
       if (p.kind === 'glass' && p.materialId) use(`glass:${p.materialId}`, ei, (p.length * p.width * n) / 1e6);
       if (p.kind === 'counter' && p.materialId) use(`counter:${p.materialId}`, ei, (p.length * p.width * n) / 1e6);
+      // finishing work priced per m² (spray painting, lacquer, wrapping): the visible face of each part
+      if (p.kind === 'board') {
+        const fin = partFinish(cat, e.unit, p.role, cat.boards.find((b) => b.id === p.materialId));
+        if (fin && fin.surcharge > 0) use(`fin:${fin.id}`, ei, (p.length * p.width * n) / 1e6);
+      }
     }
     for (const a of e.build.aluminium) use(`alu:${a.profileId}`, ei, sum(a.pieces) * e.qty);
     for (const h of e.build.hardware) use(`hw:${h.accessoryId}`, ei, h.qty * e.qty);
     for (const a of e.build.applianceList) use(`appl:${a.applianceId}`, ei, a.qty * e.qty);
   });
 
+  for (const f of cat.finishes ?? []) {
+    const a = sum(usage.get(`fin:${f.id}`) ?? []);
+    if (!a || !f.surcharge) continue;
+    const total = a * f.surcharge;
+    charged.set(`fin:${f.id}`, total);
+    costLines.push({ key: `fin:${f.id}`, group: 'Finishes', description: f.name, qty: round2(a), unit: 'm²', unitPrice: f.surcharge, total });
+  }
   for (const ed of cat.edging) {
     const m = sum(usage.get(`edge:${ed.id}`) ?? []);
     if (!m) continue;

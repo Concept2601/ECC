@@ -1,3 +1,4 @@
+import { defaultFinishes } from './finishes';
 import type { CeilingProduct, CeilingRates, PresetItem, ServiceItem, TileProduct, TileSupply, TilingRates, Accessory, Appliance, Catalog, Settings } from './types';
 
 const acc = (a: Omit<Accessory, 'packQty' | 'unit'> & Partial<Pick<Accessory, 'packQty' | 'unit'>>): Accessory => ({ unit: 'pc', packQty: 1, ...a });
@@ -101,6 +102,7 @@ export const defaultCatalog = (): Catalog => ({
     { id: 'c-wood', name: 'Solid hardwood top 40mm', thickness: 40, pricePerSqm: 140, color: '#a8743f', finish: 'satin' },
   ],
   appliances: defaultAppliances(),
+  finishes: defaultFinishes(),
   ceilingProducts: defaultCeilingProducts(),
   tiles: defaultTiles(),
   tileSupplies: defaultTileSupplies(),

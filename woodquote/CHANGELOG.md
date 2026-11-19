@@ -2,6 +2,30 @@
 
 _En-Quote was called WoodQuote by 2601 up to version 2.3._
 
+## 3.1.0 — Render studio, finish library, custom sinks and a faster, split database (2026-11-19)
+
+### Added
+- Render studio (✦ button on every 3D view): lighting presets (Daylight, Studio white, Showroom, Warm evening, Night with lights on, Line drawing), sun direction, height, strength and colour, room light, exposure, soft shadows, shadow darkness, corner shading (ambient occlusion), reflections, matte or polished floor, backgrounds including transparent PNG, panel outlines
+- Photoreal renders: a path tracer with true reflections in gloss, glass, metal and polished floors, soft shadows and light bouncing between cabinets – choose the number of samples, stop early and keep the result
+- Image renders up to 4K, square and portrait sizes, saved to the quotation’s Renders and to the device
+- Video export: turntable, half turn or a walk-through gliding between saved views, 4–60 seconds, 30 fps, up to 4K, as MP4 (WebM where MP4 is not available)
+- Capture button on every 3D view: saves a high-resolution picture and the camera angle; saved views can be re-rendered or used in walk-through videos
+- Renders library on each quotation: save to device (Documents/En-Quote/Renders on Windows and Android, Files app on iPhone), share, add to the quotation PDF or delete
+- Finish library: colours and your own PNG / JPG textures (import single files, several or a whole folder), gloss / satin / matt / textured / metallic surfaces, real texture size in mm, grain direction and a finishing price per m²; 16 starter finishes including high gloss solid wood in red, cream and blue
+- Front and carcass finish per cabinet (Materials tab) or for the whole job (Material hub); boards and worktops can carry a finish too
+- Custom sinks: any width and depth, layouts such as bowl + drainer, two drainers with a bowl, double bowl, 1½ bowl, stainless / granite composite / ceramic in any colour, inset or undermount, tap position – drawn the same in 3D and in drawings
+
+### Updated
+- Zoom follows the pointer or pinch point instead of always zooming into the middle; double-click / double-tap a spot to turn and zoom around it
+- Drawings show finish colours
+- Finishing work appears as its own “Finishes” group in costs and the material schedule
+
+### Upgraded
+- Database split into separate stores: settings, price lists, invoices and one record per quotation, with finish textures and renders in their own stores – only what changed is saved, so big jobs no longer slow every edit
+- Prices, cut lists and 3D builds are worked out in the background, so typing, dragging and the 3D view never wait for big kitchens
+- Very big jobs (e.g. a kitchen repeated for a block of flats) work out their sheet layouts in seconds instead of minutes, and screens keep showing the last figures while new ones are worked out
+- Edits copy quotations without duplicating photos and logos, and 3D panels of the same size share their shapes and materials – much less memory on big kitchens
+
 ## 3.0.0 — En-Quote: Joinery, Ceilings and Tiling in one app (2026-10-25)
 
 ### Added

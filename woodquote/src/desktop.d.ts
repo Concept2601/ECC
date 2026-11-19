@@ -4,6 +4,8 @@ interface Window {
     platform: string;
     openFile: (name: string, bytes: ArrayBuffer) => Promise<string>;
     saveBackup?: (name: string, json: string) => Promise<string>;
+    saveMedia?: (name: string, bytes: ArrayBuffer) => Promise<string>;
+    showFile?: (file: string) => Promise<void>;
     setMenu?: (menu: DesktopMenuItem[]) => void;
     onCommand?: (fn: (id: string) => void) => void;
     systemInfo?: () => Promise<{ os: string; cpu: string; cores: number; ramMb: number; heapMb: number; gpu: string[] | null; gpuStatus: Record<string, string>; electron: string; chrome: string }>;

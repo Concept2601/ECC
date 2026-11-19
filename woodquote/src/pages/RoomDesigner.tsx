@@ -2,7 +2,7 @@ import { Box, Columns2, DoorOpen, Map as MapIcon, Plus, RotateCw, SquareDashed, 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import RoomPalette from '../components/RoomPalette';
-import { Card, confirmAction, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
+import { Calculating, Card, confirmAction, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import Viewer3D from '../components/Viewer3D';
 import { useQuoteCalc } from '../hooks';
 import type { ItemPrice } from '../lib/pricing';
@@ -208,7 +208,8 @@ export default function RoomDesigner() {
     if (!quote.room || missing) updateQuote(quote.id, (q) => (q.room = autoPlace(q.room ?? defaultRoom(), calc.items, catalog)));
   }, [quote, calc, catalog, updateQuote]);
 
-  if (!quote || !calc || !quote.room) return <PageHeader title="Room layout" back />;
+  if (!quote) return <PageHeader title="Room layout" back />;
+  if (!calc || !quote.room) return <Calculating title="Room layout" back={`/quotes/${quote.id}`} />;
   const room = quote.room;
   const up = (fn: (r: Room) => void) => updateQuote(quote.id, (q) => q.room && fn(q.room));
   const sel = room.placements.find((p) => p.itemId === selected);

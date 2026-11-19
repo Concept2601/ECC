@@ -4,6 +4,8 @@ import { confirmAction, Field, NumInput, PageHeader, Tabs, Toggle } from '../com
 import { useMoney } from '../hooks';
 import { ACCESSORY_CATEGORIES, ACCESSORY_LABELS, APPLIANCE_CATEGORIES, APPLIANCE_LABELS, type Catalog, type CeilingProduct, type CeilingRates, type PresetItem, type ServiceItem, type TileProduct, type TilePattern, type TileSupply, type TilingRates, type Trade, type TransportOption } from '../lib/types';
 import { TRADES } from '../app/brand';
+import FinishLibrary from '../components/FinishLibrary';
+import SinkDesigner from '../components/SinkDesigner';
 import { usePrefs } from '../app/prefs';
 import { ceilingRates } from '../lib/ceilings';
 import { TILE_PATTERNS, tilingRates } from '../lib/tiling';
@@ -81,7 +83,7 @@ function EditableList<T extends { id: string; name: string }>({
   );
 }
 
-type Tab = 'boards' | 'edging' | 'glass' | 'aluminium' | 'countertops' | 'accessories' | 'appliances' | 'transport' | 'services' | 'cProducts' | 'cDesigns' | 'cExtras' | 'cRates' | 'tTiles' | 'tSupplies' | 'tExtras' | 'tRates';
+type Tab = 'finishes' | 'boards' | 'edging' | 'glass' | 'aluminium' | 'countertops' | 'accessories' | 'appliances' | 'transport' | 'services' | 'cProducts' | 'cDesigns' | 'cExtras' | 'cRates' | 'tTiles' | 'tSupplies' | 'tExtras' | 'tRates';
 
 const FIRST_TAB: Record<Trade, Tab> = { joinery: 'boards', ceilings: 'cProducts', tiling: 'tTiles' };
 
@@ -93,6 +95,9 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
   const [tab, setTab] = useState<Tab>(FIRST_TAB[prefTrade]);
   const [cat, setCat] = useState<string>('all');
   const [appCat, setAppCat] = useState<string>('all');
+  const [sinkEdit, setSinkEdit] = useState<string | null>(null);
+
+  const finishOptions = [{ value: '', label: 'None – own colour above' }, ...(catalog.finishes ?? []).map((f) => ({ value: f.id, label: f.name }))];
 
   function listProps<K extends keyof Catalog>(key: K) {
     return {
@@ -159,6 +164,7 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
           onChange={setTab}
           tabs={[
             { value: 'boards', label: 'Boards' },
+            { value: 'finishes', label: 'Finishes & textures' },
             { value: 'edging', label: 'Edging' },
             { value: 'glass', label: 'Glass' },
             { value: 'aluminium', label: 'Aluminium' },
@@ -184,7 +190,8 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
               { key: 'thickness', label: 'Thickness', type: 'number', suffix: 'mm' },
               { key: 'color', label: 'Colour (render)', type: 'color' },
               { key: 'texture', label: 'Render finish', type: 'select', options: [{ value: 'plain', label: 'Plain / solid colour' }, { value: 'wood', label: 'Wood grain' }] },
-              { key: 'finish', label: 'Surface finish (render)', type: 'select', options: [{ value: 'matte', label: 'Matte' }, { value: 'satin', label: 'Satin' }, { value: 'gloss', label: 'High gloss' }, { value: 'textured', label: 'Textured' }] },
+              { key: 'finish', label: 'Surface finish (render)', type: 'select', options: [{ value: 'matte', label: 'Matte' }, { value: 'satin', label: 'Satin' }, { value: 'gloss', label: 'High gloss' }, { value: 'textured', label: 'Textured' }, { value: 'metallic', label: 'Metallic' }] },
+              { key: 'finishId', label: 'Look from the finish library', type: 'select', options: finishOptions },
               { key: 'grain', label: 'Grain direction (no rotation when cutting)', type: 'bool' },
             ]}
             onAdd={() => updateCatalog((c) => c.boards.push({ id: uid('b-'), name: 'New board', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 50, color: '#d9c3a0', grain: false, texture: 'plain', finish: 'matte' }))}
@@ -242,7 +249,8 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
               { key: 'pricePerSqm', label: 'Price per m²', type: 'number' },
               { key: 'thickness', label: 'Thickness', type: 'number', suffix: 'mm' },
               { key: 'color', label: 'Colour', type: 'color' },
-              { key: 'finish', label: 'Surface finish (render)', type: 'select', options: [{ value: 'matte', label: 'Matte' }, { value: 'satin', label: 'Satin' }, { value: 'gloss', label: 'High gloss' }, { value: 'textured', label: 'Textured' }] },
+              { key: 'finish', label: 'Surface finish (render)', type: 'select', options: [{ value: 'matte', label: 'Matte' }, { value: 'satin', label: 'Satin' }, { value: 'gloss', label: 'High gloss' }, { value: 'textured', label: 'Textured' }, { value: 'metallic', label: 'Metallic' }] },
+              { key: 'finishId', label: 'Look from the finish library', type: 'select', options: finishOptions },
             ]}
             onAdd={() => updateCatalog((c) => c.countertops.push({ id: uid('c-'), name: 'New top', thickness: 30, pricePerSqm: 100, color: '#cccccc', finish: 'satin' }))}
           />
@@ -285,6 +293,20 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
         )}
         {tab === 'appliances' && (
           <>
+          <div className="card flex flex-wrap items-center gap-2 p-3">
+            <span className="mr-auto text-sm text-stone-600">Sinks with your own width and layout of bowls and drainers – they look right in 3D and in drawings.</span>
+            <button className="btn-secondary px-3 py-1.5 text-sm" onClick={() => setSinkEdit('new')}>
+              + Design a custom sink
+            </button>
+            {catalog.appliances
+              .filter((a) => a.category === 'sink')
+              .map((a) => (
+                <button key={a.id} className="chip border border-stone-300 bg-white py-1 text-stone-700 hover:border-brand-500" onClick={() => setSinkEdit(a.id)}>
+                  Edit layout: {a.name}
+                </button>
+              ))}
+          </div>
+          {sinkEdit && <SinkDesigner open onClose={() => setSinkEdit(null)} base={sinkEdit === 'new' ? null : (catalog.appliances.find((a) => a.id === sinkEdit) ?? null)} />}
           <div className="no-scrollbar flex gap-1 overflow-x-auto">
             {['all', ...APPLIANCE_CATEGORIES].map((c) => (
               <button key={c} className={`chip whitespace-nowrap py-1.5 ${appCat === c ? 'bg-brand-600 text-white' : 'border border-stone-300 bg-white text-stone-700'}`} onClick={() => setAppCat(c)}>
@@ -333,6 +355,7 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
             onAdd={() => updateSettings((s) => s.pricing.transportOptions.push({ id: uid('tr-'), name: 'New transport option', price: 50 }))}
           />
         )}
+        {tab === 'finishes' && <FinishLibrary />}
         {tab === 'cProducts' && (
           <EditableList<CeilingProduct>
             {...listProps('ceilingProducts')}

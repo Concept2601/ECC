@@ -1,3 +1,5 @@
+import { boardColour } from '../lib/finishes';
+import { sinkSpec, sinkZones } from '../lib/sinks';
 import { useRef, useState, type ReactNode } from 'react';
 import { elevation, topThickness } from '../lib/generate';
 import { cellRects, sameRef } from '../lib/sections';
@@ -49,8 +51,9 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
   const D = unit.depth;
   const ct = topThickness(unit, catalog);
   const board = (id: string | null) => catalog.boards.find((b) => b.id === id);
-  const front = board(unit.frontMaterialId)?.color ?? '#ddd';
-  const carcass = board(unit.carcassMaterialId)?.color ?? '#eee';
+  // finish-library colours show in the drawing as well as in 3D
+  const front = boardColour(catalog, board(unit.frontMaterialId), unit.frontFinishId);
+  const carcass = boardColour(catalog, board(unit.carcassMaterialId), unit.carcassFinishId);
   const topColor = catalog.countertops.find((c) => c.id === unit.countertopId)?.color ?? board(unit.topBoardId)?.color ?? '#999';
   const fp = unit.finishPanels;
   const fpT = (s: 'left' | 'right' | 'back') => (fp[s].enabled ? board(fp[s].materialId)?.thickness ?? 18 : 0);
@@ -202,8 +205,30 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
             <g key={i}>
               <rect x={a.box.x} y={Z(a.box.z)} width={a.box.w} height={a.box.d} rx={20} fill={ap?.category === 'sink' ? '#c9cdd2' : '#18181b'} stroke="#333" strokeWidth={3} />
               {ap?.category === 'hob' && [0.25, 0.75].flatMap((u) => [0.3, 0.7].map((v) => <circle key={`${u}${v}`} cx={a.box.x + a.box.w * u} cy={Z(a.box.z + a.box.d * v)} r={Math.min(a.box.w, a.box.d) / 7} fill="none" stroke="#999" strokeWidth={4} />))}
+              {ap?.category === 'sink' &&
+                (() => {
+                  // bowls, half bowls and drainers as laid out on the real sink
+                  const sp = sinkSpec(ap);
+                  const back = sp.mount === 'undermount' ? 10 : 35;
+                  const hh = a.box.d - back - (sp.mount === 'undermount' ? 10 : 30);
+                  return sinkZones(sp, a.box.w).map((z, k) =>
+                    z.kind === 'drainer' ? (
+                      <g key={k}>
+                        <rect x={a.box.x + z.x} y={Z(a.box.z + back)} width={z.w} height={hh} rx={14} fill="none" stroke="#6b7280" strokeWidth={2.5} />
+                        {Array.from({ length: Math.max(2, Math.floor(hh / 45)) }, (_, j) => (
+                          <line key={j} x1={a.box.x + z.x + 18} x2={a.box.x + z.x + z.w - 18} y1={Z(a.box.z + back + ((j + 1) * hh) / (Math.max(2, Math.floor(hh / 45)) + 1))} y2={Z(a.box.z + back + ((j + 1) * hh) / (Math.max(2, Math.floor(hh / 45)) + 1))} stroke="#9ca3af" strokeWidth={2} />
+                        ))}
+                      </g>
+                    ) : (
+                      <g key={k}>
+                        <rect x={a.box.x + z.x} y={Z(a.box.z + back)} width={z.w} height={hh} rx={28} fill="#9aa1a9" stroke="#4b5563" strokeWidth={3} />
+                        <circle cx={a.box.x + z.x + z.w / 2} cy={Z(a.box.z + back + hh * 0.55)} r={Math.min(z.w, hh) * 0.08} fill="#374151" />
+                      </g>
+                    ),
+                  );
+                })()}
               <text x={a.box.x + a.box.w / 2} y={Z(a.box.z + a.box.d / 2)} fontSize={fs * 0.8} textAnchor="middle" fill={ap?.category === 'sink' ? '#333' : '#ddd'}>
-                {ap?.category === 'sink' ? 'Sink' : 'Hob'}
+                {ap?.category === 'sink' ? '' : 'Hob'}
               </text>
             </g>
           );

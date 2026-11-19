@@ -1,57 +1,12 @@
-import { del, get, set } from 'idb-keyval';
+import { get as legacyGet } from 'idb-keyval';
 import { create } from 'zustand';
-import { createJSONStorage, persist, type PersistStorage, type StateStorage, type StorageValue } from 'zustand/middleware';
+import { DATA_VERSION, dataBin, K, listKeys, readMany, remove, writeMany } from './app/db';
 import { DEFAULTS_ADDED_LATER, defaultCatalog, defaultSettings } from './lib/defaults';
 import { normalizeUnit } from './lib/presets';
 import { normalizeRoom } from './lib/room';
 import { calculateQuote } from './lib/pricing';
 import type { Catalog, Counters, Invoice, Payment, Quote, Settings } from './lib/types';
 import { addDaysISO, deepClone, todayISO, uid } from './lib/util';
-
-const mem = new Map<string, string>();
-const hasIdb = typeof indexedDB !== 'undefined';
-const idbStorage: StateStorage = {
-  getItem: async (name) => (hasIdb ? ((await get<string>(name)) ?? null) : (mem.get(name) ?? null)),
-  setItem: async (name, value) => (hasIdb ? set(name, value) : void mem.set(name, value)),
-  removeItem: async (name) => (hasIdb ? del(name) : void mem.delete(name)),
-};
-
-/**
- * Saving the whole database on every keystroke froze the app on big jobs
- * (photos, logos, many quotes). Writes are now coalesced: the latest state is
- * written once typing pauses, at most every few seconds while busy, and right
- * away when the app is hidden or closed.
- */
-const jsonStorage = createJSONStorage<AppData>(() => idbStorage)!;
-const pending = new Map<string, StorageValue<AppData>>();
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
-let firstPending = 0;
-export function flushSave() {
-  clearTimeout(saveTimer);
-  saveTimer = undefined;
-  firstPending = 0;
-  const jobs = [...pending.entries()];
-  pending.clear();
-  return Promise.all(jobs.map(([n, v]) => jsonStorage.setItem(n, v)));
-}
-const lazyStorage: PersistStorage<AppData> = {
-  getItem: (name) => jsonStorage.getItem(name),
-  setItem: (name, value) => {
-    pending.set(name, value);
-    const now = Date.now();
-    if (!firstPending) firstPending = now;
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => void flushSave(), now - firstPending > 4000 ? 0 : 700);
-  },
-  removeItem: (name) => {
-    pending.delete(name);
-    return jsonStorage.removeItem(name);
-  },
-};
-if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', () => void flushSave());
-  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && void flushSave());
-}
 
 export interface AppData {
   settings: Settings;
@@ -79,7 +34,7 @@ interface AppState extends AppData {
 }
 
 /** Add catalog items / fields introduced by newer app versions, keeping user edits. */
-export const defaultIds = (d: Catalog = defaultCatalog()) => [d.boards, d.countertops, d.edging, d.glass, d.aluminium, d.accessories, d.appliances, d.ceilingProducts ?? [], d.tiles ?? [], d.tileSupplies ?? []].flatMap((l) => l.map((x) => x.id));
+export const defaultIds = (d: Catalog = defaultCatalog()) => [d.boards, d.countertops, d.edging, d.glass, d.aluminium, d.accessories, d.appliances, d.finishes ?? [], d.ceilingProducts ?? [], d.tiles ?? [], d.tileSupplies ?? []].flatMap((l) => l.map((x) => x.id));
 
 /**
  * Your library always wins: your prices and names are kept as they are and
@@ -104,7 +59,7 @@ export function mergeCatalog(c: Partial<Catalog>): Catalog {
   // a library with no boards at all cannot price anything, so that one list is refilled
   const boards = (c.boards?.length ? mergeList(c.boards, d.boards) : d.boards).map((b) => ({ ...b, finish: b.finish ?? (/gloss/i.test(b.name) ? 'gloss' : 'matte') }));
   const countertops = mergeList(c.countertops, d.countertops).map((t) => ({ ...t, finish: t.finish ?? 'satin' }));
-  return { boards, countertops, edging: mergeList(c.edging, d.edging), glass: mergeList(c.glass, d.glass), aluminium: mergeList(c.aluminium, d.aluminium), accessories: mergeList(c.accessories, d.accessories), appliances: mergeList(c.appliances, d.appliances), ceilingProducts: mergeList(c.ceilingProducts, d.ceilingProducts ?? []), tiles: mergeList(c.tiles, d.tiles ?? []), tileSupplies: mergeList(c.tileSupplies, d.tileSupplies ?? []), defaultsSeen: [...new Set([...seen, ...all])] };
+  return { boards, countertops, edging: mergeList(c.edging, d.edging), glass: mergeList(c.glass, d.glass), aluminium: mergeList(c.aluminium, d.aluminium), accessories: mergeList(c.accessories, d.accessories), appliances: mergeList(c.appliances, d.appliances), finishes: mergeList(c.finishes, d.finishes ?? []), ceilingProducts: mergeList(c.ceilingProducts, d.ceilingProducts ?? []), tiles: mergeList(c.tiles, d.tiles ?? []), tileSupplies: mergeList(c.tileSupplies, d.tileSupplies ?? []), defaultsSeen: [...new Set([...seen, ...all])] };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -159,9 +114,7 @@ export const isWoodQuoteData = (raw: any) => !!raw && (Array.isArray(raw.quotes)
 
 const num = (prefix: string, n: number) => `${prefix}${String(n).padStart(4, '0')}`;
 
-export const useStore = create<AppState>()(
-  persist(
-    (setState, getState) => ({
+export const useStore = create<AppState>()((setState, getState) => ({
       hydrated: false,
       settings: defaultSettings(),
       catalog: defaultCatalog(),
@@ -330,21 +283,114 @@ export const useStore = create<AppState>()(
       },
       importData: (d) => setState(normalizeData(d)),
       resetCatalog: () => setState({ catalog: { ...defaultCatalog(), defaultsSeen: defaultIds() } }),
-    }),
-    {
-      name: 'woodquote-data',
-      version: 2,
-      // data is upgraded in merge() below, so older versions pass straight through
-      migrate: (state) => state as AppData,
-      storage: lazyStorage,
-      partialize: (s) => ({ settings: s.settings, catalog: s.catalog, quotes: s.quotes, invoices: s.invoices, counters: s.counters }),
-      merge: (persisted, current) => ({ ...current, ...(persisted ? normalizeData(persisted) : {}) }),
-      onRehydrateStorage: () => () => useStore.setState({ hydrated: true }),
-    },
-  ),
-);
+    }));
 
 export const exportData = (): AppData => {
   const { settings, catalog, quotes, invoices, counters } = useStore.getState();
   return { settings, catalog, quotes, invoices, counters };
 };
+
+/* ================================================================ saving */
+
+/**
+ * Saving: only what changed is written – one quotation, the price list, the
+ * settings or the invoices – to its own record in the data bin, once typing
+ * pauses (at most every few seconds while busy), and straight away when the
+ * app is hidden or closed.
+ */
+const dirty = { settings: false, catalog: false, invoices: false, meta: false, order: false, quotes: new Set<string>(), gone: new Set<string>() };
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let firstPending = 0;
+let saving: Promise<unknown> = Promise.resolve();
+
+export function flushSave(): Promise<unknown> {
+  clearTimeout(saveTimer);
+  saveTimer = undefined;
+  firstPending = 0;
+  const st = useStore.getState();
+  if (!st.hydrated) return saving;
+  const list: [string, unknown][] = [];
+  if (dirty.settings) list.push([K.settings, st.settings]);
+  if (dirty.catalog) list.push([K.catalog, st.catalog]);
+  if (dirty.invoices) list.push([K.invoices, st.invoices]);
+  if (dirty.meta) list.push([K.meta, { version: DATA_VERSION, counters: st.counters, savedAt: Date.now() }]);
+  if (dirty.order) list.push([K.order, st.quotes.map((q) => q.id)]);
+  const byId = new Map(st.quotes.map((q) => [q.id, q]));
+  for (const id of dirty.quotes) {
+    const q = byId.get(id);
+    if (q) list.push([K.quote(id), q]);
+  }
+  const gone = [...dirty.gone].map(K.quote);
+  dirty.settings = dirty.catalog = dirty.invoices = dirty.meta = dirty.order = false;
+  dirty.quotes.clear();
+  dirty.gone.clear();
+  saving = saving.then(() => Promise.all([writeMany(dataBin, list), remove(dataBin, gone)])).catch((e) => console.error('Saving failed', e));
+  return saving;
+}
+
+function scheduleSave() {
+  const now = Date.now();
+  if (!firstPending) firstPending = now;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => void flushSave(), now - firstPending > 4000 ? 0 : 700);
+}
+
+useStore.subscribe((s, prev) => {
+  if (!s.hydrated || !prev.hydrated) return;
+  let any = false;
+  if (s.settings !== prev.settings) any = dirty.settings = true;
+  if (s.catalog !== prev.catalog) any = dirty.catalog = true;
+  if (s.invoices !== prev.invoices) any = dirty.invoices = true;
+  if (s.counters !== prev.counters) any = dirty.meta = true;
+  if (s.quotes !== prev.quotes) {
+    const before = new Map(prev.quotes.map((q) => [q.id, q]));
+    for (const q of s.quotes) if (before.get(q.id) !== q) dirty.quotes.add(q.id);
+    const now = new Set(s.quotes.map((q) => q.id));
+    for (const id of before.keys()) if (!now.has(id)) dirty.gone.add(id);
+    if (s.quotes.length !== prev.quotes.length || s.quotes.some((q, i) => prev.quotes[i]?.id !== q.id)) dirty.order = true;
+    any = true;
+  }
+  if (any) scheduleSave();
+});
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => void flushSave());
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && void flushSave());
+}
+
+/* =============================================================== loading */
+
+/** Everything written fresh (first start on the split database, or after a restore). */
+async function writeAll(d: AppData) {
+  dirty.settings = dirty.catalog = dirty.invoices = dirty.meta = dirty.order = true;
+  for (const q of d.quotes) dirty.quotes.add(q.id);
+  await flushSave();
+}
+
+/**
+ * Open the data bin. The first time after updating from WoodQuote / En-Quote 3.0
+ * (one big saved file) the old data is read, upgraded and split into records;
+ * the old file is left in place untouched as a fallback.
+ */
+export async function loadData() {
+  try {
+    const [meta] = await readMany<{ version: number; counters: Counters }>(dataBin, [K.meta]);
+    if (meta) {
+      const [settings, catalog, invoices, order] = await readMany<unknown>(dataBin, [K.settings, K.catalog, K.invoices, K.order]);
+      const ids = new Set((order as string[] | undefined) ?? []);
+      // quotations not in the order list (e.g. saved just before a crash) are still loaded
+      for (const k of await listKeys(dataBin)) if (k.startsWith('quote:')) ids.add(k.slice(6));
+      const quotes = (await readMany<Quote>(dataBin, [...ids].map(K.quote))).filter(Boolean) as Quote[];
+      useStore.setState({ ...normalizeData({ settings, catalog, invoices, quotes, counters: meta.counters }), hydrated: true });
+      return;
+    }
+    const legacy = await legacyGet<string>('woodquote-data').catch(() => undefined);
+    const parsed = legacy ? (JSON.parse(legacy) as { state?: unknown }) : null;
+    const data = normalizeData(parsed?.state ?? {});
+    useStore.setState({ ...data, hydrated: true });
+    await writeAll(data);
+  } catch (e) {
+    console.error('Could not open saved data', e);
+    useStore.setState({ hydrated: true });
+  }
+}

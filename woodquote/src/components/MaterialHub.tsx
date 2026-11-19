@@ -8,6 +8,7 @@ import { assemblyUnits } from '../lib/assembly';
 import { leafSections } from '../lib/sections';
 import type { Catalog, Quote, Unit } from '../lib/types';
 import ApplianceSelect from './ApplianceSelect';
+import FinishPicker from './FinishPicker';
 import { Card } from './ui';
 
 type Field = 'carcassMaterialId' | 'frontMaterialId' | 'backMaterialId' | 'edgingId' | 'frontEdgingId' | 'glassId' | 'aluminiumId' | 'hingeId' | 'runnerId' | 'handleId' | 'legId' | 'countertopId';
@@ -90,6 +91,29 @@ export default function MaterialHub({ quote, calc, catalog, up }: { quote: Quote
     <div className="space-y-3">
       <p className="px-1 text-xs text-stone-500">Every material in this quotation, grouped by what it is used for. Choosing one here changes it on every unit and kitchen cabinet in the job (change single units in their designer).</p>
       <div className="grid gap-3 md:grid-cols-2">
+        {(
+          [
+            ['Front finish – colour & texture', 'Doors, drawer fronts, end panels and kick boards', 'frontFinishId'],
+            ['Carcass finish – colour & texture', 'Sides, shelves, backs and drawer boxes', 'carcassFinishId'],
+          ] as const
+        ).map(([title, usage, field]) => {
+          const vals = new Set(units.map((u) => u[field] ?? null));
+          const one = vals.size === 1 ? [...vals][0] : undefined;
+          return (
+            <Card key={field} title={title}>
+              <p className="mb-2 text-xs text-stone-500">{usage} on every cabinet in this job. The board still sets the price.</p>
+              <FinishPicker
+                value={one ?? null}
+                mixed={vals.size > 1}
+                onChange={(id) =>
+                  up((q) => {
+                    for (const u of [...q.units, ...q.runs.flatMap(runUnits), ...(q.assemblies ?? []).flatMap(assemblyUnits)]) u[field] = id;
+                  })
+                }
+              />
+            </Card>
+          );
+        })}
         {GROUPS.map((g) => {
           const users = units.filter((u) => !g.applies || g.applies(u));
           const ids = new Map<string, number>();

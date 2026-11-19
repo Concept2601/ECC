@@ -11,6 +11,8 @@ It is a React + TypeScript app packaged for Android with Capacitor. All data sta
 | Area | What it does |
 | --- | --- |
 | **Workspaces** | A loading page prepares everything, then you choose **Joinery**, **Ceilings** or **Tiling**. A left side bar switches workspace and moves around the app. One quotation can hold all three trades, each in its own section. |
+| **Render studio** | Photo-quality client images (studio or path-traced photoreal) with lighting presets, sun, shadows, reflections, floors and backgrounds, up to 4K; turntable and walk-through videos as MP4; capture button and a renders library on every quotation. |
+| **Finishes & sinks** | Finish library with your own PNG / JPG textures and colours for fronts, carcasses, panels and worktops; custom sinks with any width and layout of bowls and drainers. |
 | **Ceilings** | Rhinoboard and PVC ceilings per room: boards / strips, brandering and nails, screws or clips, jointing, cornices or trims, paint, insulation, designs (bulkheads, trays, shadow lines, LED coves), light cut-outs, removal of old ceilings, and add-ons like pendants, chandeliers and transport. |
 | **Tiling** | Floors and walls per room: tile type, size, colour and price per box, laying pattern and waste, boxes, adhesive and grout by weight, spacers, levelling clips, trims, skirting, waterproofing, silicone, screed, removal of old tiles, labour and add-ons. |
 | **Single units** | 11 templates: TV stand, kitchen base / wall / tall, centre island, built-in cabinet, hinged and sliding wardrobes, bookshelf, vanity and custom. Each unit can be **built-in** (fixed to walls) or **standalone**. It can stand on the **floor** (kick board, legs, or no legs so it sits straight on the floor) or hang on a **wall** at a height you set. |
@@ -96,6 +98,11 @@ npm run build
 * `src/lib/ceilings.ts`, `src/lib/tiling.ts`, `src/lib/trades.ts`: ceilings and tiling quantities and costs
 * `src/components/CeilingsEditor.tsx`, `src/components/TilingEditor.tsx`: their quotation sections
 * `src/components/Splash.tsx`, `Launcher.tsx`, `Sidebar.tsx`: loading page, workspace chooser and side bar
+* `src/app/db.ts`: the split database (data, finishes and renders stores)
+* `src/calc/`: background calculation worker
+* `src/render/studio.ts`, `src/render/video.ts`, `src/components/RenderStudio.tsx`: render studio and video export
+* `src/lib/finishes.ts`, `src/components/FinishLibrary.tsx`: finish library
+* `src/lib/sinks.ts`, `src/components/SinkDesigner.tsx`: custom sinks
 * `src/lib/runs.ts`: kitchen runs (straight, L and U shapes, modules, worktops, layout)
 * `src/lib/assembly.ts`: cabinet groups and islands (pieces facing any way, shared worktop)
 * `src/pages/AssemblyDesigner.tsx`: the island / cabinet group designer

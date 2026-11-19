@@ -30,6 +30,19 @@ export function PageHeader({ title, subtitle, back, actions }: { title: string; 
   );
 }
 
+/** Shown for the moment before the first background calculation of a quotation arrives. */
+export function Calculating({ title, back }: { title: string; back?: string | true }) {
+  return (
+    <div>
+      <PageHeader title={title} back={back} />
+      <div className="flex h-[50vh] flex-col items-center justify-center gap-3 text-sm text-stone-500">
+        <span className="h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-brand-600" />
+        Working out the design and prices…
+      </div>
+    </div>
+  );
+}
+
 export function Card({ title, children, actions, className }: { title?: ReactNode; children: ReactNode; actions?: ReactNode; className?: string }) {
   return (
     <section className={`card p-4 ${className ?? ''}`}>

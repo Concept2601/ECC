@@ -2,11 +2,14 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { unitExtents } from '../lib/generate';
 import { cellRects, sameRef } from '../lib/sections';
+import { finishOf, partFinish } from '../lib/finishes';
+import { sinkSpec, sinkZones, tapX } from '../lib/sinks';
+import { finishTexture } from './finishTextures';
 import type { ItemPrice } from '../lib/pricing';
 import { inwardNormal, itemBounds, orientation, roomExtents, vertices, wallPieces } from '../lib/room';
 import { activeLegs, legLength, legStart, legTransform, runLayout, type RunBuild } from '../lib/runs';
 import type { AssemblyBuild } from '../lib/assembly';
-import type { Appliance, Assembly, Box3 as PartBox, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
+import type { Appliance, Assembly, Box3 as PartBox, Finish, SinkSpec, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
 
 /* ---------------------------------------------------- procedural textures */
 
@@ -59,11 +62,28 @@ const FINISH: Record<SurfaceFinish, { roughness: number; clearcoat: number; env:
   textured: { roughness: 0.75, clearcoat: 0, env: 0.35 },
   satin: { roughness: 0.42, clearcoat: 0.25, env: 0.7 },
   gloss: { roughness: 0.06, clearcoat: 1, env: 1.25 },
+  metallic: { roughness: 0.32, clearcoat: 0.4, env: 1.4 },
 };
 
+/*
+ * Big kitchens have hundreds of panels. Materials and panel shapes of the same
+ * kind and size are made once and shared (marked "shared" so clearing a view
+ * keeps them), instead of being rebuilt for every panel on every change.
+ */
+const keep = <T extends THREE.Material | THREE.BufferGeometry>(x: T): T => {
+  x.userData.shared = true;
+  return x;
+};
+const matShared = new Map<string, THREE.MeshPhysicalMaterial>();
 function surfaceMaterial(color: string, finish: SurfaceFinish, map: THREE.Texture | null = null): THREE.MeshPhysicalMaterial {
-  const f = FINISH[finish] ?? FINISH.matte;
-  return new THREE.MeshPhysicalMaterial({ color: map ? '#ffffff' : color, map, roughness: f.roughness, metalness: 0.02, clearcoat: f.clearcoat, clearcoatRoughness: 0.04, envMapIntensity: f.env });
+  const key = `${color}|${finish}|${map?.uuid ?? ''}`;
+  let m = matShared.get(key);
+  if (!m) {
+    const f = FINISH[finish] ?? FINISH.matte;
+    m = keep(new THREE.MeshPhysicalMaterial({ color: map ? '#ffffff' : color, map, roughness: f.roughness, metalness: finish === 'metallic' ? 0.75 : 0.02, clearcoat: f.clearcoat, clearcoatRoughness: 0.04, envMapIntensity: f.env }));
+    matShared.set(key, m);
+  }
+  return m;
 }
 
 const metal = new THREE.MeshStandardMaterial({ color: '#c8ccd0', metalness: 0.9, roughness: 0.25 });
@@ -72,11 +92,98 @@ const brass = new THREE.MeshStandardMaterial({ color: '#b08d57', metalness: 0.85
 const blackGlass = new THREE.MeshPhysicalMaterial({ color: '#0b0b0d', roughness: 0.05, clearcoat: 1, metalness: 0.1 });
 const notchMat = new THREE.MeshStandardMaterial({ color: '#1a1a1a', roughness: 0.9 });
 
+/** Material for a finish from the library: its colour, or its photo texture at real size once loaded. */
+function finishMaterial(f: Finish): THREE.MeshPhysicalMaterial {
+  const map = f.textureId ? finishTexture(f.textureId) : null;
+  const key = `fin|${f.id}|${f.color}|${f.finish}|${map?.uuid ?? ''}|${f.textureSize}|${f.grain}`;
+  let m = matShared.get(key);
+  if (!m) {
+    const base = FINISH[f.finish] ?? FINISH.matte;
+    m = keep(new THREE.MeshPhysicalMaterial({ color: map ? '#ffffff' : f.color, map, roughness: base.roughness, metalness: f.finish === 'metallic' ? 0.75 : 0.02, clearcoat: base.clearcoat, clearcoatRoughness: 0.04, envMapIntensity: base.env }));
+    if (map) {
+      m.userData.uvSize = Math.max(50, f.textureSize || 600);
+      m.userData.grain = f.grain;
+    }
+    matShared.set(key, m);
+  }
+  return m;
+}
+
+function counterMaterial(cat: Catalog, c: { color: string; finish: SurfaceFinish; finishId?: string | null } | undefined) {
+  const f = finishOf(cat, c?.finishId);
+  return f ? finishMaterial(f) : surfaceMaterial(c?.color ?? '#999', c?.finish ?? 'satin');
+}
+function panelMaterial(cat: Catalog, b: BoardMaterial | undefined) {
+  const f = finishOf(cat, b?.finishId);
+  return f ? finishMaterial(f) : surfaceMaterial(b?.color ?? '#ddd', b?.finish ?? 'matte', b?.texture === 'wood' ? woodTexture(b.color, true) : null);
+}
+
+const geoShared = new Map<string, THREE.BoxGeometry>();
+const edgeShared = new Map<string, THREE.EdgesGeometry>();
+const edgeMat = keep(new THREE.LineBasicMaterial({ color: '#000000', transparent: true, opacity: 0.16 }));
+const sizeKey = (b: PartBox) => `${Math.round(Math.max(b.w, 0.5) * 2)}|${Math.round(Math.max(b.h, 0.5) * 2)}|${Math.round(Math.max(b.d, 0.5) * 2)}`;
 function boxGeo(b: PartBox) {
-  return new THREE.BoxGeometry(Math.max(b.w, 0.5), Math.max(b.h, 0.5), Math.max(b.d, 0.5));
+  const k = sizeKey(b);
+  let g = geoShared.get(k);
+  if (!g) {
+    // far more distinct sizes than any job needs: start again rather than grow forever
+    if (geoShared.size > 6000) {
+      geoShared.clear();
+      edgeShared.clear();
+    }
+    g = keep(new THREE.BoxGeometry(Math.max(b.w, 0.5), Math.max(b.h, 0.5), Math.max(b.d, 0.5)));
+    geoShared.set(k, g);
+  }
+  return g;
+}
+/**
+ * Box with texture coordinates in real millimetres, so a photo texture keeps its
+ * true size on every panel (one image = `size` mm) and the grain runs along
+ * each face's length (or always upright).
+ */
+const uvShared = new Map<string, THREE.BoxGeometry>();
+function boxGeoUV(b: PartBox, size: number, grain: 'length' | 'vertical') {
+  const k = `${sizeKey(b)}|${size}|${grain}`;
+  let g = uvShared.get(k);
+  if (g) return g;
+  if (uvShared.size > 4000) uvShared.clear();
+  g = keep(new THREE.BoxGeometry(Math.max(b.w, 0.5), Math.max(b.h, 0.5), Math.max(b.d, 0.5)));
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+  // faces: +x, -x, +y, -y, +z, -z (4 corners each) with their width × height on the face
+  const faces: [number, number][] = [
+    [b.d, b.h],
+    [b.d, b.h],
+    [b.w, b.d],
+    [b.w, b.d],
+    [b.w, b.h],
+    [b.w, b.h],
+  ];
+  faces.forEach(([fw, fh], f) => {
+    const swap = grain === 'length' && fw > fh;
+    for (let i = f * 4; i < f * 4 + 4; i++) {
+      const u = uv.getX(i);
+      const v = uv.getY(i);
+      if (swap) uv.setXY(i, (v * fh) / size, (u * fw) / size);
+      else uv.setXY(i, (u * fw) / size, (v * fh) / size);
+    }
+  });
+  uv.needsUpdate = true;
+  uvShared.set(k, g);
+  return g;
+}
+
+function boxEdges(b: PartBox) {
+  const k = sizeKey(b);
+  let g = edgeShared.get(k);
+  if (!g) {
+    g = keep(new THREE.EdgesGeometry(boxGeo(b)));
+    edgeShared.set(k, g);
+  }
+  return g;
 }
 
 function boxMesh(b: PartBox, mat: THREE.Material, edges = true): THREE.Object3D {
+  const tex = mat.userData.uvSize as number | undefined;
   // shaped panels (diagonal corner cupboards): extrude the outline upwards
   if (b.meta?.shape && b.meta.shape.length >= 3) {
     const shape = new THREE.Shape(b.meta.shape.map(([x, z]) => new THREE.Vector2(x, -z)));
@@ -94,7 +201,7 @@ function boxMesh(b: PartBox, mat: THREE.Material, edges = true): THREE.Object3D 
     group.add(line);
     return group;
   }
-  const geo = boxGeo(b);
+  const geo = tex ? boxGeoUV(b, tex, mat.userData.grain ?? 'length') : boxGeo(b);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(b.x + b.w / 2, b.y + b.h / 2, b.z + b.d / 2);
   mesh.castShadow = true;
@@ -103,11 +210,91 @@ function boxMesh(b: PartBox, mat: THREE.Material, edges = true): THREE.Object3D 
   if (!edges) return mesh;
   const group = new THREE.Group();
   group.add(mesh);
-  const line = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#000000', transparent: true, opacity: 0.16 }));
+  const line = new THREE.LineSegments(boxEdges(b), edgeMat);
   line.position.copy(mesh.position);
   group.add(line);
   if (b.meta?.ref) group.userData.ref = b.meta.ref;
   return group;
+}
+
+/* ----------------------------------------------------------------- sinks */
+
+const sinkTex = new Map<string, THREE.CanvasTexture>();
+/** Top of a sink as a picture: deck, bowls with depth shading and drain, drainer grooves. */
+function sinkTexture(spec: SinkSpec, w: number, d: number): THREE.CanvasTexture {
+  const key = `${JSON.stringify(spec)}|${Math.round(w)}|${Math.round(d)}`;
+  const hit = sinkTex.get(key);
+  if (hit) return hit;
+  const k = Math.min(2, 2048 / Math.max(w, d));
+  const c = document.createElement('canvas');
+  c.width = Math.max(8, Math.round(w * k));
+  c.height = Math.max(8, Math.round(d * k));
+  const g = c.getContext('2d')!;
+  g.scale(k, k);
+  const base = spec.material === 'stainless' ? '#c9cdd2' : spec.color;
+  const dark = (hex: string, f: number) => shade(hex, -f);
+  if (spec.mount === 'inset') {
+    // deck with a brushed look
+    g.fillStyle = base;
+    g.fillRect(0, 0, w, d);
+    if (spec.material === 'stainless') {
+      g.globalAlpha = 0.08;
+      for (let x = 0; x < w; x += 3) {
+        g.fillStyle = x % 6 ? '#ffffff' : '#7b8087';
+        g.fillRect(x, 0, 1.5, d);
+      }
+      g.globalAlpha = 1;
+    }
+  }
+  const rr = (x: number, y: number, ww: number, hh: number, r: number) => {
+    g.beginPath();
+    g.roundRect(x, y, ww, hh, Math.min(r, ww / 2, hh / 2));
+  };
+  const rimY = spec.mount === 'undermount' ? 10 : 35;
+  for (const z of sinkZones(spec, w)) {
+    const y0 = rimY;
+    const hh = d - rimY - (spec.mount === 'undermount' ? 10 : 30);
+    if (z.kind === 'drainer') {
+      // sloping grooves running to the bowl
+      rr(z.x, y0, z.w, hh, 18);
+      g.fillStyle = spec.mount === 'undermount' ? dark(base, 0.05) : dark(base, 0.04);
+      g.fill();
+      g.strokeStyle = dark(base, 0.22);
+      g.lineWidth = 3;
+      for (let gy = y0 + 25; gy < y0 + hh - 15; gy += 32) {
+        g.beginPath();
+        g.moveTo(z.x + 20, gy);
+        g.lineTo(z.x + z.w - 20, gy);
+        g.stroke();
+      }
+      continue;
+    }
+    // bowl: dark rim edge, inner gradient for depth, drain hole
+    const r = spec.material === 'stainless' ? 30 : 45;
+    rr(z.x, y0, z.w, hh, r);
+    const grad = g.createRadialGradient(z.x + z.w / 2, y0 + hh / 2, 10, z.x + z.w / 2, y0 + hh / 2, Math.max(z.w, hh) * 0.62);
+    grad.addColorStop(0, dark(base, 0.08));
+    grad.addColorStop(0.75, dark(base, 0.28));
+    grad.addColorStop(1, dark(base, 0.5));
+    g.fillStyle = grad;
+    g.fill();
+    g.lineWidth = 5;
+    g.strokeStyle = dark(base, 0.55);
+    g.stroke();
+    g.beginPath();
+    g.arc(z.x + z.w / 2, y0 + hh * 0.55, Math.min(z.w, hh) * (z.kind === 'half' ? 0.09 : 0.07), 0, Math.PI * 2);
+    g.fillStyle = '#3b3f44';
+    g.fill();
+    g.lineWidth = 4;
+    g.strokeStyle = '#9aa0a6';
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  t.userData.shared = true;
+  sinkTex.set(key, t);
+  return t;
 }
 
 /* --------------------------------------------------------------- handles */
@@ -246,15 +433,26 @@ export function applianceObject(a: Appliance, b: PartBox): THREE.Object3D {
       break;
     }
     case 'sink': {
-      add({ x: b.x, y: b.y, z: b.z, w: b.w, h: 3, d: b.d }, metal);
-      const bowls = /double/i.test(a.variant) ? 2 : 1;
-      const bw = /drainer/i.test(a.name) ? b.w * 0.5 : b.w * 0.9;
-      for (let i = 0; i < bowls; i++) add({ x: b.x + 25 + (i * bw) / bowls, y: b.y + 3, z: b.z + 30, w: bw / bowls - 20, h: 1, d: b.d - 60 }, darkMetal);
-      cyl(b.x + b.w * 0.5, b.y + 130, b.z + 25, 14, 260, metal);
-      const spout = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 180, 12), metal);
-      spout.rotation.x = Math.PI / 2;
-      spout.position.set(b.x + b.w * 0.5, b.y + 255, b.z + 110);
-      g.add(spout);
+      // the sink top is drawn from its layout (bowls, half bowls, drainers), so any custom sink looks right
+      const spec = sinkSpec(a);
+      const tex = sinkTexture(spec, b.w, b.d);
+      const top = new THREE.Mesh(
+        new THREE.PlaneGeometry(Math.max(1, b.w), Math.max(1, b.d)),
+        new THREE.MeshPhysicalMaterial({ map: tex, transparent: spec.mount === 'undermount', roughness: spec.material === 'stainless' ? 0.28 : spec.material === 'ceramic' ? 0.08 : 0.5, metalness: spec.material === 'stainless' ? 0.85 : 0, clearcoat: spec.material === 'ceramic' ? 1 : 0, envMapIntensity: 1.2 }),
+      );
+      top.rotation.x = -Math.PI / 2;
+      top.position.set(b.x + b.w / 2, b.y + (spec.mount === 'undermount' ? 0.6 : 2.5), b.z + b.d / 2);
+      top.receiveShadow = true;
+      g.add(top);
+      if (spec.mount === 'inset') add({ x: b.x, y: b.y, z: b.z, w: b.w, h: 2, d: b.d }, spec.material === 'stainless' ? metal : new THREE.MeshPhysicalMaterial({ color: spec.color, roughness: 0.4 }));
+      const tx = tapX(spec, b.w);
+      if (tx != null) {
+        cyl(b.x + tx, b.y + 130, b.z + 25, 14, 260, metal);
+        const spout = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 180, 12), metal);
+        spout.rotation.x = Math.PI / 2;
+        spout.position.set(b.x + tx, b.y + 255, b.z + 110);
+        g.add(spout);
+      }
       break;
     }
     case 'oven':
@@ -376,8 +574,13 @@ export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt:
         mat = new THREE.MeshPhysicalMaterial({ color: g?.color ?? '#cfe8ef', transparent: true, opacity: g?.opacity ?? 0.3, roughness: mirror ? 0.02 : /frost/i.test(g?.name ?? '') ? 0.6 : 0.05, metalness: mirror ? 0.95 : 0, envMapIntensity: 1.4 });
       } else if (p.kind === 'counter') {
         const c = cat.countertops.find((x) => x.id === p.materialId);
-        mat = surfaceMaterial(c?.color ?? '#999', c?.finish ?? 'satin');
-      } else mat = boardMat(cat.boards.find((x) => x.id === p.materialId), b);
+        const cf = finishOf(cat, c?.finishId);
+        mat = cf ? finishMaterial(cf) : surfaceMaterial(c?.color ?? '#999', c?.finish ?? 'satin');
+      } else {
+        const board = cat.boards.find((x) => x.id === p.materialId);
+        const fin = partFinish(cat, unit, p.role, board);
+        mat = fin ? finishMaterial(fin) : boardMat(board, b);
+      }
       const obj = boxMesh(b, mat, p.kind !== 'glass');
       target(b).add(obj);
       if (b.meta?.style && b.meta.style !== 'flat' && p.role === 'finish') root.add(panelDecoration(b, mat, unit));
@@ -563,10 +766,10 @@ export function buildRunObject(run: Run, rb: RunBuild, cat: Catalog, opt: SceneO
   const counter = cat.countertops.find((c) => c.id === run.countertopId);
   for (const ep of rb.extraPlacements) {
     const g = new THREE.Group();
-    if (ep.kind === 'counter') g.add(boxMesh(ep.box, surfaceMaterial(counter?.color ?? '#999', counter?.finish ?? 'satin')));
+    if (ep.kind === 'counter') g.add(boxMesh(ep.box, counterMaterial(cat, counter)));
     else if (ep.kind === 'panel') {
       const b = cat.boards.find((x) => x.id === ep.materialId);
-      g.add(boxMesh(ep.box, surfaceMaterial(b?.color ?? '#ddd', b?.finish ?? 'matte')));
+      g.add(boxMesh(ep.box, panelMaterial(cat, b)));
     } else {
       const a = cat.appliances.find((x) => x.id === ep.applianceId);
       if (a) g.add(applianceObject(a, ep.box));
@@ -621,11 +824,11 @@ export function buildAssemblyObject(a: Assembly, ab: AssemblyBuild, cat: Catalog
   }
   for (const pn of ab.panels) {
     const b = cat.boards.find((x) => x.id === pn.materialId);
-    root.add(boxMesh(pn.box, surfaceMaterial(b?.color ?? '#ddd', b?.finish ?? 'matte', b?.texture === 'wood' ? woodTexture(b.color, true) : null)));
+    root.add(boxMesh(pn.box, panelMaterial(cat, b)));
   }
   if (ab.top) {
     const counter = cat.countertops.find((c) => c.id === a.top.countertopId);
-    root.add(boxMesh(ab.top, surfaceMaterial(counter?.color ?? '#999', counter?.finish ?? 'satin')));
+    root.add(boxMesh(ab.top, counterMaterial(cat, counter)));
   }
   return root;
 }
@@ -698,7 +901,7 @@ const envCache = new WeakMap<THREE.WebGLRenderer, THREE.Texture>();
 
 export function createStage(renderer: THREE.WebGLRenderer, shadowSize = 2048) {
   renderer.shadowMap.enabled = shadowSize > 0;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
@@ -739,9 +942,9 @@ export function createStage(renderer: THREE.WebGLRenderer, shadowSize = 2048) {
     scene.remove(content);
     content.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments || o instanceof THREE.Points) {
-        o.geometry.dispose();
+        if (!o.geometry.userData.shared) o.geometry.dispose();
         const mats = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of mats) m.dispose();
+        for (const m of mats) if (!m.userData.shared) m.dispose();
       }
     });
     content = null;
@@ -759,6 +962,7 @@ export function createStage(renderer: THREE.WebGLRenderer, shadowSize = 2048) {
     const cx = (b.x0 + b.x1) / 2;
     const cz = (b.z0 + b.z1) / 2;
     obj.position.set(-cx, 0, -cz);
+    obj.userData.content = true;
     scene.add(obj);
     content = obj;
     center = new THREE.Vector3(0, (b.y0 + b.y1) / 2, 0);

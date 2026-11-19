@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-d
 import { usePrefs } from './app/prefs';
 import AppShell from './components/AppShell';
 import { usePdfExport } from './pdf/exportState';
+import { useStudio } from './render/studioState';
 import Launcher from './components/Launcher';
 import Sidebar, { useDrawer } from './components/Sidebar';
 import Splash from './components/Splash';
@@ -42,8 +43,19 @@ const SpaceFit = lazy(pages.SpaceFit);
 const PlanReader = lazy(pages.PlanReader);
 
 const ExportSheet = lazy(() => import('./components/ExportSheet'));
+const RenderStudio = lazy(() => import('./components/RenderStudio'));
 
 const preload = () => Object.values(pages).map((p) => p());
+
+/** The render studio (and the path tracer) load only when it is opened. */
+function StudioReady() {
+  const open = useStudio((s) => !!s.scene);
+  return open ? (
+    <Suspense fallback={null}>
+      <RenderStudio />
+    </Suspense>
+  ) : null;
+}
 
 /** The save / share panel loads only when a PDF is ready. */
 function PdfReady() {
@@ -104,6 +116,7 @@ function Workspace() {
         </Suspense>
       </main>
       <PdfReady />
+      <StudioReady />
       {launcher && (
         <Launcher
           onPick={(t: Trade) => {

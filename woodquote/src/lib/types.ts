@@ -5,7 +5,32 @@ export type ID = string;
 
 /* ------------------------------------------------------------------ catalog */
 
-export type SurfaceFinish = 'matte' | 'satin' | 'gloss' | 'textured';
+export type SurfaceFinish = 'matte' | 'satin' | 'gloss' | 'textured' | 'metallic';
+
+/**
+ * A finish colour / texture from the finish library, e.g. "High gloss red" or
+ * "Oak natural (photo texture)". It sets how a board looks (in 3D, renders and
+ * drawings); the board itself still sets the price, plus an optional surcharge
+ * per m² for the finishing work (spray painting, veneering, wrapping).
+ */
+export interface Finish {
+  id: ID;
+  name: string;
+  /** main colour (also used in 2D drawings and when there is no texture) */
+  color: string;
+  finish: SurfaceFinish;
+  /** id of the texture image in the finishes store (PNG / JPG), null = plain colour */
+  textureId: string | null;
+  /** small preview image (data URL) for lists */
+  thumb?: string | null;
+  /** real-world size the texture image covers (mm) */
+  textureSize: number;
+  /** grain / pattern direction: along each panel's length, or always vertical */
+  grain: 'length' | 'vertical';
+  /** extra price per m² of finished area (0 = included in the board price) */
+  surcharge: number;
+  category: string;
+}
 
 export interface BoardMaterial {
   id: ID;
@@ -19,6 +44,8 @@ export interface BoardMaterial {
   grain: boolean; // true = parts may not be rotated on the sheet
   texture: 'plain' | 'wood';
   finish: SurfaceFinish; // drives how light reflects in the render
+  /** look from the finish library (colour / photo texture); overrides colour + texture above */
+  finishId?: ID | null;
 }
 
 export interface EdgeBanding {
@@ -52,6 +79,8 @@ export interface Countertop {
   pricePerSqm: number;
   color: string;
   finish: SurfaceFinish;
+  /** look from the finish library (e.g. a granite or marble photo) */
+  finishId?: ID | null;
 }
 
 export const ACCESSORY_CATEGORIES = [
@@ -161,6 +190,20 @@ export interface Appliance {
   /** where it lives: on top of a counter, inside a compartment, or free standing */
   placement: 'top' | 'inbuilt' | 'freestanding';
   plates?: number; // hobs: number of plates / burners
+  /** sinks: bowls and drainers, material and mounting (missing = worked out from the name) */
+  sink?: SinkSpec;
+}
+
+/**
+ * A sink's layout from left to right: B = bowl, H = half bowl, D = drainer.
+ * e.g. "BD" bowl + drainer, "DBD" two drainers with a bowl, "BB" double bowl, "BHD" 1.5 bowl + drainer.
+ */
+export interface SinkSpec {
+  layout: string;
+  material: 'stainless' | 'granite' | 'ceramic';
+  color: string;
+  mount: 'inset' | 'undermount';
+  tap: 'centre' | 'left' | 'right' | 'none';
 }
 
 export interface Catalog {
@@ -177,6 +220,8 @@ export interface Catalog {
    * delete stay deleted and your prices are never replaced.
    */
   defaultsSeen?: string[];
+  /** finish colours and textures (gloss, matt, wood, marble…) */
+  finishes?: Finish[];
   /** ceilings: boards, PVC strips, brandering, cornices, trims, fixings, jointing, paint… */
   ceilingProducts?: CeilingProduct[];
   /** tiling: tiles (size, type, colour, per box) */
@@ -429,6 +474,10 @@ export interface Unit {
   plinthRecess: number; // how far the kick board is set back
   carcassMaterialId: ID;
   frontMaterialId: ID;
+  /** finish colour / texture of doors, drawer fronts and visible panels (null = the board's own look) */
+  frontFinishId?: ID | null;
+  /** finish colour / texture of the carcass, shelves and backs */
+  carcassFinishId?: ID | null;
   backMaterialId: ID | null;
   edgingId: ID | null;
   frontEdgingId: ID | null;

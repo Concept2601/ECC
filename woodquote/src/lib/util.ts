@@ -22,7 +22,21 @@ export const fmtDate = (iso: string): string => {
 
 export const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
 
-export const deepClone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+/**
+ * Copy plain data. Walks the objects directly instead of turning everything into
+ * text and back, so big kitchens copy quickly and photos / logos (long strings)
+ * are shared rather than duplicated on every edit. Like JSON, undefined fields are dropped.
+ */
+export function deepClone<T>(v: T): T {
+  if (v === null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map((x) => (x === undefined ? null : deepClone(x))) as T;
+  const out: Record<string, unknown> = {};
+  for (const k in v as Record<string, unknown>) {
+    const x = (v as Record<string, unknown>)[k];
+    if (x !== undefined && typeof x !== 'function') out[k] = deepClone(x);
+  }
+  return out as T;
+}
 
 export const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
 

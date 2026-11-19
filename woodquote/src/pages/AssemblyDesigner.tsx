@@ -7,7 +7,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import ApplianceSelect from '../components/ApplianceSelect';
 import TopApplianceField from '../components/TopApplianceField';
 import { IslandIcon } from '../components/AddGroupModal';
-import { Card, confirmAction, Field, NumInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
+import { Calculating, Card, confirmAction, Field, NumInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
 import Viewer3D from '../components/Viewer3D';
 import { usePageShortcuts } from '../app/shortcuts';
 import { useMoney, useQuoteCalc } from '../hooks';
@@ -182,7 +182,8 @@ export default function AssemblyDesigner() {
 
   const group = quote?.assemblies?.find((g) => g.id === gid);
   const item = calc?.items.find((it) => it.id === gid);
-  if (!quote || !group || !item?.assemblyBuild) return <PageHeader title="Group not found" back={quote ? `/quotes/${quote.id}` : '/quotes'} />;
+  if (!quote || !group) return <PageHeader title="Group not found" back={quote ? `/quotes/${quote.id}` : '/quotes'} />;
+  if (!item?.assemblyBuild) return <Calculating title={group.name} back={`/quotes/${quote.id}`} />;
 
   const up = (fn: (g: Assembly) => void) =>
     updateQuote(quote.id, (q) => {

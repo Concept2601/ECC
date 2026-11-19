@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('woodquoteDesktop', {
   saveBackup: (name, json) => ipcRenderer.invoke('woodquote:save-backup', name, json),
   /** Show the app's commands and shortcut keys in the menu bar. */
   setMenu: (items) => ipcRenderer.send('woodquote:set-menu', items),
+  /** Save a render / video to Documents\\En-Quote\\Renders; resolves to the file path. */
+  saveMedia: (name, bytes) => ipcRenderer.invoke('woodquote:save-media', name, bytes),
+  /** Show a saved file in Explorer / Finder. */
+  showFile: (file) => ipcRenderer.invoke('woodquote:show-file', file),
   /** CPU, memory and graphics card of this PC. */
   systemInfo: () => ipcRenderer.invoke('woodquote:system-info'),
   /** Called when a menu item is clicked. */

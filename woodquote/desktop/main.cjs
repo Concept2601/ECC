@@ -150,6 +150,16 @@ app.whenReady().then(() => {
     return file;
   });
 
+  // captured views, photo renders and videos: Documents\En-Quote\Renders
+  ipcMain.handle('woodquote:save-media', async (_e, name, bytes) => {
+    const dir = path.join(app.getPath('documents'), 'En-Quote', 'Renders');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, String(name).replace(/[^\w.-]+/g, '_'));
+    fs.writeFileSync(file, Buffer.from(bytes));
+    return file;
+  });
+  ipcMain.handle('woodquote:show-file', async (_e, file) => shell.showItemInFolder(String(file)));
+
   ipcMain.handle('woodquote:system-info', async () => {
     const cpus = os.cpus();
     let gpu = null;

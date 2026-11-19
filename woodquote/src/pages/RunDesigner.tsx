@@ -1,8 +1,9 @@
 import { ArrowLeft, ArrowRight, Copy, Pencil, Plus, Ruler, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { uid } from '../lib/util';
+import { boardColour } from '../lib/finishes';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Card, confirmAction, Field, Modal, NumInput, PageHeader, Select, Tabs, TextInput } from '../components/ui';
+import { Calculating, Card, confirmAction, Field, Modal, NumInput, PageHeader, Select, Tabs, TextInput } from '../components/ui';
 import { usePageShortcuts } from '../app/shortcuts';
 import Viewer3D from '../components/Viewer3D';
 import ApplianceSelect from '../components/ApplianceSelect';
@@ -22,7 +23,7 @@ function LegStrip({ run, leg, catalog, selected, onSelect }: { run: Run; leg: nu
   const H = Math.max(run.tallHeight, run.wallBottom + run.wallHeight, ...mods.map((m) => Math.max(m.height ?? 0, m.wall ? (m.wallBottom ?? run.wallBottom) + (m.wallHeight || run.wallHeight) : 0))) + 100;
   const firstFront = run.legs.flat().find((m) => m.base)?.base?.frontMaterialId;
   const Y = (y: number) => H - y;
-  const front = (id: string | null | undefined) => catalog.boards.find((b) => b.id === id)?.color ?? '#ddd';
+  const front = (id: string | null | undefined, finishId?: string | null) => boardColour(catalog, catalog.boards.find((b) => b.id === id), finishId);
   const fs = 70;
   const starts = mods.map((_, i) => mods.slice(0, i).reduce((a, m) => a + m.width, 0));
   return (
@@ -37,14 +38,14 @@ function LegStrip({ run, leg, catalog, selected, onSelect }: { run: Run; leg: nu
           <g key={m.id} onClick={() => onSelect(m.id)} className="cursor-pointer">
             {m.kind === 'base' && m.base && (
               <>
-                <rect x={x0} y={Y(m.height || run.counterHeight)} width={m.width} height={(m.height || run.counterHeight) - run.plinthHeight} fill={front(m.base.frontMaterialId)} stroke={stroke} strokeWidth={sw} />
+                <rect x={x0} y={Y(m.height || run.counterHeight)} width={m.width} height={(m.height || run.counterHeight) - run.plinthHeight} fill={front(m.base.frontMaterialId, m.base.frontFinishId)} stroke={stroke} strokeWidth={sw} />
                 <rect x={x0} y={Y(run.plinthHeight)} width={m.width} height={run.plinthHeight} fill="#8f8a83" />
               </>
             )}
-            {m.kind === 'tall' && m.base && <rect x={x0} y={Y(m.height || run.tallHeight)} width={m.width} height={m.height || run.tallHeight} fill={front(m.base.frontMaterialId)} stroke={stroke} strokeWidth={sw} />}
+            {m.kind === 'tall' && m.base && <rect x={x0} y={Y(m.height || run.tallHeight)} width={m.width} height={m.height || run.tallHeight} fill={front(m.base.frontMaterialId, m.base.frontFinishId)} stroke={stroke} strokeWidth={sw} />}
             {m.kind === 'gap' && <rect x={x0} y={Y(m.height || run.counterHeight + 900)} width={m.width} height={m.height || run.counterHeight + 900} fill="#f5f5f4" stroke={stroke} strokeWidth={sw} strokeDasharray="40 20" />}
             {m.kind === 'filler' && <rect x={x0} y={Y(fillerHeight(m, run, 30))} width={m.width} height={fillerHeight(m, run, 30)} fill={front(firstFront)} stroke={stroke} strokeWidth={sw} />}
-            {m.wall && <rect x={x0} y={Y((m.wallBottom ?? run.wallBottom) + (m.wallHeight || run.wallHeight))} width={m.width} height={m.wallHeight || run.wallHeight} fill={front(m.wall.frontMaterialId)} stroke={stroke} strokeWidth={sw} />}
+            {m.wall && <rect x={x0} y={Y((m.wallBottom ?? run.wallBottom) + (m.wallHeight || run.wallHeight))} width={m.width} height={m.wallHeight || run.wallHeight} fill={front(m.wall.frontMaterialId, m.wall.frontFinishId)} stroke={stroke} strokeWidth={sw} />}
             {m.hoodId && <path d={`M${x0 + m.width * 0.15} ${Y((m.wallBottom ?? run.wallBottom) + 100)} h${m.width * 0.7} l-${m.width * 0.2} -${300} h-${m.width * 0.3} z`} fill="#b5b9be" stroke="#555" strokeWidth={4} />}
             <text x={x0 + m.width / 2} y={Y(0) + fs * 1.4} fontSize={fs} textAnchor="middle" fill="#57534e">
               {m.width}
@@ -183,7 +184,8 @@ export default function RunDesigner() {
 
   const run = quote?.runs.find((r) => r.id === rid);
   const item = calc?.items.find((i) => i.id === rid);
-  if (!quote || !run || !item?.runBuild) return <PageHeader title="Kitchen not found" back />;
+  if (!quote || !run) return <PageHeader title="Kitchen not found" back />;
+  if (!item?.runBuild) return <Calculating title={run.name} back={`/quotes/${quote.id}`} />;
 
   const up = (fn: (r: Run) => void) =>
     updateQuote(quote.id, (q) => {

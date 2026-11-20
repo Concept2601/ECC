@@ -9,7 +9,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { RunBuild } from '../lib/runs';
 import type { AssemblyBuild } from '../lib/assembly';
 import type { Assembly, Box3, Catalog, Room, Run, SectionRef, Unit, UnitBuild } from '../lib/types';
-import { addUnitRoom, assemblyBounds3, buildAssemblyObject, buildRoomObject, buildRunObject, buildUnitObject, createStage, ROOM_VIEW_DIR, roomBounds, runBounds, runViewDir, unitBounds, type ViewName } from '../render/scene';
+import { worktopForUnit, addUnitRoom, assemblyBounds3, buildAssemblyObject, buildRoomObject, buildRunObject, buildUnitObject, createStage, ROOM_VIEW_DIR, roomBounds, runBounds, runViewDir, unitBounds, type ViewName } from '../render/scene';
 import type { ItemPrice } from '../lib/pricing';
 import { RENDER_QUALITY, usePrefs } from '../app/prefs';
 import { unitExtents } from '../lib/generate';
@@ -276,11 +276,8 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
     } else if (unit && build) {
       make = (clean, lit = lights) => {
         const o = buildUnitObject(unit, build, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight });
-        for (const xb of extraBoxes ?? []) {
-          const m = new THREE.Mesh(new THREE.BoxGeometry(xb.box.w, xb.box.h, xb.box.d), new THREE.MeshStandardMaterial({ color: xb.color, roughness: 0.4 }));
-          m.position.set(xb.box.x + xb.box.w / 2, xb.box.y + xb.box.h / 2, xb.box.z + xb.box.d / 2);
-          o.add(m);
-        }
+        // the kitchen worktop around this cabinet, with the sink cut-out
+        for (const xb of extraBoxes ?? []) o.add(worktopForUnit(xb.box, xb.color, build, catalog));
         if (unit.installType === 'builtIn' && view !== 'back' && view !== 'top') addUnitRoom(o as THREE.Group, unitExtents(unit, catalog));
         return o;
       };

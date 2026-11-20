@@ -3,13 +3,13 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { unitExtents } from '../lib/generate';
 import { cellRects, sameRef } from '../lib/sections';
 import { finishOf, partFinish } from '../lib/finishes';
-import { sinkSpec, sinkZones, tapX } from '../lib/sinks';
 import { finishTexture } from './finishTextures';
 import type { ItemPrice } from '../lib/pricing';
 import { itemBounds, orientation, partitionPoint, roomExtents, vertices, wallMitres, wallPieces } from '../lib/room';
 import { activeLegs, legLength, legStart, legTransform, runLayout, type RunBuild } from '../lib/runs';
 import { pieceAppliance, type AssemblyBuild } from '../lib/assembly';
-import type { Appliance, Assembly, Box3 as PartBox, Finish, SinkSpec, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
+import { insertObject, railObject, sinkHoles, sinkObject, slabWithHoles } from './fixtures3d';
+import type { Appliance, Assembly, Box3 as PartBox, Finish, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
 
 /* ---------------------------------------------------- procedural textures */
 
@@ -220,83 +220,7 @@ function boxMesh(b: PartBox, mat: THREE.Material, edges = true): THREE.Object3D 
 
 /* ----------------------------------------------------------------- sinks */
 
-const sinkTex = new Map<string, THREE.CanvasTexture>();
 /** Top of a sink as a picture: deck, bowls with depth shading and drain, drainer grooves. */
-function sinkTexture(spec: SinkSpec, w: number, d: number): THREE.CanvasTexture {
-  const key = `${JSON.stringify(spec)}|${Math.round(w)}|${Math.round(d)}`;
-  const hit = sinkTex.get(key);
-  if (hit) return hit;
-  const k = Math.min(2, 2048 / Math.max(w, d));
-  const c = document.createElement('canvas');
-  c.width = Math.max(8, Math.round(w * k));
-  c.height = Math.max(8, Math.round(d * k));
-  const g = c.getContext('2d')!;
-  g.scale(k, k);
-  const base = spec.material === 'stainless' ? '#c9cdd2' : spec.color;
-  const dark = (hex: string, f: number) => shade(hex, -f);
-  if (spec.mount === 'inset') {
-    // deck with a brushed look
-    g.fillStyle = base;
-    g.fillRect(0, 0, w, d);
-    if (spec.material === 'stainless') {
-      g.globalAlpha = 0.08;
-      for (let x = 0; x < w; x += 3) {
-        g.fillStyle = x % 6 ? '#ffffff' : '#7b8087';
-        g.fillRect(x, 0, 1.5, d);
-      }
-      g.globalAlpha = 1;
-    }
-  }
-  const rr = (x: number, y: number, ww: number, hh: number, r: number) => {
-    g.beginPath();
-    g.roundRect(x, y, ww, hh, Math.min(r, ww / 2, hh / 2));
-  };
-  const rimY = spec.mount === 'undermount' ? 10 : 35;
-  for (const z of sinkZones(spec, w)) {
-    const y0 = rimY;
-    const hh = d - rimY - (spec.mount === 'undermount' ? 10 : 30);
-    if (z.kind === 'drainer') {
-      // sloping grooves running to the bowl
-      rr(z.x, y0, z.w, hh, 18);
-      g.fillStyle = spec.mount === 'undermount' ? dark(base, 0.05) : dark(base, 0.04);
-      g.fill();
-      g.strokeStyle = dark(base, 0.22);
-      g.lineWidth = 3;
-      for (let gy = y0 + 25; gy < y0 + hh - 15; gy += 32) {
-        g.beginPath();
-        g.moveTo(z.x + 20, gy);
-        g.lineTo(z.x + z.w - 20, gy);
-        g.stroke();
-      }
-      continue;
-    }
-    // bowl: dark rim edge, inner gradient for depth, drain hole
-    const r = spec.material === 'stainless' ? 30 : 45;
-    rr(z.x, y0, z.w, hh, r);
-    const grad = g.createRadialGradient(z.x + z.w / 2, y0 + hh / 2, 10, z.x + z.w / 2, y0 + hh / 2, Math.max(z.w, hh) * 0.62);
-    grad.addColorStop(0, dark(base, 0.08));
-    grad.addColorStop(0.75, dark(base, 0.28));
-    grad.addColorStop(1, dark(base, 0.5));
-    g.fillStyle = grad;
-    g.fill();
-    g.lineWidth = 5;
-    g.strokeStyle = dark(base, 0.55);
-    g.stroke();
-    g.beginPath();
-    g.arc(z.x + z.w / 2, y0 + hh * 0.55, Math.min(z.w, hh) * (z.kind === 'half' ? 0.09 : 0.07), 0, Math.PI * 2);
-    g.fillStyle = '#3b3f44';
-    g.fill();
-    g.lineWidth = 4;
-    g.strokeStyle = '#9aa0a6';
-    g.stroke();
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
-  t.userData.shared = true;
-  sinkTex.set(key, t);
-  return t;
-}
 
 /* --------------------------------------------------------------- handles */
 
@@ -434,26 +358,8 @@ export function applianceObject(a: Appliance, b: PartBox): THREE.Object3D {
       break;
     }
     case 'sink': {
-      // the sink top is drawn from its layout (bowls, half bowls, drainers), so any custom sink looks right
-      const spec = sinkSpec(a);
-      const tex = sinkTexture(spec, b.w, b.d);
-      const top = new THREE.Mesh(
-        new THREE.PlaneGeometry(Math.max(1, b.w), Math.max(1, b.d)),
-        new THREE.MeshPhysicalMaterial({ map: tex, transparent: spec.mount === 'undermount', roughness: spec.material === 'stainless' ? 0.28 : spec.material === 'ceramic' ? 0.08 : 0.5, metalness: spec.material === 'stainless' ? 0.85 : 0, clearcoat: spec.material === 'ceramic' ? 1 : 0, envMapIntensity: 1.2 }),
-      );
-      top.rotation.x = -Math.PI / 2;
-      top.position.set(b.x + b.w / 2, b.y + (spec.mount === 'undermount' ? 0.6 : 2.5), b.z + b.d / 2);
-      top.receiveShadow = true;
-      g.add(top);
-      if (spec.mount === 'inset') add({ x: b.x, y: b.y, z: b.z, w: b.w, h: 2, d: b.d }, spec.material === 'stainless' ? metal : new THREE.MeshPhysicalMaterial({ color: spec.color, roughness: 0.4 }));
-      const tx = tapX(spec, b.w);
-      if (tx != null) {
-        cyl(b.x + tx, b.y + 130, b.z + 25, 14, 260, metal);
-        const spout = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 180, 12), metal);
-        spout.rotation.x = Math.PI / 2;
-        spout.position.set(b.x + tx, b.y + 255, b.z + 110);
-        g.add(spout);
-      }
+      // hollow bowls dropping into the worktop cut-out, deck with openings, drainer ribs, swan-neck tap
+      g.add(sinkObject(a, b));
       break;
     }
     case 'oven':
@@ -590,7 +496,9 @@ export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt:
         const fin = partFinish(cat, unit, p.role, board);
         mat = fin ? finishMaterial(fin) : boardMat(board, b);
       }
-      const obj = boxMesh(b, mat, p.kind !== 'glass');
+      // a worktop with a sink in it gets the sink's bowl openings cut out
+      const cut = p.kind === 'counter' && !b.meta?.shape ? holesIn(b, unitSinkHoles(build, cat)) : [];
+      const obj = cut.length ? slabWithHoles(b.x, b.z, b.w, b.d, b.y, b.h, cut, mat) : boxMesh(b, mat, p.kind !== 'glass');
       target(b).add(obj);
       if (b.meta?.style && b.meta.style !== 'flat' && p.role === 'finish') root.add(panelDecoration(b, mat, unit));
     }
@@ -639,14 +547,12 @@ export function buildUnitObject(unit: Unit, build: UnitBuild, cat: Catalog, opt:
     }
   }
 
-  for (const r of build.rails) root.add(boxMesh(r.box, metal, false));
+  for (const r of build.rails) root.add(railObject(r.box));
   for (const ins of build.inserts) {
-    const geo = boxGeo(ins.box);
-    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#8d949b' }));
-    lines.position.set(ins.box.x + ins.box.w / 2, ins.box.y + ins.box.h / 2, ins.box.z + ins.box.d / 2);
-    root.add(lines);
-    const tiers = Math.max(1, Math.floor(ins.box.h / 300));
-    for (let k = 0; k < tiers; k++) root.add(boxMesh({ x: ins.box.x, y: ins.box.y + (ins.box.h * k) / tiers + 5, z: ins.box.z, w: ins.box.w, h: 4, d: ins.box.d, meta: ins.box.meta }, metal, false));
+    const acc = cat.accessories.find((x) => x.id === ins.accessoryId);
+    const o = insertObject(ins.accessoryId, acc?.name ?? '', ins.box);
+    if (ins.ref) o.traverse((c) => (c.userData.ref = ins.ref));
+    root.add(o);
   }
   for (const ap of build.appliances) {
     const a = cat.appliances.find((x) => x.id === ap.applianceId);
@@ -775,7 +681,17 @@ export function buildRunObject(run: Run, rb: RunBuild, cat: Catalog, opt: SceneO
   const counter = cat.countertops.find((c) => c.id === run.countertopId);
   for (const ep of rb.extraPlacements) {
     const g = new THREE.Group();
-    if (ep.kind === 'counter') g.add(boxMesh(ep.box, counterMaterial(cat, ep.materialId ? (cat.countertops.find((c) => c.id === ep.materialId) ?? counter) : counter)));
+    if (ep.kind === 'counter') {
+      const mat = counterMaterial(cat, ep.materialId ? (cat.countertops.find((c) => c.id === ep.materialId) ?? counter) : counter);
+      // sinks in the cabinets under this worktop, moved into the worktop's frame
+      const hs = ep.materialId
+        ? []
+        : rb.pieces
+            .filter((pc) => pc.place.leg === ep.place.leg)
+            .flatMap((pc) => unitSinkHoles(pc.build, cat).map((h) => ({ ...h, x: h.x + pc.place.s - ep.place.s })));
+      const cut = holesIn(ep.box, hs);
+      g.add(cut.length ? slabWithHoles(ep.box.x, ep.box.z, ep.box.w, ep.box.d, ep.box.y, ep.box.h, cut, mat) : boxMesh(ep.box, mat));
+    }
     else if (ep.kind === 'panel') {
       const b = cat.boards.find((x) => x.id === ep.materialId);
       if (ep.slats) {
@@ -845,7 +761,22 @@ export function buildAssemblyObject(a: Assembly, ab: AssemblyBuild, cat: Catalog
   }
   if (ab.top) {
     const counter = cat.countertops.find((c) => c.id === a.top.countertopId);
-    root.add(boxMesh(ab.top, counterMaterial(cat, counter)));
+    // sinks in the group's cabinets, turned and moved into the group frame
+    const hs = ab.pieces.flatMap(({ piece, build }) => {
+      if (!build) return [];
+      const th = (-piece.rot * Math.PI) / 180;
+      const c = Math.round(Math.cos(th) * 1e6) / 1e6;
+      const sn = Math.round(Math.sin(th) * 1e6) / 1e6;
+      const tf = (x: number, z: number): [number, number] => [piece.x + x * c + z * sn, piece.z - x * sn + z * c];
+      return unitSinkHoles(build, cat).map((h) => {
+        const p0 = tf(h.x, h.z);
+        const p1 = tf(h.x + h.w, h.z + h.d);
+        return { x: Math.min(p0[0], p1[0]), z: Math.min(p0[1], p1[1]), w: Math.abs(p1[0] - p0[0]), d: Math.abs(p1[1] - p0[1]), r: h.r, y: h.y };
+      });
+    });
+    const cut = holesIn(ab.top, hs);
+    const mat = counterMaterial(cat, counter);
+    root.add(cut.length ? slabWithHoles(ab.top.x, ab.top.z, ab.top.w, ab.top.d, ab.top.y, ab.top.h, cut, mat) : boxMesh(ab.top, mat));
   }
   return root;
 }
@@ -1095,6 +1026,30 @@ export function roomBounds(room: Room): Bounds {
 }
 
 export const ROOM_VIEW_DIR: [number, number, number] = [0.45, 1.05, 1];
+
+/** Bowl openings of every sink in a cabinet build (cabinet coordinates), with the sink's top height. */
+function unitSinkHoles(build: UnitBuild, cat: Catalog): { x: number; z: number; w: number; d: number; r: number; y: number }[] {
+  const out: { x: number; z: number; w: number; d: number; r: number; y: number }[] = [];
+  for (const ap of build.appliances) {
+    const a = cat.appliances.find((x) => x.id === ap.applianceId);
+    if (a?.category === 'sink') for (const h of sinkHoles(a, ap.box)) out.push({ ...h, y: ap.box.y });
+  }
+  return out;
+}
+
+/** A worktop slab for a cabinet shown on its own (kitchen worktop context), with its sink cut-outs. */
+export function worktopForUnit(b: PartBox, color: string, build: UnitBuild, cat: Catalog): THREE.Object3D {
+  const mat = surfaceMaterial(color, 'satin');
+  const cut = holesIn(b, unitSinkHoles(build, cat));
+  return cut.length ? slabWithHoles(b.x, b.z, b.w, b.d, b.y, b.h, cut, mat) : boxMesh(b, mat);
+}
+
+/** The holes that fall inside a worktop box (at its top), clipped to it. */
+function holesIn(b: PartBox, hs: { x: number; z: number; w: number; d: number; r: number; y: number }[]) {
+  return hs
+    .filter((h) => Math.abs(h.y - (b.y + b.h)) < 40 && h.x >= b.x + 5 && h.x + h.w <= b.x + b.w - 5 && h.z >= b.z + 5 && h.z + h.d <= b.z + b.d - 5)
+    .map(({ x, z, w, d, r }) => ({ x, z, w, d, r }));
+}
 
 const tileTexCache = new Map<string, THREE.CanvasTexture>();
 /** One tile with a thin grout line and a soft marble-like variation; repeated once per tile size. */

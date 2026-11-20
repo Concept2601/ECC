@@ -11,6 +11,17 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.2.0',
+    date: '2026-11-20',
+    title: "Realistic 3D sinks, pull-outs and rails",
+    added: [
+      "Hollow sinks in 3D: real bowl openings in the deck, bowls that drop below the worktop through a cut-out, drains, overflows, ribbed drainers and a swan-neck mixer tap — for any custom layout (two drainers and a bowl, double bowls, 1½ bowls…), inset or undermount, stainless, granite composite or ceramic",
+      "Worktops get the sink cut-out in single cabinets, kitchen worktops and island tops",
+      "Realistic pull-outs and organisers: chrome wire baskets (pantry and vegetable racks), twin-bin pull-out with bins, spice racks, carousel trays, magic-corner baskets, cutlery tray dividers and a bottle rack with bottles",
+      "Hanging rails as chrome tubes on end brackets",
+    ],
+  },
+  {
     version: '3.1.5',
     date: '2026-11-20',
     title: "Simpler, cleaner screens",

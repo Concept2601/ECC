@@ -2,6 +2,13 @@
 
 _En-Quote was called WoodQuote by 2601 up to version 2.3._
 
+## 3.1.5 — Simpler, cleaner screens (2026-11-20)
+
+### Updated
+- Quotation design tab: Unit, Kitchen and Island / row / slats / appliance buttons on one row; room layout and “Render the whole room” in one slim card
+- Cabinet designer: one slim toolbar with 3D / 2D / Both and a cabinet-type dropdown (replaces the row of type chips)
+- Fewer, grouped tabs and full-width layouts carried through the kitchen, group and room designers
+
 ## 3.1.4 — Smoother Windows app, one cabinet editor at full width, snapping and new boards (2026-11-20)
 
 ### Added

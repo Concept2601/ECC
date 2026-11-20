@@ -11,6 +11,16 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.1.5',
+    date: '2026-11-20',
+    title: "Simpler, cleaner screens",
+    updated: [
+      "Quotation design tab: Unit, Kitchen and Island / row / slats / appliance buttons on one row; room layout and “Render the whole room” in one slim card",
+      "Cabinet designer: one slim toolbar with 3D / 2D / Both and a cabinet-type dropdown (replaces the row of type chips)",
+      "Fewer, grouped tabs and full-width layouts carried through the kitchen, group and room designers",
+    ],
+  },
+  {
     version: '3.1.4',
     date: '2026-11-20',
     title: "Smoother Windows app, one cabinet editor at full width, snapping and new boards",

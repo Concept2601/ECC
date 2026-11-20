@@ -241,35 +241,36 @@ export default function QuoteEditor() {
                 </div>
               );
             })}
-            {calc.items.length > 0 && (
-              <Link to={`/quotes/${quote.id}/room`} className="card flex items-center gap-3 border-emerald-200 bg-emerald-50 p-4 hover:border-emerald-400">
-                <Home size={22} className="text-emerald-700" />
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold text-emerald-900">{quote.room ? 'Room layout' : 'Show in a room layout'}</div>
-                  <div className="text-xs text-emerald-800">{quote.room ? `${quote.room.walls.length} walls · ${quote.room.openings.length} opening(s) · included in the quotation PDF` : 'Walls, windows, doors and open-plan beams so the client sees the design in their space'}</div>
-                </div>
-              </Link>
-            )}
-            {calc.items.length > 0 && (
-              <Link to={`/quotes/${quote.id}/room?studio=1`} className="card flex items-center gap-3 border-violet-200 bg-violet-50 p-4 hover:border-violet-400">
-                <Sparkles size={22} className="text-violet-700" />
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold text-violet-900">Render the whole room</div>
-                  <div className="text-xs text-violet-800">Every kitchen, BIC, TV unit and partition in place, with walls, windows, doors, ceiling and a tiled floor — photo-quality images and videos</div>
-                </div>
-              </Link>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-brand-700 hover:border-brand-400" onClick={() => setAdding(true)}>
-                <Plus size={18} /> Add unit (TV stand, wardrobe, island…)
+            {/* add anything in one row */}
+            <div className="grid gap-2 sm:grid-cols-3">
+              <button className="card flex w-full items-center justify-center gap-2 border-dashed px-3 py-3.5 text-sm font-semibold text-brand-700 hover:border-brand-400" onClick={() => setAdding(true)}>
+                <Plus size={17} /> Unit
+                <span className="hidden font-normal text-stone-500 lg:inline">TV stand, wardrobe, BIC…</span>
               </button>
-              <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-violet-700 hover:border-violet-400" onClick={() => setAddingRun(true)}>
-                <LayoutPanelTop size={18} /> Add whole kitchen (straight / L / U)
+              <button className="card flex w-full items-center justify-center gap-2 border-dashed px-3 py-3.5 text-sm font-semibold text-violet-700 hover:border-violet-400" onClick={() => setAddingRun(true)}>
+                <LayoutPanelTop size={17} /> Kitchen
+                <span className="hidden font-normal text-stone-500 lg:inline">straight, L, U</span>
               </button>
-              <button className="card flex w-full items-center justify-center gap-2 border-dashed p-5 font-semibold text-sky-700 hover:border-sky-400 sm:col-span-2" onClick={() => setAddingGroup(true)}>
-                <Boxes size={18} /> Add island, cabinet row (BIC / TV wall / wardrobes), wall slats, custom unit or loose appliance
+              <button className="card flex w-full items-center justify-center gap-2 border-dashed px-3 py-3.5 text-sm font-semibold text-sky-700 hover:border-sky-400" onClick={() => setAddingGroup(true)}>
+                <Boxes size={17} /> Island, row, slats…
+                <span className="hidden font-normal text-stone-500 lg:inline">or appliance</span>
               </button>
             </div>
+            {calc.items.length > 0 && (
+              <div className="card flex flex-wrap items-center gap-2 p-2.5">
+                <Home size={18} className="ml-1 text-emerald-700" />
+                <div className="min-w-0 flex-1 text-sm">
+                  <span className="font-semibold">{quote.room ? 'Room layout' : 'Room'}</span>
+                  <span className="ml-2 text-xs text-stone-500">{quote.room ? `${quote.room.walls.length} walls · ${quote.room.openings.length} opening(s) · in the PDF` : 'walls, windows and doors around the design'}</span>
+                </div>
+                <Link to={`/quotes/${quote.id}/room`} className="btn-secondary px-3 py-1.5 text-xs">
+                  <Home size={14} /> {quote.room ? 'Open' : 'Set up'}
+                </Link>
+                <Link to={`/quotes/${quote.id}/room?studio=1`} className="btn-primary px-3 py-1.5 text-xs">
+                  <Sparkles size={14} /> Render the whole room
+                </Link>
+              </div>
+            )}
           </div>
         )}
         {tab === 'design' && <ServicesCard quote={quote} up={up} />}

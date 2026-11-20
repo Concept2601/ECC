@@ -168,7 +168,7 @@ export default function RenderStudio() {
 
   const field = 'block text-[11px] font-semibold uppercase tracking-wide text-stone-500';
   return (
-    <div className="theme-fixed fixed inset-0 z-[80] flex flex-col bg-[#111317] text-stone-200 md:flex-row">
+    <div className="theme-fixed fixed inset-0 z-[80] flex flex-col bg-[#12171C] text-stone-200 md:flex-row">
       <div className="relative min-h-[45vh] flex-1">
         <div ref={host} className="absolute inset-0" />
         <div className="absolute left-3 top-3 flex items-center gap-2">
@@ -220,7 +220,7 @@ export default function RenderStudio() {
         )}
       </div>
 
-      <aside className="max-h-[55vh] w-full shrink-0 space-y-4 overflow-y-auto border-white/5 bg-[#16181d] p-4 md:max-h-none md:w-[340px] md:border-l">
+      <aside className="max-h-[55vh] w-full shrink-0 space-y-4 overflow-y-auto border-white/5 bg-[#1A2028] p-4 md:max-h-none md:w-[340px] md:border-l">
         <div className="flex gap-1 rounded-xl bg-white/5 p-1">
           {(
             [

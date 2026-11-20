@@ -9,7 +9,7 @@ import { DEVELOPER } from '../app/developer';
 import { usePrefs } from '../app/prefs';
 import type { Trade } from '../lib/types';
 import { useStore } from '../store';
-import { LogoMark, Wordmark } from './Logo';
+import { LogoMark, Mark, Wordmark } from './Logo';
 
 export const useDrawer = create<{ open: boolean; launcher: boolean }>(() => ({ open: false, launcher: false }));
 
@@ -52,10 +52,10 @@ export default function Sidebar() {
   return (
     <>
       {open && <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] md:hidden" onClick={() => useDrawer.setState({ open: false })} />}
-      <aside className={`theme-fixed safe-top fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#14161a] text-stone-200 transition-transform duration-200 md:translate-x-0 ${open ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+      <aside className={`theme-fixed safe-top fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#12171C] text-stone-200 transition-transform duration-200 md:translate-x-0 ${open ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div className="flex items-center gap-2.5 px-4 pb-4 pt-5">
-          <LogoMark size={34} />
-          <Wordmark dark className="text-xl" />
+          <Mark size={34} />
+          <Wordmark dark className="text-[22px]" />
           <button className="ml-auto rounded-lg p-1.5 text-stone-400 hover:bg-white/10 md:hidden" aria-label="Close menu" onClick={() => useDrawer.setState({ open: false })}>
             <X size={18} />
           </button>
@@ -97,9 +97,14 @@ export default function Sidebar() {
           <p className="px-3 pb-1 pt-5 text-[10px] font-semibold uppercase tracking-widest text-stone-600">App</p>
           <Item to="/settings" end icon={SettingsIcon} label="Settings" />
         </nav>
-        <div className="safe-bottom flex items-center gap-2 border-t border-white/5 px-4 py-2.5 text-[11px] text-stone-600">
-          <span className="flex-1">
-            v{DEVELOPER.version} · {DEVELOPER.name}
+        <div className="safe-bottom flex items-center gap-2.5 border-t border-white/[.07] px-3.5 py-3 text-[11px] text-stone-600">
+          {/* the brand signature: icon, wordmark, version and developer */}
+          <LogoMark size={30} />
+          <span className="min-w-0 flex-1 leading-tight">
+            <Wordmark dark className="block text-[14px]" />
+            <span className="mt-0.5 block font-mono text-[10.5px] text-[#7F8A96]" style={{ fontFamily: '"JetBrains Mono", ui-monospace, Consolas, monospace' }}>
+              v{DEVELOPER.version} · by Sir 2601
+            </span>
           </span>
           <ThemeSwitch />
         </div>

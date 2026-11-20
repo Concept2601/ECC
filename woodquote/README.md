@@ -119,3 +119,7 @@ npm run build
 ## Diagram reader setup
 
 Create an API key at <https://console.anthropic.com/settings/keys> and paste it into **Settings → Diagram reader (AI)**. The key is stored only on the device, and the app calls the Anthropic API directly. The default model is `claude-opus-5-5`.
+
+## Brand assets
+
+The logo, app icons and splash screens all come from `brand/mark.mjs` (En-Quote Brand Guide v1.0). After changing it, run `node scripts/brand-assets.mjs` (needs Playwright's Chromium and ImageMagick) to regenerate the web, Windows, Android and iPhone images.

@@ -1,5 +1,6 @@
 // Licence screen (shown until the app is activated) and the developer's
 // licence manager for issuing codes from an authenticator app.
+import { Wordmark } from './Logo';
 import { KeyRound, Loader2, Lock, ShieldCheck } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -78,12 +79,12 @@ function Screen({ state, onDone }: { state: LicenceState & { ok: false }; onDone
           ? 'The licence on this device is not valid. Enter a code to activate again.'
           : 'Enter the email this copy is licensed to and the 6-digit code from the developer.';
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 p-4">
+    <div className="flex min-h-[100dvh] items-center justify-center theme-fixed p-4" style={{ background: 'radial-gradient(120% 100% at 50% 0%, #26303B 0%, #12171C 55%, #0B0F13 100%)' }}>
       <div className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-xl">
         <div className="flex items-center gap-3">
           <img src="./favicon.svg" className="h-12 w-12" />
           <div>
-            <div className="text-lg font-bold">{DEVELOPER.product}</div>
+            <Wordmark className="text-[26px]" />
             <div className="text-xs text-stone-500">Licensed software</div>
           </div>
         </div>

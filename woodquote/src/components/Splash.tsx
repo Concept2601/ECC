@@ -6,7 +6,7 @@ import { APP_TAGLINE } from '../app/brand';
 import { DEVELOPER } from '../app/developer';
 import { warmTotals } from '../app/totals';
 import { useStore } from '../store';
-import { LogoMark, Wordmark } from './Logo';
+import { Mark, Wordmark } from './Logo';
 
 const STEPS = ['Opening your data', 'Loading workspaces', 'Loading finish textures', 'Preparing quotations', 'Ready'];
 
@@ -45,17 +45,20 @@ export default function Splash({ preload, onDone }: { preload: () => Promise<unk
   }, [hydrated, preload, onDone]);
 
   return (
-    <div className="theme-fixed fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#111317] text-white">
-      <div className="pointer-events-none absolute inset-0 opacity-60" style={{ background: 'radial-gradient(60% 50% at 50% 35%, rgba(196,138,75,.25), transparent 70%)' }} />
+    <div className="theme-fixed fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#12171C] text-white">
+      <div className="pointer-events-none absolute inset-0 opacity-60" style={{ background: 'radial-gradient(120% 100% at 50% 0%, #26303B 0%, #12171C 55%, #0B0F13 100%)' }} />
       <div className="relative flex flex-col items-center gap-5 px-8">
-        <LogoMark size={76} className="animate-[pulse_2.4s_ease-in-out_infinite] drop-shadow-xl" />
+        <Mark size={84} className="animate-[pulse_2.4s_ease-in-out_infinite]" />
         <div className="text-center">
-          <Wordmark dark className="text-4xl" />
-          <p className="mt-1 text-sm text-stone-400">{APP_TAGLINE}</p>
+          <Wordmark dark className="text-[44px]" />
+          <p className="mt-3 text-[11px] uppercase tracking-[.32em] text-[#F2F4F6]/55" style={{ fontFamily: '"Outfit", system-ui, sans-serif', fontWeight: 300 }}>
+            by Sir 2601 · Think Different
+          </p>
+          <p className="mt-2 text-sm text-stone-400">{APP_TAGLINE}</p>
         </div>
         <div className="mt-6 w-64">
           <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-gradient-to-r from-brand-400 via-sky-400 to-teal-400 transition-[width] duration-300" style={{ width: `${pct}%` }} />
+            <div className="h-full rounded-full bg-gradient-to-r from-[#0A5C9C] via-[#4A9EE4] to-[#5CA6E6] transition-[width] duration-300" style={{ width: `${pct}%` }} />
           </div>
           <p className="mt-3 text-center text-xs text-stone-400" role="status">
             {STEPS[step]}…

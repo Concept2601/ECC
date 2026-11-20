@@ -10,8 +10,8 @@ export default function Launcher({ onPick }: { onPick: (t: Trade) => void }) {
   const showLauncher = usePrefs((s) => s.showLauncher);
   const set = usePrefs((s) => s.set);
   return (
-    <div className="fixed inset-0 z-[90] overflow-y-auto bg-[#111317] text-white">
-      <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(70% 45% at 50% 0%, rgba(196,138,75,.18), transparent 70%)' }} />
+    <div className="fixed inset-0 z-[90] overflow-y-auto bg-[#12171C] text-white">
+      <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(120% 80% at 50% 0%, #26303B 0%, rgba(18,23,28,0) 70%)' }} />
       <div className="relative mx-auto flex min-h-full max-w-5xl flex-col justify-center px-5 py-10">
         <div className="mb-10 flex items-center gap-3">
           <LogoMark size={44} />

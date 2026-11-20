@@ -86,7 +86,7 @@ export default function Home() {
 
   return (
     <div>
-      <div className="safe-top relative overflow-hidden bg-[#14161a] px-4 pb-16 pt-6 text-white">
+      <div className="safe-top relative overflow-hidden bg-[#12171C] px-4 pb-16 pt-6 text-white">
         <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full opacity-40 blur-3xl" style={{ background: meta.accent }} />
         <div className="relative mx-auto max-w-5xl">
           <div className="flex items-center gap-3">

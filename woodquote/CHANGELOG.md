@@ -2,6 +2,14 @@
 
 _En-Quote was called WoodQuote by 2601 up to version 2.3._
 
+## 3.2.2 — New En-Quote brand: the Folio mark (2026-11-20)
+
+### Updated
+- New logo: the Folio mark — a finished quote sheet with a slashed quotation mark and an orange full stop — and the En/Quote wordmark in Outfit
+- New app icons on Windows, Android (adaptive, round and themed / monochrome icons) and iPhone, plus new splash screens and web icons
+- Brand colours through the app: graphite side bar and start screens, Think Different blue for buttons and highlights, orange only as the full stop
+- Signature at the bottom of the side bar: app icon, wordmark, version and “by Sir 2601”
+
 ## 3.2.1 — Smooth measurement editing, room doors and windows, dark mode (2026-11-20)
 
 ### Added

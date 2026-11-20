@@ -1,7 +1,7 @@
 {
   "name": "woodquote-desktop",
   "productName": "En-Quote",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "Joinery, ceilings and tiling quotations, 3D designs, invoices and receipts",
   "author": "Zusly Projects",
   "private": true,
@@ -44,7 +44,7 @@
           ]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

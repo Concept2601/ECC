@@ -11,6 +11,17 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.2.2',
+    date: '2026-11-20',
+    title: "New En-Quote brand: the Folio mark",
+    updated: [
+      "New logo: the Folio mark — a finished quote sheet with a slashed quotation mark and an orange full stop — and the En/Quote wordmark in Outfit",
+      "New app icons on Windows, Android (adaptive, round and themed / monochrome icons) and iPhone, plus new splash screens and web icons",
+      "Brand colours through the app: graphite side bar and start screens, Think Different blue for buttons and highlights, orange only as the full stop",
+      "Signature at the bottom of the side bar: app icon, wordmark, version and “by Sir 2601”",
+    ],
+  },
+  {
     version: '3.2.1',
     date: '2026-11-20',
     title: "Smooth measurement editing, room doors and windows, dark mode",

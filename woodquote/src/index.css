@@ -23,10 +23,10 @@ html.dark .theme-fixed {
 html.dark .bg-white, html.dark .card, html.dark .input, html.dark .btn-secondary { background-color: rgb(var(--surface)); }
 html.dark .bg-white\/90, html.dark .bg-white\/95, html.dark .bg-white\/80 { background-color: rgb(var(--surface) / 0.9); }
 html.dark .theme-fixed .bg-white { background-color: #ffffff; }
-html.dark .bg-brand-50 { background-color: rgb(169 111 51 / 0.16); }
-html.dark .bg-brand-50\/40 { background-color: rgb(169 111 51 / 0.1); }
-html.dark .text-brand-700, html.dark .text-brand-800 { color: #e6cba8; }
-html.dark .border-brand-200, html.dark .border-brand-300 { border-color: rgb(169 111 51 / 0.45); }
+html.dark .bg-brand-50 { background-color: rgb(92 166 230 / 0.14); }
+html.dark .bg-brand-50\/40 { background-color: rgb(92 166 230 / 0.08); }
+html.dark .text-brand-700, html.dark .text-brand-800 { color: #9cc9ee; }
+html.dark .border-brand-200, html.dark .border-brand-300 { border-color: rgb(92 166 230 / 0.4); }
 html.dark .bg-amber-50 { background-color: rgb(245 158 11 / 0.14); }
 html.dark .text-amber-900, html.dark .text-amber-800, html.dark .text-amber-700 { color: #fcd34d; }
 html.dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.12); }

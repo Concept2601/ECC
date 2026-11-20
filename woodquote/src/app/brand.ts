@@ -17,7 +17,7 @@ export interface TradeMeta {
 }
 
 export const TRADES: TradeMeta[] = [
-  { id: 'joinery', label: 'Joinery', blurb: 'Kitchens, BICs, wardrobes, TV units, islands and custom cabinets – designed in 3D with cut lists.', icon: Hammer, accent: '#a96f33', soft: '#f3e6d4', ink: '#6c4524' },
+  { id: 'joinery', label: 'Joinery', blurb: 'Kitchens, BICs, wardrobes, TV units, islands and custom cabinets – designed in 3D with cut lists.', icon: Hammer, accent: '#004577', soft: '#d7e8f7', ink: '#00385f' },
   { id: 'ceilings', label: 'Ceilings', blurb: 'Rhinoboard and PVC ceilings – brandering, cornices, designs, paint, lights and renovations.', icon: Layers, accent: '#2563eb', soft: '#dbeafe', ink: '#1e3a8a' },
   { id: 'tiling', label: 'Tiling', blurb: 'Floors and walls – tiles and boxes, adhesive, grout, trims, waterproofing and labour.', icon: Grid3x3, accent: '#0d9488', soft: '#ccfbf1', ink: '#134e4a' },
 ];

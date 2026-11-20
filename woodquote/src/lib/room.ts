@@ -286,6 +286,8 @@ export function wallMitres(room: Room): { start: number; end: number }[] {
     const j = i - 1;
     if (j < 0 && !closed) continue;
     const prev = (j + n) % n;
+    // a wall next to a cut-away (hidden) wall ends square, like a free end
+    if (!room.walls[i].visible || !room.walls[prev].visible) continue;
     const di = wallDir(room.walls[i]);
     const dj = wallDir(room.walls[prev]);
     const ni = nOut(i);
@@ -339,4 +341,66 @@ export function placeOnWall(room: Room, itemId: string, wall: WallSide, b: { x0:
   const left = orientation(room) > 0 ? b.x0 : b.x1;
   const [ox, oz] = placeXZ(left, b.z0, np);
   return { ...np, x: Math.round(v[0] + dx * offset - ox), z: Math.round(v[1] + dz * offset - oz) };
+}
+
+/* ------------------------------------------------------------- snapping */
+
+export interface SnapOptions {
+  on: boolean;
+  /** how close (mm) an item has to come before it snaps */
+  within: number;
+  /** space left between the item and the wall / item it snaps to (mm) */
+  gap: number;
+}
+export const DEFAULT_SNAP: SnapOptions = { on: true, within: 50, gap: 0 };
+
+/**
+ * Pull a dragged item against the nearest wall (inside face) and against the
+ * sides of other items when it comes within `within` mm, leaving `gap` mm.
+ */
+export function snapPlacement(room: Room, items: ItemPrice[], cat: Catalog, it: ItemPrice, p: RoomPlacement, opt: SnapOptions): RoomPlacement {
+  if (!opt.on) return p;
+  const v = vertices(room);
+  let best = { dx: 0, dz: 0, dist: Infinity };
+  let bestOther = { dx: 0, dz: 0, dist: Infinity };
+  const pts = footprints(it, cat, p).flat();
+  // walls: distance of the nearest point to each wall's inside face, measured into the room
+  room.walls.forEach((w, i) => {
+    const [dx, dz] = wallDir(w);
+    const [nx, nz] = inwardNormal(room, i);
+    let minD = Infinity;
+    let along0 = Infinity;
+    let along1 = -Infinity;
+    for (const [x, z] of pts) {
+      minD = Math.min(minD, (x - v[i][0]) * nx + (z - v[i][1]) * nz);
+      const a = (x - v[i][0]) * dx + (z - v[i][1]) * dz;
+      along0 = Math.min(along0, a);
+      along1 = Math.max(along1, a);
+    }
+    if (along1 < 0 || along0 > w.length) return; // not in front of this wall
+    const off = opt.gap - minD;
+    if (Math.abs(off) <= opt.within && Math.abs(off) < Math.abs(best.dist)) best = { dx: nx * off, dz: nz * off, dist: off };
+  });
+  // other items: line up side to side on the plan (axis-aligned outlines)
+  const bb = (ps: [number, number][]) => ({ x0: Math.min(...ps.map((q) => q[0])), x1: Math.max(...ps.map((q) => q[0])), z0: Math.min(...ps.map((q) => q[1])), z1: Math.max(...ps.map((q) => q[1])) });
+  const me = bb(pts);
+  for (const op of room.placements) {
+    if (op.itemId === it.id) continue;
+    const o = items.find((x) => x.id === op.itemId);
+    if (!o) continue;
+    const ob = bb(footprints(o, cat, op).flat());
+    const overlapZ = me.z0 < ob.z1 && me.z1 > ob.z0;
+    const overlapX = me.x0 < ob.x1 && me.x1 > ob.x0;
+    const tries: [number, number][] = [];
+    if (overlapZ) tries.push([ob.x1 + opt.gap - me.x0, 0], [ob.x0 - opt.gap - me.x1, 0]);
+    if (overlapX) tries.push([0, ob.z1 + opt.gap - me.z0], [0, ob.z0 - opt.gap - me.z1]);
+    for (const [dx, dz] of tries) {
+      const d = Math.abs(dx || dz);
+      if (d <= opt.within && d < Math.abs(bestOther.dist)) bestOther = { dx, dz, dist: d };
+    }
+  }
+  let out = p;
+  if (Number.isFinite(best.dist)) out = { ...out, x: Math.round(out.x + best.dx), z: Math.round(out.z + best.dz) };
+  if (Number.isFinite(bestOther.dist)) out = { ...out, x: Math.round(out.x + bestOther.dx), z: Math.round(out.z + bestOther.dz) };
+  return out;
 }

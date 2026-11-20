@@ -146,3 +146,35 @@ export function mergeSection(u: Unit, ref: SectionRef): SectionRef | null {
   }
   return { ...pref, path: [...pref.path!, n] };
 }
+
+/**
+ * Give one part a size typed by hand. The other parts keep the equal-split rule:
+ * those not sized by hand share what is left equally. When every other part was
+ * sized by hand, the next one gives or takes the difference.
+ * `mm` holds the current size of every part in mm (same order as `list`).
+ */
+export function resizeShared<T extends { size: number; custom?: boolean }>(list: T[], mm: number[], idx: number, value: number, min = 80) {
+  const total = mm.reduce((a, x) => a + x, 0);
+  list.forEach((x, i) => (x.size = mm[i]));
+  const others = list.length - 1;
+  const v = Math.min(total - min * others, Math.max(min, value));
+  list[idx].size = v;
+  list[idx].custom = true;
+  const free = list.filter((x, i) => i !== idx && !x.custom);
+  const fixed = list.reduce((a, x, i) => a + (i !== idx && x.custom ? x.size : 0), 0);
+  if (free.length && total - v - fixed >= min * free.length) {
+    free.forEach((x) => (x.size = (total - v - fixed) / free.length));
+    return;
+  }
+  // nothing left to share: the neighbour gives or takes the difference
+  const n = idx < list.length - 1 ? idx + 1 : idx - 1;
+  if (n < 0) return;
+  const rest = list.reduce((a, x, i) => a + (i !== idx && i !== n ? x.size : 0), 0);
+  list[n].size = Math.max(min, total - v - rest);
+}
+
+/** Back to equal parts: forget the hand-typed sizes. */
+export function makeEqual<T extends { size: number; custom?: boolean }>(list: T[]) {
+  const total = list.reduce((a, x) => a + x.size, 0);
+  list.forEach((x) => ((x.custom = false), (x.size = total / list.length)));
+}

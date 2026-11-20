@@ -1047,6 +1047,7 @@ function still(obj: THREE.Object3D, bounds: Bounds, width: number, height: numbe
   try {
     if (!stillRenderer) {
       stillRenderer = new THREE.WebGLRenderer({ antialias: !lowMemory(), preserveDrawingBuffer: true, powerPreference: 'low-power' });
+      stillRenderer.debug.checkShaderErrors = false;
       stillRenderer.domElement.addEventListener('webglcontextlost', (e) => {
         e.preventDefault();
         stillRenderer = null;

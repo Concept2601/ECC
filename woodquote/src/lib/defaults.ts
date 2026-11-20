@@ -69,7 +69,7 @@ export const defaultAppliances = (): Appliance[] => [
 ];
 
 /** Built-in library items added after 2.1, offered once to libraries saved by older versions. */
-export const DEFAULTS_ADDED_LATER = ['c-caesarstone', 'c-slate', 'c-tile-subway', 'c-tile-mosaic', 'c-tile-porcelain', 'ap-tv-32', 'ap-tv-40', 'ap-tv-41', 'ap-tv-42', 'ap-tv-43', 'ap-tv-46', 'ap-tv-50', 'ap-tv-65', 'ap-tv-75', 'ap-tv-85', 'ap-tv-100', 'r-push', 'sv-notch-drawer', ...pgBisonFinishes().map((f) => f.id), 'rl-support', 'l-clip', 't-stopper', 't-guide', 'fx-buffer', 'fx-anchor', 'fx-silicone', 'ap-washer-top', 'ap-dryer', 'ap-freezer-chest', 'ap-bin-pedal', 'ap-bin-twin', 'ap-tv-55'];
+export const DEFAULTS_ADDED_LATER = ['b-mel32-white', 'b-mdf32', 'b-chip32', 'b-cover5', 'c-caesarstone', 'c-slate', 'c-tile-subway', 'c-tile-mosaic', 'c-tile-porcelain', 'ap-tv-32', 'ap-tv-40', 'ap-tv-41', 'ap-tv-42', 'ap-tv-43', 'ap-tv-46', 'ap-tv-50', 'ap-tv-65', 'ap-tv-75', 'ap-tv-85', 'ap-tv-100', 'r-push', 'sv-notch-drawer', ...pgBisonFinishes().map((f) => f.id), 'rl-support', 'l-clip', 't-stopper', 't-guide', 'fx-buffer', 'fx-anchor', 'fx-silicone', 'ap-washer-top', 'ap-dryer', 'ap-freezer-chest', 'ap-bin-pedal', 'ap-bin-twin', 'ap-tv-55'];
 
 
 export const defaultCatalog = (): Catalog => ({
@@ -85,6 +85,10 @@ export const defaultCatalog = (): Catalog => ({
     { id: 'b-hmr18', name: 'HMR moisture resistant 18mm', category: 'HMR', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 60, color: '#9fae8c', grain: false, texture: 'plain', finish: 'matte' },
     { id: 'b-ply18', name: 'Plywood 18mm', category: 'Plywood', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 55, color: '#d8b98a', grain: true, texture: 'wood', finish: 'satin' },
     { id: 'b-pine32', name: 'Pine laminated board 32mm', category: 'Solid wood', thickness: 32, sheetLength: 2400, sheetWidth: 600, pricePerSheet: 65, color: '#dcb57c', grain: true, texture: 'wood', finish: 'satin' },
+    { id: 'b-mel32-white', name: 'Melamine chipboard white 32mm (bases / tops)', category: 'Melamine', thickness: 32, sheetLength: 2750, sheetWidth: 1830, pricePerSheet: 78, color: '#f2f0ea', grain: false, texture: 'plain', finish: 'matte' },
+    { id: 'b-mdf32', name: 'MDF 32mm (bases / tops)', category: 'MDF', thickness: 32, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 85, color: '#c9a97c', grain: false, texture: 'plain', finish: 'matte' },
+    { id: 'b-chip32', name: 'Chipboard 32mm raw (sub-tops / plinths)', category: 'Chipboard', thickness: 32, sheetLength: 2750, sheetWidth: 1830, pricePerSheet: 55, color: '#c8b08a', grain: false, texture: 'plain', finish: 'matte' },
+    { id: 'b-cover5', name: 'Back cover sheet white 5mm (light, cheaper than board)', category: 'Back cover', thickness: 5, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 18, color: '#f1eee7', grain: false, texture: 'plain', finish: 'matte' },
     { id: 'b-hb3', name: 'Hardboard white 3mm (backs)', category: 'Hardboard', thickness: 3, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 12, color: '#efece4', grain: false, texture: 'plain', finish: 'matte' },
   ],
   edging: [

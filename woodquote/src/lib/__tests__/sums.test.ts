@@ -52,3 +52,17 @@ describe('dividing a compartment', () => {
     expect(parts.map((p) => p.size)).toEqual([0.25, 0.25, 1.5]);
   });
 });
+
+import { makeEqual, resizeShared } from '../sections';
+describe('custom size after an equal split', () => {
+  it('the others keep sharing equally, and equal puts it back', () => {
+    const list = [{ size: 1 }, { size: 1 }, { size: 1 }] as { size: number; custom?: boolean }[];
+    resizeShared(list, [600, 600, 600], 0, 800);
+    expect(list.map((x) => x.size)).toEqual([800, 500, 500]);
+    resizeShared(list, [800, 500, 500], 2, 400);
+    expect(list.map((x) => x.size)).toEqual([800, 600, 400]);
+    makeEqual(list);
+    expect(list.map((x) => x.size)).toEqual([600, 600, 600]);
+    expect(list.some((x) => x.custom)).toBe(false);
+  });
+});

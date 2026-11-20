@@ -34,7 +34,8 @@ export const AUTOSAVE_CHOICES = [0, 1, 2, 5, 10, 15, 30];
 /** Phones get the light setting (heavy 3D made some Android phones close the app). */
 function defaultQuality(): RenderQuality {
   if (typeof window === 'undefined') return 'balanced';
-  if (window.woodquoteDesktop) return 'high';
+  // Windows laptops: balanced keeps editing smooth; pick High in Settings for a dedicated graphics card
+  if (window.woodquoteDesktop) return 'balanced';
   const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
   if (/Android|iPhone|iPad/i.test(navigator.userAgent)) return mem >= 8 ? 'balanced' : 'saver';
   return window.innerWidth >= 1024 ? 'high' : 'balanced';
@@ -61,6 +62,17 @@ export const usePrefs = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
       showLauncher: true,
       set: (p) => set(p),
     }),
-    { name: 'woodquote-prefs', storage: safeStorage, partialize: ({ set: _s, ...rest }) => rest },
+    {
+      name: 'woodquote-prefs',
+      storage: safeStorage,
+      partialize: ({ set: _s, ...rest }) => rest,
+      version: 2,
+      // 3.1.4: the desktop app used to start on High, which made some Windows laptops stutter
+      migrate: (old, v) => {
+        const p = old as Prefs;
+        if (v < 2 && typeof window !== 'undefined' && window.woodquoteDesktop && p.renderQuality === 'high') p.renderQuality = 'balanced';
+        return p;
+      },
+    },
   ),
 );

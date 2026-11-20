@@ -54,6 +54,26 @@ const VIEWS: { v: ViewName; label: string }[] = [
 ];
 
 /** Interactive orbitable 3D render. Tap a compartment to select it. */
+/** The graphics card WebGL runs on (for Settings), and whether it is a slow software fallback. */
+export function graphicsName(r: THREE.WebGLRenderer): string {
+  try {
+    const gl = r.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+  } catch {
+    return 'unknown';
+  }
+}
+function softwareGraphics(r: THREE.WebGLRenderer): boolean {
+  const name = graphicsName(r);
+  try {
+    localStorage.setItem('enquote-gpu', name);
+  } catch {
+    /* private mode */
+  }
+  return /swiftshader|software|basic render|llvmpipe|softpipe/i.test(name);
+}
+
 export default function Viewer3D(props: Props) {
   // a new quality setting needs a new WebGL renderer
   const quality = usePrefs((s) => s.renderQuality);
@@ -103,12 +123,18 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
       el.innerHTML = '<div class="p-6 text-sm text-stone-500">3D preview is not supported on this device.</div>';
       return;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatio));
+    // checking every shader for errors blocks the page while the driver answers (slow on Windows)
+    renderer.debug.checkShaderErrors = false;
+    // a computer drawing 3D in software (no usable graphics driver) gets the light mode automatically
+    const soft = softwareGraphics(renderer);
+    renderer.setPixelRatio(soft ? 1 : Math.min(window.devicePixelRatio, q.pixelRatio));
     el.appendChild(renderer.domElement);
     Object.assign(renderer.domElement.style, { touchAction: 'none', display: 'block', width: '100%', height: '100%' });
-    const stage = createStage(renderer, q.shadows);
+    const stage = createStage(renderer, soft ? 0 : q.shadows);
     const controls = new OrbitControls(stage.camera, renderer.domElement);
     controls.enableDamping = true;
+    // settle quickly: a long glide keeps the GPU busy and makes the rest of the app stutter
+    controls.dampingFactor = 0.15;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
     // zoom (wheel or pinch) towards the point under the pointer, not the middle of the view
     controls.zoomToCursor = true;
@@ -168,6 +194,9 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
     };
     renderer.domElement.addEventListener('dblclick', onDbl);
 
+    const lastPos = new THREE.Vector3();
+    const lastTarget = new THREE.Vector3();
+    const lastQuat = new THREE.Quaternion();
     const loop = () => {
       if (glide) {
         glide.t = Math.min(1, glide.t + 0.08);
@@ -179,9 +208,18 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
         if (glide.t >= 1) glide = null;
         dirty = true;
       }
-      const moving = controls.update();
+      let moving = controls.update();
+      if (moving && !dirty) {
+        // the last bit of the glide is invisible: stop drawing once the camera barely moves
+        const cam = stage.camera;
+        const moved = cam.position.distanceTo(lastPos) + controls.target.distanceTo(lastTarget);
+        if (moved < 0.5 && cam.quaternion.angleTo(lastQuat) < 0.0005) moving = false;
+      }
       if ((dirty || moving) && visible) {
         renderer.render(stage.scene, stage.camera);
+        lastPos.copy(stage.camera.position);
+        lastTarget.copy(controls.target);
+        lastQuat.copy(stage.camera.quaternion);
         dirty = false;
       }
       raf = requestAnimationFrame(loop);

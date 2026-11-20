@@ -546,7 +546,7 @@ export default function AssemblyDesigner() {
                 <div className="flex flex-wrap gap-2">
                   {sel.unit && (
                     <Link className="btn-primary" to={`/quotes/${quote.id}/units/${sel.unit.id}`}>
-                      <Pencil size={16} /> Design – fronts, drawers, hardware
+                      <Pencil size={16} /> Edit cabinet – all controls
                     </Link>
                   )}
                   <button className="btn-secondary" onClick={() => duplicate(sel.id)}>

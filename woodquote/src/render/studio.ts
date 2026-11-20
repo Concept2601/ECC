@@ -153,6 +153,7 @@ export class Studio {
   constructor(host: HTMLElement, src: StudioScene) {
     this.src = src;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true, powerPreference: 'high-performance' });
+    this.renderer.debug.checkShaderErrors = false;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;

@@ -272,7 +272,7 @@ export default function RunDesigner() {
           </div>
         ))}
         <div className="sticky top-0 z-10 border-b border-stone-200 bg-stone-100/95 px-3 backdrop-blur">
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-[1800px]">
             <Tabs<Tab>
               value={tab}
               onChange={setTab}
@@ -284,7 +284,7 @@ export default function RunDesigner() {
             />
           </div>
         </div>
-        <div className="mx-auto max-w-5xl space-y-3 p-3">
+        <div className="mx-auto max-w-[1800px] space-y-3 p-3">
           {tab === 'layout' && nLegs > 1 && (
             <Card title="Corners – which wall runs into the corner">
               <div className="grid gap-3 md:grid-cols-2">
@@ -419,7 +419,20 @@ export default function RunDesigner() {
 
           {tab === 'module' &&
             (sel ? (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                <div className="flex flex-wrap gap-2 md:col-span-2 2xl:col-span-3">
+                  {sel.m.base && (
+                    <button className="btn-primary" onClick={() => nav(`/quotes/${quote.id}/units/${sel.m.base!.id}`)}>
+                      <Pencil size={16} /> Edit {sel.m.kind === 'tall' ? 'tall' : 'base'} cabinet – all controls
+                    </button>
+                  )}
+                  {sel.m.wall && (
+                    <button className="btn-secondary" onClick={() => nav(`/quotes/${quote.id}/units/${sel.m.wall!.id}`)}>
+                      <Pencil size={16} /> Edit wall cabinet above – all controls
+                    </button>
+                  )}
+                  <span className="self-center text-xs text-stone-500">The same full designer as every other cabinet: fronts, openings, inset / overlay, glass, drawers, pull-outs, appliances, lighting.</span>
+                </div>
                 <Card
                   title={`${LEG_LABELS[sel.leg]} – position ${sel.i + 1}`}
                   actions={
@@ -578,21 +591,6 @@ export default function RunDesigner() {
                         <ApplianceSelect value={sel.m.hoodId} none="No hood" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.hoodId = v))} filter={(a) => a.category === 'hood'} />
                       </Field>
                     )}
-                  </div>
-                </Card>
-                <Card title="Design in detail">
-                  <div className="space-y-2">
-                    {sel.m.base && (
-                      <button className="btn-primary w-full justify-start" onClick={() => nav(`/quotes/${quote.id}/units/${sel.m.base!.id}`)}>
-                        <Pencil size={16} /> Design {sel.m.kind === 'tall' ? 'tall' : 'base'} cabinet – fronts, hinges, drawers, sink / hob, lights
-                      </button>
-                    )}
-                    {sel.m.wall && (
-                      <button className="btn-secondary w-full justify-start" onClick={() => nav(`/quotes/${quote.id}/units/${sel.m.wall!.id}`)}>
-                        <Pencil size={16} /> Design wall cabinet above
-                      </button>
-                    )}
-                    <p className="text-xs text-stone-500">Each cabinet opens in the full designer: fronts, opening directions, inset or overlay, glass, pull-outs, appliances and lighting.</p>
                   </div>
                 </Card>
               </div>

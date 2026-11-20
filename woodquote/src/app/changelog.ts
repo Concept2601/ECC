@@ -11,6 +11,27 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.1.4',
+    date: '2026-11-20',
+    title: "Smoother Windows app, one cabinet editor at full width, snapping and new boards",
+    added: [
+      "Snapping on the room plan: items snap against walls and each other while you drag, with your own snap distance and gap between them",
+      "Equal widths / Equal heights buttons next to the compartment sizes",
+      "5mm back cover sheet (lighter and cheaper than board) and 32mm boards (melamine, MDF, chipboard) for bases and tops",
+      "Settings › Developer information shows which graphics card the 3D uses, with a warning when it is drawn in software",
+    ],
+    updated: [
+      "Windows app: the 3D view stops drawing as soon as the view settles, shaders are no longer checked on every change, the desktop starts on Balanced quality, and computers without a usable graphics driver get a light 3D mode automatically — no more hiccups while editing",
+      "After an equal split you can type a custom size for any part; the others keep sharing the rest equally (and Equal puts them back)",
+      "One cabinet editor for every cabinet: kitchens, islands, TV stands and rows all open the same full designer with “Edit cabinet – all controls” first",
+      "The editor uses the full screen width; related settings are grouped into 6 tabs (Layout & fronts, Size top & base, Sides & materials, Hardware & lighting, Appliances, Cut list) and sit side by side on wide screens",
+      "Room plan: wall lengths on dimension lines outside the walls, labels sized to fit, window and door widths shown — no more overlapping labels",
+    ],
+    fixed: [
+      "Walls next to a cut-away wall end square instead of mitred",
+    ],
+  },
+  {
     version: '3.1.3',
     date: '2026-11-20',
     title: "Proper wall joints, partitions and pillars, any-shape kitchens and whole-room renders",

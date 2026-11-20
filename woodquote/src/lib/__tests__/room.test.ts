@@ -4,6 +4,7 @@ import { defaultRoom, newWall, wallMitres } from '../room';
 describe('wall joints', () => {
   it('outside corners of a closed rectangle run on by the wall thickness', () => {
     const r = defaultRoom();
+    r.walls.forEach((w) => (w.visible = true));
     const T = r.wallThickness;
     const m = wallMitres(r);
     for (const w of m) {
@@ -48,5 +49,17 @@ describe('kitchen row on any wall', () => {
     const [x, z] = placeXZ(0, 0, p);
     expect(Math.round(x)).toBe(4000);
     expect(Math.round(z)).toBe(0);
+  });
+});
+
+describe('square ends', () => {
+  it('a wall next to a cut-away wall ends square', () => {
+    const r = defaultRoom();
+    r.walls.forEach((w) => (w.visible = true));
+    r.walls[2].visible = false;
+    const m = wallMitres(r);
+    expect(m[1].end).toBe(0);
+    expect(m[3].start).toBe(0);
+    expect(m[0].start).not.toBe(0);
   });
 });

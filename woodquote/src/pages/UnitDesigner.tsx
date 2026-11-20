@@ -17,13 +17,17 @@ import { replaceUnit } from '../lib/locate';
 import FinishPicker from '../components/FinishPicker';
 import SinkDesigner from '../components/SinkDesigner';
 import { syncAssembly } from '../lib/assembly';
-import { cellRects, getSection, mergeSection, sameRef, shareEqually, splitSection } from '../lib/sections';
+import { cellRects, getSection, makeEqual, mergeSection, resizeShared, sameRef, shareEqually, splitSection } from '../lib/sections';
 import { ACCESSORY_LABELS, type AccessoryCategory, type FrontKind, type LightLocation, type ProductType, type SectionRef, type Unit } from '../lib/types';
 import { kelvinToHex, LIGHT_TEMPS, uid } from '../lib/util';
 import { accessoryPacksLabel } from '../pdf/pdf';
 import { useStore } from '../store';
 
 type Tab = 'layout' | 'size' | 'top' | 'sides' | 'materials' | 'hardware' | 'lights' | 'appliances' | 'parts';
+/** tabs shown: related settings are grouped so they sit together (side by side on wide screens) */
+type Group = 'layout' | 'size' | 'sides' | 'hardware' | 'appliances' | 'parts';
+const GROUPS: Record<Group, Tab[]> = { layout: ['layout'], size: ['size', 'top'], sides: ['sides', 'materials'], hardware: ['hardware', 'lights'], appliances: ['appliances'], parts: ['parts'] };
+const groupOf = (t: Tab): Group => (Object.keys(GROUPS) as Group[]).find((g) => GROUPS[g].includes(t)) ?? 'layout';
 
 function Stepper({ value, onChange, min = 0, max = 20 }: { value: number; onChange: (v: number) => void; min?: number; max?: number }) {
   return (
@@ -183,6 +187,8 @@ export default function UnitDesigner() {
   const calc = useQuoteCalc(quote);
   const fmt = useMoney();
   const [tab, setTab] = useState<Tab>('layout');
+  const group = groupOf(tab);
+  const show = (t: Tab) => GROUPS[group].includes(t);
   const [sel, setSel] = useState<Sel | null>({ bay: 0, section: 0 });
   const [mode, setMode] = useState<'3d' | '2d' | 'both'>(typeof window !== 'undefined' && window.innerWidth >= 900 ? 'both' : '3d');
   const [view2d, setView2d] = useState<EditorView>('front');
@@ -253,41 +259,29 @@ export default function UnitDesigner() {
       const parent = getSection(u, pref);
       if (!parent?.split) return;
       const sib = cells.filter((c) => c.ref.bay === s.bay && c.ref.section === s.section && (c.ref.path ?? []).length === s.path!.length && (c.ref.path ?? []).slice(0, -1).join('.') === pref.path.join('.'));
-      sib.forEach((c, k) => (parent.split!.parts[k].size = dim === 'w' ? c.w : c.h));
-      const idx = s.path[s.path.length - 1];
-      const n = idx < sib.length - 1 ? idx + 1 : idx - 1;
-      if (n < 0) return;
-      const total = (dim === 'w' ? sib[idx].w + sib[n].w : sib[idx].h + sib[n].h);
-      const nv = Math.min(total - 80, Math.max(80, v));
-      parent.split.parts[idx].size = nv;
-      parent.split.parts[n].size = total - nv;
-      parent.split.parts[idx].custom = true;
+      resizeShared(parent.split.parts, sib.map((c) => (dim === 'w' ? c.w : c.h)), s.path[s.path.length - 1], v);
     });
 
   const setBayMm = (v: number) =>
     up((u) => {
       if (!s) return;
-      elev.bays.forEach((b, i) => (u.bays[i].size = b.w));
-      const n = s.bay < u.bays.length - 1 ? s.bay + 1 : s.bay - 1;
-      if (n < 0) return;
-      const total = elev.bays[s.bay].w + elev.bays[n].w;
-      const nv = Math.min(total - 80, Math.max(80, v));
-      u.bays[s.bay].size = nv;
-      u.bays[n].size = total - nv;
-      u.bays[s.bay].custom = true;
+      resizeShared(u.bays, elev.bays.map((b) => b.w), s.bay, v);
     });
   const setSecMm = (v: number) =>
     up((u) => {
       if (!s) return;
-      const eb = elev.bays[s.bay];
-      eb.sections.forEach((x, j) => (u.bays[s.bay].sections[j].size = x.h));
-      const n = s.section < eb.sections.length - 1 ? s.section + 1 : s.section - 1;
-      if (n < 0) return;
-      const total = eb.sections[s.section].h + eb.sections[n].h;
-      const nv = Math.min(total - 80, Math.max(80, v));
-      u.bays[s.bay].sections[s.section].size = nv;
-      u.bays[s.bay].sections[n].size = total - nv;
-      u.bays[s.bay].sections[s.section].custom = true;
+      resizeShared(u.bays[s.bay].sections, elev.bays[s.bay].sections.map((x) => x.h), s.section, v);
+    });
+  /** the parts next to the selected one go back to equal sizes */
+  const equalise = (what: 'bays' | 'sections' | 'nested') =>
+    up((u) => {
+      if (!s) return;
+      if (what === 'bays') makeEqual(u.bays);
+      else if (what === 'sections') makeEqual(u.bays[s.bay].sections);
+      else if (s.path?.length) {
+        const parent = getSection(u, { ...s, path: s.path.slice(0, -1) });
+        if (parent?.split) makeEqual(parent.split.parts);
+      }
     });
   const setWidth = (v: number) =>
     updateQuote(quote.id, (q) => {
@@ -372,18 +366,15 @@ export default function UnitDesigner() {
           </div>
         )}
         <div className="sticky top-0 z-10 border-b border-stone-200 bg-stone-100/95 px-3 backdrop-blur">
-          <div className="mx-auto max-w-5xl">
-            <Tabs<Tab>
-              value={tab}
-              onChange={setTab}
+          <div className="mx-auto max-w-[1800px]">
+            <Tabs<Group>
+              value={group}
+              onChange={(g) => setTab(GROUPS[g][0])}
               tabs={[
                 { value: 'layout', label: 'Layout & fronts' },
-                { value: 'size', label: 'Size & mounting' },
-                { value: 'top', label: 'Top & base' },
-                { value: 'sides', label: 'Sides & back' },
-                { value: 'materials', label: 'Materials' },
-                { value: 'hardware', label: 'Hardware' },
-                { value: 'lights', label: `Lighting${unit.lights.length ? ` (${unit.lights.length})` : ''}` },
+                { value: 'size', label: 'Size, top & base' },
+                { value: 'sides', label: 'Sides & materials' },
+                { value: 'hardware', label: `Hardware & lighting${unit.lights.length ? ` (${unit.lights.length})` : ''}` },
                 { value: 'appliances', label: 'Appliances' },
                 { value: 'parts', label: `Cut list (${build.parts.reduce((a, p) => a + p.qty, 0)})` },
               ]}
@@ -391,8 +382,8 @@ export default function UnitDesigner() {
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-5xl space-y-3 p-3">
-          {tab === 'layout' && unit.corner && (
+        <div className={`mx-auto grid w-full max-w-[1800px] content-start items-start gap-3 p-3 ${GROUPS[group].length > 1 ? '2xl:grid-cols-2' : ''}`}>
+          {show('layout') && unit.corner && (
             <CornerCard
               unit={unit}
               inRun={inRun}
@@ -410,7 +401,7 @@ export default function UnitDesigner() {
               up={up}
             />
           )}
-          {tab === 'layout' && !unit.corner && (
+          {show('layout') && !unit.corner && (
             <div className="space-y-3">
               <Card
                 title={s ? `Bay ${s.bay + 1} · compartment ${s.section + 1}${s.path?.length ? `.${s.path.map((x) => x + 1).join('.')}` : ''}` : 'Select a compartment'}
@@ -436,7 +427,7 @@ export default function UnitDesigner() {
                 }
               >
                 {s && curSec && curBay ? (
-                  <div className="space-y-4">
+                  <div className="space-y-4 lg:columns-2 lg:gap-8 2xl:columns-3 [&>*]:break-inside-avoid">
                     <div className="grid grid-cols-2 gap-2">
                       <button className="btn-secondary px-2 py-2 text-xs" onClick={() => { let r: SectionRef | null = null; up((u) => (r = splitSection(u, s, 'cols'))); if (r) setSel(r); }}>
                         <Columns2 size={14} /> Split side by side
@@ -453,6 +444,15 @@ export default function UnitDesigner() {
                       <Field label="Compartment height">
                         {cell?.parentDir === 'cols' ? <div className="input bg-stone-50">{Math.round(cell.h)}</div> : <NumInput value={cell?.parentDir === 'rows' ? Math.round(cell.h) : secMm} suffix="mm" onChange={(v) => (cell?.parentDir === 'rows' ? setNestedMm('h', v) : setSecMm(v))} />}
                       </Field>
+                    </div>
+                    <div className="-mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                      <span className="text-stone-500">Type a size to set it by hand — the rest keep sharing equally.</span>
+                      <button className="font-semibold text-brand-700" onClick={() => equalise(cell?.parentDir === 'cols' ? 'nested' : 'bays')}>
+                        Equal widths
+                      </button>
+                      <button className="font-semibold text-brand-700" onClick={() => equalise(cell?.parentDir === 'rows' ? 'nested' : 'sections')}>
+                        Equal heights
+                      </button>
                     </div>
                     <div>
                       <span className="label">Front type</span>
@@ -585,7 +585,7 @@ export default function UnitDesigner() {
             </div>
           )}
 
-          {tab === 'size' && (
+          {show('size') && (
             <div className="grid gap-3 md:grid-cols-2">
               <Card title="Unit">
                 <div className="space-y-3">
@@ -665,7 +665,7 @@ export default function UnitDesigner() {
             </div>
           )}
 
-          {tab === 'top' && (
+          {show('top') && (
             <div className="grid gap-3 md:grid-cols-2">
               {!inRun && (
                 <Card title="Carcass parts">
@@ -750,7 +750,7 @@ export default function UnitDesigner() {
             </div>
           )}
 
-          {tab === 'sides' && (
+          {show('sides') && (
             <div className="grid gap-3 md:grid-cols-3">
               {(['left', 'right', 'back'] as const).map((side) => {
                 const p = unit.finishPanels[side];
@@ -803,7 +803,7 @@ export default function UnitDesigner() {
             </div>
           )}
 
-          {tab === 'materials' && (
+          {show('materials') && (
             <div className="grid gap-3 md:grid-cols-2">
               <Card title="Board colour & texture">
                 <div className="space-y-4">
@@ -858,7 +858,7 @@ export default function UnitDesigner() {
             </div>
           )}
 
-          {tab === 'hardware' && (
+          {show('hardware') && (
             <div className="grid gap-3 md:grid-cols-2">
               <Card title="Choose fittings">
                 <div className="space-y-3">
@@ -942,7 +942,7 @@ export default function UnitDesigner() {
             </div>
           )}
 
-          {tab === 'lights' && (
+          {show('lights') && (
             <div className="space-y-3">
               {unit.lights.map((l, i) => (
                 <Card
@@ -1038,7 +1038,7 @@ export default function UnitDesigner() {
               onSaved={(id) => sinkEdit === 'new' && up((u) => u.topAppliances.push({ id: uid('ta'), applianceId: id, bay: Math.floor(u.bays.length / 2), frontGap: null, xOffset: null, downdraftId: null }))}
             />
           )}
-          {tab === 'appliances' && (
+          {show('appliances') && (
             <div className="grid gap-3 md:grid-cols-2">
               <Card title="On the top (hob / sink)">
                 <div className="space-y-2">
@@ -1132,7 +1132,7 @@ export default function UnitDesigner() {
             </div>
           )}
 
-          {tab === 'parts' && (
+          {show('parts') && (
             <div className="space-y-3">
               <div className="card overflow-x-auto">
                 <table className="w-full text-left text-sm">

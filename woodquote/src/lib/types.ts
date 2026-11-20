@@ -911,6 +911,8 @@ export interface Room {
   partitions?: Partition[];
   /** floor finish: tiles (default 1200 × 1200, colour matched to the kitchen), wood or plain */
   floor?: { kind: 'tiles' | 'wood' | 'plain'; tileSize: number; color: string | null; grout: string };
+  /** snap items to walls and to each other while dragging on the plan */
+  snap?: { on: boolean; within: number; gap: number };
   /** show the ceiling in renders (seen from inside the room) */
   ceiling?: boolean;
   ceilingColor?: string;

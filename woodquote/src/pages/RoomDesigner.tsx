@@ -7,7 +7,7 @@ import { Calculating, Card, confirmAction, Field, NumInput, PageHeader, Select, 
 import Viewer3D from '../components/Viewer3D';
 import { useQuoteCalc } from '../hooks';
 import type { ItemPrice } from '../lib/pricing';
-import { autoPlace, newPartition, placeOnWall, partitionCorners, partitionPoint, wallMitres, placeXZ, closeRoom, defaultRoom, footprints, inwardNormal, isClosed, newOpening, newWall, OPENING_LABELS, ROOM_SHAPES, roomExtents, roomShape, roomWarnings, snapToWall, vertices, wallDir, wallName, type RoomShape } from '../lib/room';
+import { autoPlace, DEFAULT_SNAP, newPartition, placeOnWall, snapPlacement, partitionCorners, partitionPoint, wallMitres, placeXZ, closeRoom, defaultRoom, footprints, inwardNormal, isClosed, newOpening, newWall, OPENING_LABELS, ROOM_SHAPES, roomExtents, roomShape, roomWarnings, snapToWall, vertices, wallDir, wallName, type RoomShape } from '../lib/room';
 import type { Catalog, Room, RoomOpening, RoomPlacement } from '../lib/types';
 import { useStore } from '../store';
 
@@ -80,7 +80,9 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
         if (!drag.current) return;
         const [x, z] = toMm(e);
         const d = drag.current;
-        setLive({ ...d.orig, x: Math.round((d.orig.x + x - d.start[0]) / 5) * 5, z: Math.round((d.orig.z + z - d.start[1]) / 5) * 5 });
+        const raw = { ...d.orig, x: Math.round((d.orig.x + x - d.start[0]) / 5) * 5, z: Math.round((d.orig.z + z - d.start[1]) / 5) * 5 };
+        const it = items.find((i) => i.id === d.id);
+        setLive(it ? snapPlacement(room, items, catalog, it, raw, room.snap ?? DEFAULT_SNAP) : raw);
       }}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
@@ -141,6 +143,14 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
               return <path d={`M${hinge.join(' ')} L${open.join(' ')} A${r} ${r} 0 0 ${sweep} ${end.join(' ')}`} fill="none" stroke="#8b6b4a" strokeWidth={fs / 6} />;
             })()}
             {o.kind === 'opening' && o.beam && <polygon points={pts(quad(o.wall, u0, u1, 0, -300))} fill="none" stroke="#78716c" strokeDasharray={`${fs} ${fs / 2}`} strokeWidth={fs / 8} />}
+            {(o.kind === 'window' || o.kind === 'door') && (() => {
+              const p = add(mid, n, fs * 0.9);
+              return (
+                <text x={p[0]} y={p[1]} fontSize={fs * 0.55} textAnchor="middle" dominantBaseline="middle" fill={o.kind === 'window' ? '#0369a1' : '#78350f'} pointerEvents="none">
+                  {Math.round(u1 - u0)}
+                </text>
+              );
+            })()}
             {o.kind === 'opening' && (() => {
               const p = add(mid, n, fs * 1.2);
               return (
@@ -192,22 +202,48 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
             {polys.map((poly, k) => (
               <polygon key={k} points={pts(poly)} fill={it.kind === 'run' ? '#ddd6fe' : it.kind === 'assembly' && !it.assembly?.pieces.some((x) => x.unit) ? '#bae6fd' : '#e9c99f'} fillOpacity={0.85} stroke={sel ? '#ea580c' : '#57534e'} strokeWidth={sel ? fs / 3 : fs / 10} />
             ))}
-            <text x={cx} y={cz} fontSize={fs * 0.8} textAnchor="middle" dominantBaseline="middle" fill="#1c1917" fontWeight={600}>
-              {it.name.length > 24 ? `${it.name.slice(0, 22)}…` : it.name}
-            </text>
+            {(() => {
+              // fit the name inside the item's outline (smaller text for small items, none if tiny)
+              const xs = ps.map((q) => q[0]);
+              const zs = ps.map((q) => q[1]);
+              const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
+              const name = it.name.length > 24 ? `${it.name.slice(0, 22)}…` : it.name;
+              const size = Math.min(fs * 0.75, (span * 0.9) / Math.max(4, name.length * 0.58));
+              if (size < fs * 0.3) return null;
+              return (
+                <text x={cx} y={cz} fontSize={size} textAnchor="middle" dominantBaseline="middle" fill="#1c1917" fontWeight={600} pointerEvents="none" paintOrder="stroke" stroke="#ffffff" strokeWidth={size / 6}>
+                  {name}
+                </text>
+              );
+            })()}
           </g>
         );
       })}
       {room.walls.map((w, i) => {
+        // dimension line outside the wall with end ticks, the label beyond it — never on the wall or its neighbours
         const d = wallDir(w);
         const n = inwardNormal(room, i);
-        const p = add(add(v[i], d, w.length / 2), n, -(T + fs * 1.1));
+        const off = T + fs * 0.9;
+        const a0 = add(v[i], n, -off);
+        const a1 = add(add(v[i], d, w.length), n, -off);
+        const label = `W${i + 1} · ${w.length}${w.visible ? '' : ' (cut away)'}`;
+        const size = Math.min(fs * 0.85, (w.length * 0.8) / Math.max(4, label.length * 0.6));
+        const p = add(add(v[i], d, w.length / 2), n, -(off + size * 0.9));
         let a = w.angle % 360;
         if (a > 90 && a <= 270) a -= 180;
+        const tick = (q: P): P[] => [add(q, n, fs * 0.3), add(q, n, -fs * 0.3)];
+        const [t0a, t0b] = tick(a0);
+        const [t1a, t1b] = tick(a1);
+        const col = w.visible ? '#57534e' : '#a8a29e';
         return (
-          <text key={w.id} x={p[0]} y={p[1]} fontSize={fs} fontWeight={700} textAnchor="middle" dominantBaseline="middle" fill={w.visible ? '#333' : '#a8a29e'} transform={`rotate(${a} ${p[0]} ${p[1]})`}>
-            W{i + 1} · {w.length} mm{w.visible ? '' : ' (cut away)'}
-          </text>
+          <g key={w.id} pointerEvents="none">
+            <line x1={a0[0]} y1={a0[1]} x2={a1[0]} y2={a1[1]} stroke={col} strokeWidth={fs / 14} />
+            <line x1={t0a[0]} y1={t0a[1]} x2={t0b[0]} y2={t0b[1]} stroke={col} strokeWidth={fs / 12} />
+            <line x1={t1a[0]} y1={t1a[1]} x2={t1b[0]} y2={t1b[1]} stroke={col} strokeWidth={fs / 12} />
+            <text x={p[0]} y={p[1]} fontSize={size} fontWeight={700} textAnchor="middle" dominantBaseline="middle" fill={w.visible ? '#333' : '#a8a29e'} transform={`rotate(${a} ${p[0]} ${p[1]})`} paintOrder="stroke" stroke="#f7f5f2" strokeWidth={size / 5}>
+              {label}
+            </text>
+          </g>
         );
       })}
     </svg>
@@ -299,6 +335,21 @@ export default function RoomDesigner() {
         <Chip active={mode === 'both'} onClick={() => setMode('both')}>
           <Columns2 size={13} className="inline" /> Both
         </Chip>
+        {mode !== '3d' && (
+          <span className="ml-2 flex items-center gap-1 text-[11px] text-stone-600">
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={(room.snap ?? DEFAULT_SNAP).on} onChange={(e) => up((r) => (r.snap = { ...(r.snap ?? DEFAULT_SNAP), on: e.target.checked }))} /> Snap
+            </label>
+            {(room.snap ?? DEFAULT_SNAP).on && (
+              <>
+                <span>within</span>
+                <NumInput className="w-20" value={(room.snap ?? DEFAULT_SNAP).within} min={5} max={500} suffix="mm" onChange={(v) => up((r) => (r.snap = { ...(r.snap ?? DEFAULT_SNAP), within: v }))} />
+                <span>gap</span>
+                <NumInput className="w-20" value={(room.snap ?? DEFAULT_SNAP).gap} min={0} max={2000} suffix="mm" onChange={(v) => up((r) => (r.snap = { ...(r.snap ?? DEFAULT_SNAP), gap: v }))} />
+              </>
+            )}
+          </span>
+        )}
         <span className="ml-auto truncate text-[11px] text-stone-500">{mode === '3d' ? 'Tap an item · drag to look around' : 'Drag items to place them'}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -308,7 +359,7 @@ export default function RoomDesigner() {
           </div>
         ))}
         <div className="sticky top-0 z-10 border-b border-stone-200 bg-stone-100/95 px-3 backdrop-blur">
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-[1800px]">
             <Tabs<Tab>
               value={tab}
               onChange={setTab}
@@ -320,7 +371,7 @@ export default function RoomDesigner() {
             />
           </div>
         </div>
-        <div className="mx-auto max-w-5xl space-y-3 p-3">
+        <div className="mx-auto max-w-[1800px] space-y-3 p-3">
           {tab === 'room' && (
             <div className="grid gap-3 md:grid-cols-2">
               <Card title="Room shape & finish">

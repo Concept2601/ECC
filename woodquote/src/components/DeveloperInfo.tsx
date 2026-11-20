@@ -71,6 +71,22 @@ export default function DeveloperInfo() {
             <div className="mt-1 flex items-center gap-1 text-sm italic text-brand-700">
               <Heart size={14} className="fill-current" /> {DEVELOPER.tagline}
             </div>
+            {(() => {
+              let gpu = '';
+              try {
+                gpu = localStorage.getItem('enquote-gpu') ?? '';
+              } catch {
+                /* private mode */
+              }
+              if (!gpu) return null;
+              const soft = /swiftshader|software|basic render|llvmpipe|softpipe/i.test(gpu);
+              return (
+                <div className={`mt-1 text-xs ${soft ? 'font-semibold text-amber-700' : 'text-stone-500'}`}>
+                  3D graphics: {gpu}
+                  {soft && ' — drawn in software, so 3D is slow. Update the graphics driver (Windows Update › Optional updates, or the maker’s website); the app uses the light 3D mode until then.'}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </Card>

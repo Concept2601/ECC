@@ -78,3 +78,31 @@ describe('corner cupboards', () => {
     expect(legStart(run, 2)).toBe(run.legs[0][0].cornerB);
   });
 });
+
+describe('corner doors behave like other doors', () => {
+  const cat = defaultCatalog();
+  const s = defaultSettings();
+  const doors = (b: ReturnType<typeof buildUnit>) => b.parts.filter((p) => p.role === 'door' || p.role === 'glass').reduce((a, p) => a + p.qty, 0);
+  it('adds doors as the corner gets wider', () => {
+    const u = createUnit('corner_base');
+    u.width = 1800;
+    u.corner!.widthB = 900;
+    const b = buildUnit(u, cat, s.pricing);
+    // main wall opening ≈ 1800 − depth → 3 doors; side wall ≈ 900 − depth → 1 door
+    expect(doors(b)).toBe(4);
+  });
+  it('takes a chosen door count and glass doors', () => {
+    const u = createUnit('corner_base');
+    u.corner!.style = 'diagonal';
+    u.corner!.doorsA = 2;
+    u.corner!.doorMaterial = 'frameless';
+    const b = buildUnit(u, cat, s.pricing);
+    expect(b.parts.filter((p) => p.role === 'glass').reduce((a, p) => a + p.qty, 0)).toBe(2);
+    expect(b.parts.some((p) => p.role === 'door')).toBe(false);
+  });
+  it('can be an open corner', () => {
+    const u = createUnit('corner_base');
+    u.corner!.open = true;
+    expect(doors(buildUnit(u, cat, s.pricing))).toBe(0);
+  });
+});

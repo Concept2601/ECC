@@ -58,3 +58,61 @@ export const LIGHT_TEMPS: { k: number; label: string }[] = [
   { k: 6500, label: '6500K cool white' },
   { k: 0, label: 'RGB colour' },
 ];
+
+/**
+ * Works out a sum typed into a measurement box: 600+18, 2400-2*18, (3000-60)/3,
+ * 1200x2 or 1200×2. Only numbers, + − × ÷ and brackets; anything else gives null.
+ */
+export function evalSum(text: string): number | null {
+  const src = text.replace(/,/g, '.').replace(/[x×]/gi, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/\s+/g, '');
+  if (!src || !/^[0-9.+\-*/()]+$/.test(src)) return null;
+  let i = 0;
+  const peek = () => src[i];
+  const num = (): number | null => {
+    if (peek() === '(') {
+      i++;
+      const v = expr();
+      if (peek() !== ')') return null;
+      i++;
+      return v;
+    }
+    if (peek() === '-') {
+      i++;
+      const v = num();
+      return v == null ? null : -v;
+    }
+    if (peek() === '+') {
+      i++;
+      return num();
+    }
+    const m = /^\d*\.?\d+|^\d+\.?/.exec(src.slice(i));
+    if (!m) return null;
+    i += m[0].length;
+    return Number(m[0]);
+  };
+  const term = (): number | null => {
+    let v = num();
+    while (v != null && (peek() === '*' || peek() === '/')) {
+      const op = src[i++];
+      const r = num();
+      if (r == null) return null;
+      v = op === '*' ? v * r : r === 0 ? null : v / r;
+    }
+    return v;
+  };
+  const expr = (): number | null => {
+    let v = term();
+    while (v != null && (peek() === '+' || peek() === '-')) {
+      const op = src[i++];
+      const r = term();
+      if (r == null) return null;
+      v = op === '+' ? v + r : v - r;
+    }
+    return v;
+  };
+  const v = expr();
+  return v != null && i === src.length && Number.isFinite(v) ? Math.round(v * 1000) / 1000 : null;
+}
+
+/** True when the text is a sum still being typed (has an operator after the first character). */
+export const isSum = (text: string) => /[0-9.)]\s*[+\-*/x×÷−(]/i.test(text) || /^\(/.test(text.trim());

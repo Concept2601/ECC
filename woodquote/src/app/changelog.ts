@@ -11,6 +11,29 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.1.1',
+    date: '2026-11-20',
+    title: "Corner doors, better defaults, sums in measurement boxes and automatic fittings",
+    added: [
+      "Sums in every measurement box: type 600+18, 2400-2*18 or (3000-60)/3 and press Enter; on phones + − × ÷ keys appear under the box",
+      "Corner cupboard front drawing (unfolded main and side wall) next to the 3D view, using the same door layout as 3D",
+      "Fittings added automatically: rail end supports, wall anchors for hanging brackets and built-in fixings, kick board clips, sliding door stoppers and bottom guides, buffers for push-to-open fronts",
+      "Fridge spaces: switch to cover a fridge with a matching door (panel-ready fridges)",
+    ],
+    updated: [
+      "Corner cupboards behave like other cupboards: a door for every 600mm (or choose the number), hinged in pairs, wood, framed glass or frameless glass doors, or an open corner",
+      "Handles default to push-to-open on new cabinets; choose a handle per cabinet when you want one",
+      "Plinth / kick board height defaults to 100mm on kitchens and 160mm on wardrobes and BICs (still adjustable)",
+      "Exposed side and back panels run down to the floor and follow the fronts board – change the fronts and they change too; make one shorter or give it its own board only when you choose",
+      "Dividing a compartment or adding a bay shares the space equally (dividing twice gives three equal parts); sizes you typed or dragged are kept",
+      "Fridges stand in an open housing instead of behind a cabinet door",
+      "Boards keep their manufacturer's finish: the painted (spray) finishes and the finish-over-board option are removed",
+    ],
+    fixed: [
+      "Quotation, invoice and receipt titles sit on their own line above the details instead of running into the company and client details",
+    ],
+  },
+  {
     version: '3.1.0',
     date: '2026-11-19',
     title: "Render studio, finish library, custom sinks and a faster, split database",

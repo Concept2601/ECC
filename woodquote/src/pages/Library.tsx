@@ -191,7 +191,6 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
               { key: 'color', label: 'Colour (render)', type: 'color' },
               { key: 'texture', label: 'Render finish', type: 'select', options: [{ value: 'plain', label: 'Plain / solid colour' }, { value: 'wood', label: 'Wood grain' }] },
               { key: 'finish', label: 'Surface finish (render)', type: 'select', options: [{ value: 'matte', label: 'Matte' }, { value: 'satin', label: 'Satin' }, { value: 'gloss', label: 'High gloss' }, { value: 'textured', label: 'Textured' }, { value: 'metallic', label: 'Metallic' }] },
-              { key: 'finishId', label: 'Look from the finish library', type: 'select', options: finishOptions },
               { key: 'grain', label: 'Grain direction (no rotation when cutting)', type: 'bool' },
             ]}
             onAdd={() => updateCatalog((c) => c.boards.push({ id: uid('b-'), name: 'New board', category: 'MDF', thickness: 18, sheetLength: 2440, sheetWidth: 1220, pricePerSheet: 50, color: '#d9c3a0', grain: false, texture: 'plain', finish: 'matte' }))}
@@ -250,7 +249,7 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
               { key: 'thickness', label: 'Thickness', type: 'number', suffix: 'mm' },
               { key: 'color', label: 'Colour', type: 'color' },
               { key: 'finish', label: 'Surface finish (render)', type: 'select', options: [{ value: 'matte', label: 'Matte' }, { value: 'satin', label: 'Satin' }, { value: 'gloss', label: 'High gloss' }, { value: 'textured', label: 'Textured' }, { value: 'metallic', label: 'Metallic' }] },
-              { key: 'finishId', label: 'Look from the finish library', type: 'select', options: finishOptions },
+              { key: 'finishId', label: 'Look from the finish library (e.g. granite photo)', type: 'select', options: finishOptions },
             ]}
             onAdd={() => updateCatalog((c) => c.countertops.push({ id: uid('c-'), name: 'New top', thickness: 30, pricePerSqm: 100, color: '#cccccc', finish: 'satin' }))}
           />

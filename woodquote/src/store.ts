@@ -1,3 +1,4 @@
+import { PAINTED_FINISH_IDS } from './lib/finishes';
 import { get as legacyGet } from 'idb-keyval';
 import { create } from 'zustand';
 import { DATA_VERSION, dataBin, K, listKeys, readMany, remove, writeMany } from './app/db';
@@ -59,7 +60,7 @@ export function mergeCatalog(c: Partial<Catalog>): Catalog {
   // a library with no boards at all cannot price anything, so that one list is refilled
   const boards = (c.boards?.length ? mergeList(c.boards, d.boards) : d.boards).map((b) => ({ ...b, finish: b.finish ?? (/gloss/i.test(b.name) ? 'gloss' : 'matte') }));
   const countertops = mergeList(c.countertops, d.countertops).map((t) => ({ ...t, finish: t.finish ?? 'satin' }));
-  return { boards, countertops, edging: mergeList(c.edging, d.edging), glass: mergeList(c.glass, d.glass), aluminium: mergeList(c.aluminium, d.aluminium), accessories: mergeList(c.accessories, d.accessories), appliances: mergeList(c.appliances, d.appliances), finishes: mergeList(c.finishes, d.finishes ?? []), ceilingProducts: mergeList(c.ceilingProducts, d.ceilingProducts ?? []), tiles: mergeList(c.tiles, d.tiles ?? []), tileSupplies: mergeList(c.tileSupplies, d.tileSupplies ?? []), defaultsSeen: [...new Set([...seen, ...all])] };
+  return { boards, countertops, edging: mergeList(c.edging, d.edging), glass: mergeList(c.glass, d.glass), aluminium: mergeList(c.aluminium, d.aluminium), accessories: mergeList(c.accessories, d.accessories), appliances: mergeList(c.appliances, d.appliances), finishes: mergeList(c.finishes, d.finishes ?? []).filter((f) => !PAINTED_FINISH_IDS.includes(f.id)), ceilingProducts: mergeList(c.ceilingProducts, d.ceilingProducts ?? []), tiles: mergeList(c.tiles, d.tiles ?? []), tileSupplies: mergeList(c.tileSupplies, d.tileSupplies ?? []), defaultsSeen: [...new Set([...seen, ...all])] };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

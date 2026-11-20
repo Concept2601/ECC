@@ -10,13 +10,18 @@ export const finishOf = (cat: Catalog, id: string | null | undefined): Finish | 
 
 /** The finish a part shows: the cabinet's front / carcass choice, else the board's own. */
 export function partFinish(cat: Catalog, unit: Unit | null | undefined, role: Part['role'], board: BoardMaterial | undefined): Finish | undefined {
-  if (unit && FRONT_ROLES.has(role) && unit.frontFinishId) return finishOf(cat, unit.frontFinishId) ?? finishOf(cat, board?.finishId);
-  if (unit && CARCASS_ROLES.has(role) && unit.carcassFinishId) return finishOf(cat, unit.carcassFinishId) ?? finishOf(cat, board?.finishId);
-  return finishOf(cat, board?.finishId);
+  // a board keeps its manufacturer's finish; only a cabinet-level look changes how it shows
+  void board;
+  if (unit && FRONT_ROLES.has(role) && unit.frontFinishId) return finishOf(cat, unit.frontFinishId);
+  if (unit && CARCASS_ROLES.has(role) && unit.carcassFinishId) return finishOf(cat, unit.carcassFinishId);
+  return undefined;
 }
 
+/** Finishes that were painted onto boards in 3.1.0; boards are not painted, so they are removed. */
+export const PAINTED_FINISH_IDS = ['fin-sat-white', 'fin-sat-forest'];
+
 /** Colour to draw a board in 2D (finish colour when it has one). */
-export const boardColour = (cat: Catalog, board: BoardMaterial | undefined, finishId?: string | null) => finishOf(cat, finishId)?.color ?? finishOf(cat, board?.finishId)?.color ?? board?.color ?? '#cccccc';
+export const boardColour = (cat: Catalog, board: BoardMaterial | undefined, finishId?: string | null) => finishOf(cat, finishId)?.color ?? board?.color ?? '#cccccc';
 
 const f = (id: string, name: string, color: string, finish: Finish['finish'], category: string, surcharge = 0): Finish => ({ id, name, color, finish, textureId: null, thumb: null, textureSize: 600, grain: 'length', surcharge, category });
 
@@ -32,8 +37,6 @@ export function defaultFinishes(): Finish[] {
     f('fin-sm-anthracite', 'Super matt anthracite', '#3a3d40', 'matte', 'Super matt'),
     f('fin-sm-sage', 'Super matt sage green', '#8f9e86', 'matte', 'Super matt'),
     f('fin-sm-cashmere', 'Super matt cashmere', '#cbbfae', 'matte', 'Super matt'),
-    f('fin-sat-white', 'Satin white (spray painted)', '#f4f2ee', 'satin', 'Spray painted', 12),
-    f('fin-sat-forest', 'Satin forest green (spray painted)', '#2f4a3a', 'satin', 'Spray painted', 12),
     f('fin-hgs-red', 'High gloss solid wood – red (lacquered)', '#9e1b22', 'gloss', 'Lacquered solid wood', 18),
     f('fin-hgs-cream', 'High gloss solid wood – cream (lacquered)', '#ecdfc4', 'gloss', 'Lacquered solid wood', 18),
     f('fin-hgs-blue', 'High gloss solid wood – blue (lacquered)', '#23466e', 'gloss', 'Lacquered solid wood', 18),

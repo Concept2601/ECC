@@ -1,6 +1,7 @@
 import { ArrowLeft, Menu, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent as RKeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { evalSum, isSum } from '../lib/util';
 import EditTools from './EditTools';
 import { useDrawer } from './Sidebar';
 
@@ -71,7 +72,9 @@ const parseNum = (t: string) => {
   const c = t.replace(',', '.').trim();
   if (c === '' || c === '-' || c === '.' || c === '-.') return null;
   const n = Number(c);
-  return Number.isFinite(n) ? n : null;
+  if (Number.isFinite(n)) return n;
+  // a sum such as 600+18 or (2400-36)/2
+  return evalSum(t);
 };
 
 /**
@@ -83,6 +86,7 @@ const parseNum = (t: string) => {
  */
 function useNumText(value: number | null, commit: (n: number | null) => void, opts: { min?: number; max?: number; step?: number; nullable?: boolean; delay?: number }) {
   const [text, setText] = useState(fmtNum(value));
+  const [hasFocus, setHasFocus] = useState(false);
   const focused = useRef(false);
   const justFocused = useRef(false);
   const timer = useRef<number | undefined>(undefined);
@@ -99,6 +103,8 @@ function useNumText(value: number | null, commit: (n: number | null) => void, op
   };
   const apply = (t: string, final: boolean) => {
     window.clearTimeout(timer.current);
+    // a sum is only worked out when you press Enter or leave the box
+    if (!final && isSum(t)) return;
     const n = parseNum(t);
     if (n == null) {
       if (!final) return;
@@ -124,6 +130,7 @@ function useNumText(value: number | null, commit: (n: number | null) => void, op
     value: text,
     onFocus: (e: FocusEvent<HTMLInputElement>) => {
       focused.current = true;
+      setHasFocus(true);
       justFocused.current = true;
       e.currentTarget.select();
     },
@@ -133,13 +140,14 @@ function useNumText(value: number | null, commit: (n: number | null) => void, op
       justFocused.current = false;
     },
     onChange: (e: ChangeEvent<HTMLInputElement>) => {
-      const t = e.target.value.replace(/[^0-9.,-]/g, '');
+      const t = e.target.value.replace(/[^0-9.,+\-*/x×÷−() ]/gi, '');
       setText(t);
       window.clearTimeout(timer.current);
       timer.current = window.setTimeout(() => apply(t, false), opts.delay ?? 700);
     },
     onBlur: () => {
       focused.current = false;
+      setHasFocus(false);
       apply(text, true);
     },
     onKeyDown: (e: RKeyboardEvent<HTMLInputElement>) => {
@@ -163,14 +171,37 @@ function useNumText(value: number | null, commit: (n: number | null) => void, op
       }
     },
   };
-  return props;
+  /** add an operator from the on-screen sum keys (phones have no + key on the number pad) */
+  const append = (ch: string) => {
+    window.clearTimeout(timer.current);
+    setText((t) => (ch === '=' ? fmtNum(parseNum(t) ?? last.current) : t + ch));
+    if (ch === '=') apply(text, true);
+  };
+  return { props, hasFocus, append };
+}
+
+const touch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+
+/** + − × ÷ keys under a focused number box on touch screens. */
+function SumKeys({ show, append }: { show: boolean; append: (ch: string) => void }) {
+  if (!show || !touch) return null;
+  return (
+    <div className="absolute left-0 right-0 top-full z-30 mt-1 flex gap-1 rounded-xl bg-stone-800 p-1 shadow-lg">
+      {['+', '-', '×', '÷', '(', ')', '='].map((k) => (
+        <button key={k} type="button" className="flex-1 rounded-lg bg-stone-700 py-1.5 text-sm font-bold text-white active:bg-brand-600" onMouseDown={(e) => e.preventDefault()} onClick={() => append(k)}>
+          {k === '-' ? '−' : k}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function NumInput({ value, onChange, min, max, step, suffix, className, placeholder }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; suffix?: string; className?: string; placeholder?: string }) {
-  const props = useNumText(value, (n) => n != null && onChange(n), { min, max, step });
+  const { props, hasFocus, append } = useNumText(value, (n) => n != null && onChange(n), { min, max, step });
   return (
     <div className={`relative ${className ?? ''}`}>
-      <input className="input pr-10" placeholder={placeholder} {...props} />
+      <input className="input pr-10" placeholder={placeholder} title="You can type a sum, e.g. 600+18" {...props} />
+      <SumKeys show={hasFocus} append={append} />
       {suffix && <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">{suffix}</span>}
     </div>
   );
@@ -178,10 +209,11 @@ export function NumInput({ value, onChange, min, max, step, suffix, className, p
 
 /** Like NumInput, but an empty box means "automatic" (null). */
 export function OptNumInput({ value, onChange, min, max, step, suffix, className, placeholder }: { value: number | null | undefined; onChange: (v: number | null) => void; min?: number; max?: number; step?: number; suffix?: string; className?: string; placeholder?: string }) {
-  const props = useNumText(value ?? null, onChange, { min, max, step, nullable: true });
+  const { props, hasFocus, append } = useNumText(value ?? null, onChange, { min, max, step, nullable: true });
   return (
     <div className={`relative ${className ?? ''}`}>
-      <input className="input pr-10" placeholder={placeholder} {...props} />
+      <input className="input pr-10" placeholder={placeholder} title="You can type a sum, e.g. 600+18" {...props} />
+      <SumKeys show={hasFocus} append={append} />
       {suffix && <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">{suffix}</span>}
     </div>
   );

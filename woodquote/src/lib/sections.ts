@@ -66,6 +66,24 @@ export function cellRects(u: Unit, cat: Catalog): CellRect[] {
   return out;
 }
 
+/**
+ * After a split or a new bay: every part not sized by hand gets an equal share
+ * of the space left by the hand-sized ones. Dividing twice gives three equal parts.
+ */
+export function shareEqually<T extends { size: number; custom?: boolean }>(list: T[]) {
+  const total = list.reduce((a, x) => a + x.size, 0);
+  const fixed = list.filter((x) => x.custom);
+  const free = list.filter((x) => !x.custom);
+  if (!free.length) return;
+  const left = total - fixed.reduce((a, x) => a + x.size, 0);
+  if (left <= 0) {
+    // hand-sized parts fill everything: fall back to equal parts for all
+    list.forEach((x) => ((x.size = total / list.length), (x.custom = false)));
+    return;
+  }
+  free.forEach((x) => (x.size = left / free.length));
+}
+
 /** Split only the selected compartment into two. Returns the ref of the new second half. */
 export function splitSection(u: Unit, ref: SectionRef, dir: 'cols' | 'rows'): SectionRef | null {
   const target = getSection(u, ref);
@@ -78,7 +96,9 @@ export function splitSection(u: Unit, ref: SectionRef, dir: 'cols' | 'rows'): Se
     const idx = ref.path![ref.path!.length - 1];
     const half = target.size / 2;
     target.size = half;
-    parent.split.parts.splice(idx + 1, 0, { ...copy(target), size: half });
+    const wasCustom = !!target.custom;
+    parent.split.parts.splice(idx + 1, 0, { ...copy(target), size: half, custom: wasCustom });
+    if (!wasCustom) shareEqually(parent.split.parts);
     return { ...ref, path: [...ref.path!.slice(0, -1), idx + 1] };
   }
   // top-level rows: keep the classic behaviour (a fixed shelf across the bay)
@@ -86,7 +106,9 @@ export function splitSection(u: Unit, ref: SectionRef, dir: 'cols' | 'rows'): Se
     const b = u.bays[ref.bay];
     const half = target.size / 2;
     target.size = half;
-    b.sections.splice(ref.section + 1, 0, { ...copy(target), size: half });
+    const wasCustom = !!target.custom;
+    b.sections.splice(ref.section + 1, 0, { ...copy(target), size: half, custom: wasCustom });
+    if (!wasCustom) shareEqually(b.sections);
     return { bay: ref.bay, section: ref.section + 1 };
   }
   const { split: _old, ...leafFields } = target;

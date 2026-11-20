@@ -1,3 +1,4 @@
+import { panelToFloor } from '../lib/panels';
 import { boardColour } from '../lib/finishes';
 import { sinkSpec, sinkZones } from '../lib/sinks';
 import { useRef, useState, type ReactNode } from 'react';
@@ -91,6 +92,7 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
         e.bays.forEach((bb, i) => (u.bays[i].size = Math.round(bb.w)));
         u.bays[drag.index].size = Math.round(aw);
         u.bays[drag.index + 1].size = Math.round(total - aw);
+        u.bays[drag.index].custom = true;
       });
     } else {
       const bay = e.bays[drag.bay];
@@ -102,6 +104,7 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
         bay.sections.forEach((ss, j) => (u.bays[drag.bay].sections[j].size = Math.round(ss.h)));
         u.bays[drag.bay].sections[drag.index].size = Math.round(ah);
         u.bays[drag.bay].sections[drag.index + 1].size = Math.round(total - ah);
+        u.bays[drag.bay].sections[drag.index].custom = true;
       });
     }
   };
@@ -148,7 +151,7 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
     const rx = (z0: number, z1: number) => ({ x: Math.min(X(z0), X(z1)), width: Math.abs(X(z1) - X(z0)) });
     const fpOn = fp[side].enabled;
     const sideColor = fpOn ? `url(#fp-${side})` : carcass;
-    const panelY0 = fpOn && fp[side].toFloor && unit.mount === 'floor' ? 0 : e.baseH;
+    const panelY0 = fpOn && panelToFloor(unit, fp[side]) && unit.mount === 'floor' ? 0 : e.baseH;
     const plinth = unit.mount === 'floor' && unit.base === 'plinth' && e.baseH > 0;
     const r = unit.plinthRecess;
     return (
@@ -252,7 +255,7 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
   const sidePanels = (['left', 'right'] as const).map((s) => {
     if (!fp[s].enabled) return null;
     const pt = fpT(s);
-    const y0 = fp[s].toFloor && unit.mount === 'floor' ? 0 : e.baseH;
+    const y0 = panelToFloor(unit, fp[s]) && unit.mount === 'floor' ? 0 : e.baseH;
     const [a, b] = s === 'left' ? [-pt, 0] : [W, W + pt];
     return <rect key={s} {...rx(a, b)} y={Y(yo + e.topY)} height={e.topY - y0} fill={`url(#fp-${s})`} stroke="#333" strokeWidth={2} onClick={pick(s)} className="cursor-pointer" />;
   });
@@ -296,7 +299,7 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
                 const y0 = Y(yo + s.y + s.h);
                 const glassy = (kind === 'door' || kind === 'sliding') && sec.doorMaterial !== 'wood';
                 const appliance = kind === 'appliance' ? catalog.appliances.find((a) => a.id === sec.applianceId) : null;
-                const integrated = appliance && /integrated/i.test(appliance.variant);
+                const integrated = appliance && (sec.applianceDoor ?? (/integrated/i.test(appliance.variant) && appliance.category !== 'fridge'));
                 const fill = kind === 'open' ? '#fbfaf8' : glassy ? '#d5ebf2' : kind === 'appliance' && !integrated ? '#26262a' : front;
                 const ins = sec.insertId ? catalog.accessories.find((a) => a.id === sec.insertId) : null;
                 return (

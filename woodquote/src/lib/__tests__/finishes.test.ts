@@ -19,7 +19,8 @@ describe('finish library', () => {
     expect(partFinish(cat, u, 'drawerFront', board)?.name).toMatch(/red/);
     expect(partFinish(cat, u, 'shelf', board)?.name).toMatch(/white/);
     u.frontFinishId = null;
-    expect(partFinish(cat, u, 'door', { ...board, finishId: 'fin-hg-blue' })?.name).toMatch(/blue/);
+    // boards are not painted: a board keeps its own look
+    expect(partFinish(cat, u, 'door', { ...board, finishId: 'fin-hg-blue' })).toBeUndefined();
     expect(boardColour(cat, board, 'fin-hg-red')).toBe('#a3161c');
   });
   it('a finishing price per m² is added for the finished area', () => {

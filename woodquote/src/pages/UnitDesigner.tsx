@@ -1,3 +1,5 @@
+import CornerElevation from '../components/CornerElevation';
+import { panelMaterialId } from '../lib/panels';
 import { Box, Columns2, Minus, PanelTop, Plus, RotateCcw, Rows2, Trash2 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
@@ -15,7 +17,7 @@ import { replaceUnit } from '../lib/locate';
 import FinishPicker from '../components/FinishPicker';
 import SinkDesigner from '../components/SinkDesigner';
 import { syncAssembly } from '../lib/assembly';
-import { cellRects, getSection, mergeSection, sameRef, splitSection } from '../lib/sections';
+import { cellRects, getSection, mergeSection, sameRef, shareEqually, splitSection } from '../lib/sections';
 import { ACCESSORY_LABELS, type AccessoryCategory, type FrontKind, type LightLocation, type ProductType, type SectionRef, type Unit } from '../lib/types';
 import { kelvinToHex, LIGHT_TEMPS, uid } from '../lib/util';
 import { accessoryPacksLabel } from '../pdf/pdf';
@@ -120,6 +122,31 @@ function CornerCard({ unit, inRun, onA, onB, up }: { unit: Unit; inRun: boolean;
               </select>
             </Field>
           )}
+          <Field label="Doors">
+            <select className="input" value={c.open ? 'open' : (c.doorMaterial ?? 'wood')} onChange={(e) => up((u) => {
+              const v = e.target.value;
+              u.corner!.open = v === 'open';
+              if (v !== 'open') u.corner!.doorMaterial = v as 'wood' | 'glass' | 'frameless';
+            })}>
+              <option value="wood">Board doors (fronts material)</option>
+              <option value="glass">Glass in aluminium frame</option>
+              <option value="frameless">Frameless glass</option>
+              <option value="open">No doors (open corner shelves)</option>
+            </select>
+          </Field>
+          {!c.open && (
+            <div className="grid grid-cols-2 gap-2">
+              <Field label={c.style === 'L' ? 'Doors on the main wall' : 'Doors across the corner'}>
+                <OptNumInput value={c.doorsA ?? null} min={1} max={6} placeholder="Auto" onChange={(v) => up((u) => (u.corner!.doorsA = v == null ? null : Math.max(1, Math.min(6, Math.round(v)))))} />
+              </Field>
+              {c.style === 'L' && (
+                <Field label="Doors on the side wall">
+                  <OptNumInput value={c.doorsB ?? null} min={1} max={6} placeholder="Auto" onChange={(v) => up((u) => (u.corner!.doorsB = v == null ? null : Math.max(1, Math.min(6, Math.round(v)))))} />
+                </Field>
+              )}
+              <p className="col-span-2 -mt-1 text-[11px] text-stone-500">Auto: a new door for every 600mm, hinged in pairs like any cupboard; handles follow the cabinet’s handle choice.</p>
+            </div>
+          )}
           <Field label="Shelves">
             <NumInput value={c.shelves} min={0} max={8} onChange={(v) => up((u) => (u.corner!.shelves = Math.max(0, Math.min(8, Math.round(v)))))} />
           </Field>
@@ -132,7 +159,7 @@ function CornerCard({ unit, inRun, onA, onB, up }: { unit: Unit; inRun: boolean;
                     u.type = u.mount === 'wall' ? 'corner_wall' : 'corner_base';
                     // typical sizes for each kind of corner cupboard
                     if (u.mount === 'wall') Object.assign(u, { base: 'none', baseHeight: 0, countertopId: null, height: 720, depth: 320, mountHeight: 1450 });
-                    else Object.assign(u, { base: 'plinth', baseHeight: 120, height: 900, depth: 560 });
+                    else Object.assign(u, { base: 'plinth', baseHeight: 100, height: 900, depth: 560 });
                   })
                 }>
                 <option value="floor">Base (on the floor)</option>
@@ -232,6 +259,7 @@ export default function UnitDesigner() {
       const nv = Math.min(total - 80, Math.max(80, v));
       parent.split.parts[idx].size = nv;
       parent.split.parts[n].size = total - nv;
+      parent.split.parts[idx].custom = true;
     });
 
   const setBayMm = (v: number) =>
@@ -244,6 +272,7 @@ export default function UnitDesigner() {
       const nv = Math.min(total - 80, Math.max(80, v));
       u.bays[s.bay].size = nv;
       u.bays[n].size = total - nv;
+      u.bays[s.bay].custom = true;
     });
   const setSecMm = (v: number) =>
     up((u) => {
@@ -256,6 +285,7 @@ export default function UnitDesigner() {
       const nv = Math.min(total - 80, Math.max(80, v));
       u.bays[s.bay].sections[s.section].size = nv;
       u.bays[s.bay].sections[n].size = total - nv;
+      u.bays[s.bay].sections[s.section].custom = true;
     });
   const setWidth = (v: number) =>
     updateQuote(quote.id, (q) => {
@@ -273,7 +303,7 @@ export default function UnitDesigner() {
 
   const viewer = <Viewer3D unit={unit} build={build} catalog={catalog} extraBoxes={extraBoxes} highlight={s} onPick={(p) => p.ref && (setSel(p.ref), setTab('layout'))} className="h-full w-full" />;
   const editor = unit.corner ? (
-    <div className="flex h-full w-full items-center justify-center bg-[#f7f5f2] p-6 text-center text-sm text-stone-500">Corner cupboards are set with Width A, Width B and the style below — the 3D view shows the result.</div>
+    <CornerElevation unit={unit} catalog={catalog} />
   ) : (
     <div className="relative h-full w-full bg-[#f7f5f2]">
       <ElevationEditor unit={unit} catalog={catalog} build={build} view={view2d} sel={s} onSelect={(x) => (setSel(x), x && setTab('layout'))} onChange={up} onSidePick={onSidePick} background={trace ? quote.sourceImage : null} />
@@ -391,8 +421,11 @@ export default function UnitDesigner() {
                         const i = s ? s.bay : u.bays.length - 1;
                         elev.bays.forEach((b, k) => (u.bays[k].size = b.w));
                         const half = u.bays[i].size / 2;
+                        const wasCustom = !!u.bays[i].custom;
                         u.bays[i].size = half;
-                        u.bays.splice(i + 1, 0, { id: uid('b'), size: half, sections: [sec({ front: 'door', opening: 'right' })] });
+                        u.bays.splice(i + 1, 0, { id: uid('b'), size: half, custom: wasCustom, sections: [sec({ front: 'door', opening: 'right' })] });
+                        // bays not sized by hand share the width equally
+                        if (!wasCustom) shareEqually(u.bays);
                       })
                     }
                   >
@@ -449,9 +482,17 @@ export default function UnitDesigner() {
                       </div>
                     )}
                     {curSec.front === 'appliance' && (
+                      <>
                       <Field label="Appliance in this compartment">
                         <ApplianceSelect value={curSec.applianceId} none="Choose appliance…" onChange={(v) => upSec((x) => (x.applianceId = v))} filter={(a) => a.placement !== 'top' && a.category !== 'hood'} />
                       </Field>
+                        {(() => {
+                          const ap = catalog.appliances.find((a) => a.id === curSec.applianceId);
+                          if (!ap) return null;
+                          const def = /integrated/i.test(ap.variant) && ap.category !== 'fridge';
+                          return <Toggle label={ap.category === 'fridge' ? 'Cover with a matching door (panel-ready fridge)' : 'Matching door panel in front'} checked={curSec.applianceDoor ?? def} onChange={(v) => upSec((x) => (x.applianceDoor = v))} />;
+                        })()}
+                      </>
                     )}
                     <div className="flex flex-wrap items-end gap-6">
                       {curSec.front === 'drawer' && (
@@ -669,7 +710,8 @@ export default function UnitDesigner() {
             <div className="grid gap-3 md:grid-cols-3">
               {(['left', 'right', 'back'] as const).map((side) => {
                 const p = unit.finishPanels[side];
-                const color = catalog.boards.find((b) => b.id === p.materialId)?.color;
+                const matId = panelMaterialId(unit, p);
+                const color = catalog.boards.find((b) => b.id === matId)?.color;
                 return (
                   <Card key={side} title={`${side} ${side === 'back' ? 'face' : 'side'}`}>
                     <div className="space-y-3">
@@ -679,7 +721,17 @@ export default function UnitDesigner() {
                           <Field label="Finish board">
                             <div className="flex gap-2">
                               <Swatch color={color} />
-                              <Select value={p.materialId} onChange={(v) => v && up((u) => (u.finishPanels[side].materialId = v))} options={boardOptions} />
+                              <Select
+                                value={p.ownMaterial ? p.materialId : '__fronts'}
+                                onChange={(v) =>
+                                  v &&
+                                  up((u) => {
+                                    if (v === '__fronts') u.finishPanels[side].ownMaterial = false;
+                                    else Object.assign(u.finishPanels[side], { materialId: v, ownMaterial: true });
+                                  })
+                                }
+                                options={[{ value: '__fronts', label: `Same as the fronts (${catalog.boards.find((b) => b.id === unit.frontMaterialId)?.name ?? '—'})` }, ...boardOptions]}
+                              />
                             </div>
                           </Field>
                           <div>
@@ -696,7 +748,7 @@ export default function UnitDesigner() {
                               </Field>
                             </div>
                           )}
-                          {unit.mount === 'floor' && <Toggle label="Run down to the floor (covers base)" checked={p.toFloor} onChange={(v) => up((u) => (u.finishPanels[side].toFloor = v))} />}
+                          {unit.mount === 'floor' && <Toggle label="Shorter: stop at the plinth / legs (otherwise runs to the floor)" checked={!!p.short} onChange={(v) => up((u) => (u.finishPanels[side].short = v))} />}
                         </>
                       )}
                       {!p.enabled && <p className="text-xs text-stone-500">{side === 'back' ? 'Add a finished back for islands and room dividers.' : 'Add a decorative end panel on an exposed side.'}</p>}

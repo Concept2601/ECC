@@ -113,9 +113,8 @@ function counterMaterial(cat: Catalog, c: { color: string; finish: SurfaceFinish
   const f = finishOf(cat, c?.finishId);
   return f ? finishMaterial(f) : surfaceMaterial(c?.color ?? '#999', c?.finish ?? 'satin');
 }
-function panelMaterial(cat: Catalog, b: BoardMaterial | undefined) {
-  const f = finishOf(cat, b?.finishId);
-  return f ? finishMaterial(f) : surfaceMaterial(b?.color ?? '#ddd', b?.finish ?? 'matte', b?.texture === 'wood' ? woodTexture(b.color, true) : null);
+function panelMaterial(_cat: Catalog, b: BoardMaterial | undefined) {
+  return surfaceMaterial(b?.color ?? '#ddd', b?.finish ?? 'matte', b?.texture === 'wood' ? woodTexture(b.color, true) : null);
 }
 
 const geoShared = new Map<string, THREE.BoxGeometry>();

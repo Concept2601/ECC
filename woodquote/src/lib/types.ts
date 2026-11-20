@@ -352,6 +352,13 @@ export interface CornerSpec {
   hand: 'left' | 'right';
   shelves: number;
   carousel: boolean;
+  /** door material, like any other door: wood, aluminium-framed glass or frameless glass */
+  doorMaterial?: DoorMaterial;
+  /** doors on the main wall / side wall (L) or across the corner (diagonal); null = automatic (max 600mm each) */
+  doorsA?: number | null;
+  doorsB?: number | null;
+  /** open corner: no doors at all */
+  open?: boolean;
 }
 
 export type FrontKind = 'open' | 'door' | 'drawer' | 'sliding' | 'appliance';
@@ -374,14 +381,20 @@ export interface Section {
   hangingRail: boolean;
   applianceId: ID | null; // front = appliance (oven, microwave, fridge ...)
   insertId: ID | null; // pull-out organiser (spice rack, bin, baskets, pantry)
+  /** appliance compartment: cover it with a matching door panel (fridges are open by default) */
+  applianceDoor?: boolean;
   /** divide just this compartment: side by side (cols) or one above another (rows) */
   split?: { dir: 'cols' | 'rows'; parts: Section[] } | null;
+  /** size typed or dragged by hand: kept when neighbours are split or added */
+  custom?: boolean;
 }
 
 export interface Bay {
   id: ID;
   size: number; // relative width weight
   sections: Section[]; // bottom -> top
+  /** width typed or dragged by hand: kept when bays are added */
+  custom?: boolean;
 }
 
 export interface SlidingDoors {
@@ -420,7 +433,12 @@ export interface FinishPanel {
   enabled: boolean;
   materialId: ID;
   style: PanelStyle;
-  toFloor: boolean; // run down past the plinth / legs to the floor
+  /** @deprecated kept in old saves; panels now run to the floor unless `short` */
+  toFloor: boolean;
+  /** stop at the plinth / legs instead of running down to the floor */
+  short?: boolean;
+  /** use materialId instead of following the fronts board */
+  ownMaterial?: boolean;
   slatWidth?: number; // slatted: width of each slat (mm), default 40
   slatGap?: number; // slatted: gap between slats (mm), default 15
 }

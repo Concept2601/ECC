@@ -234,7 +234,7 @@ export function createRun(shape: RunShape): Run {
     legs: [[], [], []],
     counterHeight: 900,
     baseDepth: 560,
-    plinthHeight: 120,
+    plinthHeight: 100,
     wallBottom: 1450,
     wallHeight: 720,
     wallDepth: 320,

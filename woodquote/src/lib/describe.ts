@@ -1,3 +1,4 @@
+import { panelMaterialId } from './panels';
 import { leafSections } from './sections';
 import type { Catalog, Unit } from './types';
 
@@ -65,7 +66,7 @@ export function describeUnit(u: Unit, cat: Catalog): string[] {
   if (u.countertopId) lines.push(`Top: ${name(cat.countertops, u.countertopId)}`);
   else if (u.topBoardId) lines.push(`Top: ${name(cat.boards, u.topBoardId)}`);
   const panels = (['left', 'right', 'back'] as const).filter((s) => u.finishPanels[s].enabled);
-  if (panels.length) lines.push(`Exposed finish panels: ${panels.map((s) => `${s} (${u.finishPanels[s].style})`).join(', ')} – ${name(cat.boards, u.finishPanels[panels[0]].materialId)}`);
+  if (panels.length) lines.push(`Exposed finish panels: ${panels.map((s) => `${s} (${u.finishPanels[s].style})`).join(', ')} – ${name(cat.boards, panelMaterialId(u, u.finishPanels[panels[0]]))}`);
   const hw: string[] = [];
   if (c.doors + c.glassDoors + c.flaps > 0 && u.hingeId) hw.push(cat.accessories.find((a) => a.id === u.hingeId)?.family ? `${cat.accessories.find((a) => a.id === u.hingeId)!.family} hinges` : acc(u.hingeId)!);
   if (c.drawers > 0 && u.runnerId) hw.push(cat.accessories.find((a) => a.id === u.runnerId)?.family ?? acc(u.runnerId)!);

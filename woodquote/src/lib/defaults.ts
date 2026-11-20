@@ -58,7 +58,7 @@ export const defaultAppliances = (): Appliance[] => [
 ];
 
 /** Built-in library items added after 2.1, offered once to libraries saved by older versions. */
-export const DEFAULTS_ADDED_LATER = ['fx-anchor', 'fx-silicone', 'ap-washer-top', 'ap-dryer', 'ap-freezer-chest', 'ap-bin-pedal', 'ap-bin-twin', 'ap-tv-55'];
+export const DEFAULTS_ADDED_LATER = ['rl-support', 'l-clip', 't-stopper', 't-guide', 'fx-buffer', 'fx-anchor', 'fx-silicone', 'ap-washer-top', 'ap-dryer', 'ap-freezer-chest', 'ap-bin-pedal', 'ap-bin-twin', 'ap-tv-55'];
 
 
 export const defaultCatalog = (): Catalog => ({
@@ -145,6 +145,8 @@ export const defaultCatalog = (): Catalog => ({
     acc({ id: 'ro-mini', category: 'roller', name: 'Cabinet sliding door roller kit', size: 'small doors', unit: 'set', price: 6 }),
     acc({ id: 't-std', category: 'track', name: 'Sliding track top + bottom', size: 'double track', unit: 'm', price: 14 }),
     acc({ id: 't-heavy', category: 'track', name: 'Heavy duty sliding track set', size: 'double track', unit: 'm', price: 22 }),
+    acc({ id: 't-stopper', category: 'track', name: 'Sliding door stopper', size: 'track end', price: 1.2 }),
+    acc({ id: 't-guide', category: 'track', name: 'Sliding door bottom guide', size: 'per door', price: 0.9 }),
     // pull-outs & organisers
     acc({ id: 'in-spice', category: 'insert', name: 'Spice rack pull-out', size: '150mm', minWidth: 140, price: 38 }),
     acc({ id: 'in-bin', category: 'insert', name: 'Trash bin pull-out (2 bins)', size: '400mm', minWidth: 380, price: 55 }),
@@ -175,8 +177,10 @@ export const defaultCatalog = (): Catalog => ({
     acc({ id: 'l-adj100', category: 'leg', name: 'Adjustable plinth leg', size: '100-150mm', price: 1.5 }),
     acc({ id: 'l-chrome150', category: 'leg', name: 'Chrome furniture leg', size: '150mm', price: 4 }),
     acc({ id: 'l-hairpin', category: 'leg', name: 'Hairpin leg black', size: '200mm', price: 6 }),
+    acc({ id: 'l-clip', category: 'leg', name: 'Kick board clip', size: 'for plinth legs', price: 0.3 }),
     acc({ id: 'rl-oval', category: 'rail', name: 'Oval wardrobe rail chrome', size: '25mm', unit: 'm', price: 5 }),
     acc({ id: 'rl-pullout', category: 'rail', name: 'Pull-down wardrobe lift', size: '830-1150mm', price: 45 }),
+    acc({ id: 'rl-support', category: 'rail', name: 'Rail end support / centre bracket', size: 'chrome', price: 0.8 }),
     acc({ id: 'st-flap', category: 'stay', name: 'Lift-up flap stay', size: 'soft close', price: 8 }),
     acc({ id: 'st-gas', category: 'stay', name: 'Gas strut', size: '80N', price: 4 }),
     acc({ id: 'st-drop', category: 'stay', name: 'Drop-down flap stay', size: 'friction', price: 5 }),
@@ -185,6 +189,7 @@ export const defaultCatalog = (): Catalog => ({
     acc({ id: 'fx-rail', category: 'fixing', name: 'Wall hanging rail', size: 'per metre', unit: 'm', price: 4 }),
     acc({ id: 'fx-bracket', category: 'fixing', name: 'Wall fixing bracket (built-in)', size: 'L-bracket', price: 0.6 }),
     acc({ id: 'fx-anchor', category: 'fixing', name: 'Wall anchor (8mm plug + screw)', size: 'pack of 100', packQty: 100, price: 9 }),
+    acc({ id: 'fx-buffer', category: 'fixing', name: 'Door / drawer buffer (bumper)', size: 'soft stop', price: 0.1 }),
     acc({ id: 'fx-silicone', category: 'fixing', name: 'Silicone / construction adhesive 300ml', size: 'tube', price: 6 }),
     acc({ id: 'sv-cutout', category: 'service', name: 'Countertop cut-out (sink / hob)', size: 'per cut-out', price: 25 }),
     acc({ id: 'sv-notch', category: 'service', name: 'Handle notch machining', size: 'per door', price: 2 }),

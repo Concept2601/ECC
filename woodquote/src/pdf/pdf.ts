@@ -85,7 +85,13 @@ function drawHeader(doc: Doc, s: Settings, title: string, meta: [string, string]
   doc.setFillColor(...accent);
   doc.rect(0, 0, PAGE_W, 2.2, 'F');
   const pos = s.doc.logoPosition;
-  const top = 13;
+  // the document title has its own row above all details, so long company
+  // details can never run into it
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(21);
+  doc.setTextColor(...accent);
+  spaced(doc, title.toUpperCase(), pos === 'right' ? M : PAGE_W - M, 13, 1.2, pos === 'right' ? 'left' : 'right');
+  const top = 23;
 
   // logo: fitted into a 22 mm tall slot, never wider than 52 mm
   let logo: { w: number; h: number } | null = null;
@@ -122,8 +128,10 @@ function drawHeader(doc: Doc, s: Settings, title: string, meta: [string, string]
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
   doc.setTextColor(...INK);
-  doc.text(c.name, textX, y + 3, { align });
-  let ly = y + 7.5;
+  const nameW = pos === 'center' ? 160 : PAGE_W - M - 66 - textX;
+  const nameLines = doc.splitTextToSize(c.name, nameW) as string[];
+  nameLines.forEach((l, k) => doc.text(l, textX, y + 3 + k * 6, { align }));
+  let ly = y + 7.5 + (nameLines.length - 1) * 6;
   if (c.tagline) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
@@ -134,13 +142,15 @@ function drawHeader(doc: Doc, s: Settings, title: string, meta: [string, string]
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);
-  for (const l of lines) {
+  // keep clear of the reference block on the right (or the logo on the right)
+  const maxW = pos === 'center' ? 160 : PAGE_W - M - 66 - textX;
+  for (const l of lines.flatMap((x) => doc.splitTextToSize(x, maxW) as string[])) {
     doc.text(l, textX, ly, { align });
     ly += 3.7;
   }
   if (s.doc.headerText) {
     doc.setFont('helvetica', 'italic');
-    for (const l of doc.splitTextToSize(s.doc.headerText, pos === 'center' ? 160 : 95)) {
+    for (const l of doc.splitTextToSize(s.doc.headerText, maxW)) {
       doc.text(l, textX, ly, { align });
       ly += 3.7;
     }
@@ -148,12 +158,7 @@ function drawHeader(doc: Doc, s: Settings, title: string, meta: [string, string]
 
   // title and reference block
   const right = PAGE_W - M;
-  let ty = pos === 'center' ? ly + 6 : pos === 'right' && logo ? top + logo.h + 4 : top + 2;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(21);
-  doc.setTextColor(...accent);
-  spaced(doc, title.toUpperCase(), right, ty + 4, 1.2, 'right');
-  ty += 10;
+  let ty = pos === 'center' ? ly + 4 : pos === 'right' && logo ? top + logo.h + 2 : top + 1;
   doc.setFontSize(7);
   for (const [k, v] of meta) {
     doc.setFont('helvetica', 'normal');

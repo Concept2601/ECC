@@ -13,6 +13,11 @@ import { hingesForDoor, shiftBuild, topThickness } from './generate';
 import type { Box3, BoxMeta, Catalog, HardwareLine, Part, PartRole, PricingSettings, Unit, UnitBuild } from './types';
 
 const GAP = 3;
+const ALU_W = 20;
+/** widest door before it is split into more doors */
+export const MAX_CORNER_DOOR = 600;
+/** how many doors cover an opening: automatic (max 600mm each) unless set by hand */
+export const cornerDoorCount = (width: number, chosen?: number | null) => Math.max(1, chosen && chosen > 0 ? Math.round(chosen) : Math.ceil((width - 1) / MAX_CORNER_DOOR));
 const deg = (r: number) => (r * 180) / Math.PI;
 
 export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings): UnitBuild {
@@ -83,14 +88,44 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
   let doors = 0;
   const handle = acc(u.handleId);
 
+  const glass = cat.glass.find((g) => g.id === u.glassId) ?? null;
+  const alu = cat.aluminium.find((a) => a.id === u.aluminiumId) ?? null;
+  const aluPieces: number[] = [];
+  const aluBoxes: Box3[] = [];
+  const material = c.doorMaterial ?? 'wood';
+  const hingeId = material === 'wood' ? u.hingeId : (u.glassHingeId ?? u.hingeId);
   const door = (name: string, box: Box3, side: 'left' | 'right') => {
     const id = `cd${doors++}`;
-    const h = Math.max(box.h, box.w);
-    addPart(name, 'door', 'board', fm, Math.max(box.h, box.w), Math.min(box.h, box.w), ft, 2 * (box.h + box.w), eFront, { ...box, meta: { ...box.meta, door: id, hinge: hinge(side), handle: true } });
-    const n = hingesForDoor(h);
+    const m: BoxMeta = { ...box.meta, door: id, hinge: hinge(side), handle: true };
+    const { x, y, z, w, h } = box;
+    if (material === 'wood') addPart(name, 'door', 'board', fm, Math.max(h, w), Math.min(h, w), ft, 2 * (h + w), eFront, { ...box, meta: m });
+    else if (material === 'glass') {
+      if (glass) addPart(`${name} glass`, 'glass', 'glass', glass.id, h - 2 * ALU_W, w - 2 * ALU_W, glass.thickness, 0, null, { x: x + ALU_W, y: y + ALU_W, z: z + 8, w: w - 2 * ALU_W, h: h - 2 * ALU_W, d: glass.thickness, meta: { ...m, handle: false } });
+      if (alu) {
+        aluPieces.push(h, h, w, w);
+        aluBoxes.push({ x, y, z, w: ALU_W, h, d: 20, meta: { ...m, handle: false } }, { x: x + w - ALU_W, y, z, w: ALU_W, h, d: 20, meta: { ...m, handle: false } }, { x: x + ALU_W, y, z, w: w - 2 * ALU_W, h: ALU_W, d: 20, meta: { ...m, handle: false } }, { x: x + ALU_W, y: y + h - ALU_W, z, w: w - 2 * ALU_W, h: ALU_W, d: 20, meta: m });
+      }
+    } else if (glass) addPart(`${name} (frameless glass)`, 'glass', 'glass', glass.id, h, w, glass.thickness, 0, null, { ...box, d: Math.max(6, glass.thickness), meta: m });
+    const n = hingesForDoor(Math.max(h, w));
     hinges += n;
-    addHw('hinge', u.hingeId, n, 'Corner door hinges');
-    if (handle) addHw('handle', handle.id, handle.unit === 'm' ? box.w / 1000 : 1, 'Handles');
+    addHw('hinge', hingeId, n, 'Corner door hinges');
+    if (handle) addHw('handle', handle.id, handle.unit === 'm' ? w / 1000 : 1, handle.style === 'push' ? 'Push-to-open per front' : 'Handles');
+  };
+  /**
+   * A row of n doors across an opening (x0 .. x0 + width in the box's own frame).
+   * `cornerEnd` is the end that meets the inside corner: that door is hinged away from it.
+   */
+  const doorRow = (name: string, x0: number, width: number, n: number, base: Omit<Box3, 'x' | 'w'>, cornerEnd: 'start' | 'end' | 'none', place: (x: number, w: number) => number) => {
+    const dw = (width - (n - 1) * GAP) / n;
+    for (let k = 0; k < n; k++) {
+      const local = x0 + k * (dw + GAP);
+      // doors pair up from the middle; the door at the corner opens away from the corner
+      let side: 'left' | 'right' = k < n / 2 ? 'left' : 'right';
+      if (n % 2 === 1 && k === (n - 1) / 2) side = cornerEnd === 'start' ? 'right' : 'left';
+      if (cornerEnd === 'start' && k === 0) side = 'right';
+      if (cornerEnd === 'end' && k === n - 1) side = 'left';
+      door(n > 1 ? `${name} ${k + 1}/${n}` : name, { ...base, x: place(local, dw), w: dw } as Box3, side);
+    }
   };
 
   const y0 = baseH;
@@ -129,10 +164,15 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
     const dy = wall ? 0 : y0;
     const mainW = A - Dc - ft - 2 * GAP;
     const retW = B - Dc - 2 * GAP;
-    door('Corner door (main wall)', { x: mx(GAP, mainW), y: dy, z: Dc, w: mainW, h: doorH, d: ft }, 'left');
-    door('Corner door (side wall)', { x: ax(Dc + GAP, retW), y: dy, z: Dc, w: retW, h: doorH, d: ft, meta: { frame: arm } }, 'right');
-    if (mainW < 150 || retW < 150) warnings.push('Corner doors are very narrow — increase Width A / B or reduce the depth.');
-    addHw('bifold', 'h-reliant', 2, 'Bi-fold link between the corner doors');
+    if (!c.open) {
+      const nA = cornerDoorCount(mainW, c.doorsA);
+      const nB = cornerDoorCount(retW, c.doorsB);
+      // main wall: the corner is at the far end (x = A); side wall: the corner is at its start
+      doorRow('Corner door (main wall)', GAP, mainW, nA, { y: dy, z: Dc, h: doorH, d: ft }, 'end', (x, w) => mx(x, w));
+      doorRow('Corner door (side wall)', Dc + GAP, retW, nB, { y: dy, z: Dc, h: doorH, d: ft, meta: { frame: arm } }, 'start', (x, w) => ax(x, w));
+      if (mainW / nA < 150 || retW / nB < 150) warnings.push('Corner doors are very narrow — increase Width A / B, reduce the depth or use fewer doors.');
+      addHw('bifold', 'h-reliant', 2, 'Bi-fold link between the corner doors');
+    }
   } else {
     // five-sided panels cut from one board each
     const outline = (inset: number): [number, number][] =>
@@ -158,7 +198,10 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
     const len = Math.hypot(dx, dz);
     const frame = { x: p1[0], z: p1[1], rot: deg(-Math.atan2(dz, dx)) };
     const doorH = wall ? H - GAP : ch;
-    door('Diagonal corner door', { x: GAP, y: wall ? 0 : y0, z: 0, w: len - 2 * GAP, h: doorH, d: ft, meta: { frame } }, 'left');
+    if (!c.open) {
+      const n = cornerDoorCount(len - 2 * GAP, c.doorsA);
+      doorRow('Diagonal corner door', GAP, len - 2 * GAP, n, { y: wall ? 0 : y0, z: 0, h: doorH, d: ft, meta: { frame } }, 'none', (x) => x);
+    }
     if (len < 250) warnings.push('The diagonal door is very narrow — increase Width A / B.');
     if (!wall && u.base === 'plinth' && baseH > 0) addPart('Kick board (diagonal)', 'plinth', 'board', cm, len, baseH, t, len, eCar, { x: 0, y: 0, z: -u.plinthRecess - t, w: len, h: baseH, d: t, meta: { frame } });
   }
@@ -204,8 +247,15 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
     addHw('insert', 'in-carousel', 1, 'Corner carousel / lazy susan');
   }
   addHw('pins', u.shelfPinId, nShelves * (c.style === 'L' ? 8 : 6), 'Shelf support pins');
-  if (wall) addHw('hanger', 'fx-hanger', 2, 'Wall hanging brackets');
-  if (u.installType === 'builtIn') addHw('fix', 'fx-bracket', 3, 'Built-in wall fixing');
+  if (wall) {
+    addHw('hanger', 'fx-hanger', 2, 'Wall hanging brackets');
+    addHw('anchor', 'fx-anchor', 8, 'Wall anchors for the hanging brackets');
+  }
+  if (u.installType === 'builtIn') {
+    addHw('fix', 'fx-bracket', 3, 'Built-in wall fixing');
+    addHw('anchor', 'fx-anchor', 3, 'Wall anchors for the fixing brackets');
+  }
+  if (handle?.style === 'push' && doors > 0) addHw('buffer', 'fx-buffer', doors * 2, 'Buffers for push-to-open doors');
   const connector = acc(u.connectorId);
   if (connector) addHw('connector', connector.id, joints * 2, `${joints} joints × 2`);
   addHw('screws', u.screwId, (connector ? 0 : joints * pricing.screwsPerJoint) + hinges * 4 + Math.ceil((2 * (A + B) + 4 * ch) / 150), 'Assembly, hinge & back fixing');
@@ -218,7 +268,8 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
   }
   for (const e of u.extraHardware) hardware.push({ key: `x:${e.id}`, accessoryId: e.accessoryId, qty: e.qty, reason: 'Added manually' });
 
-  const build: UnitBuild = { parts: [...parts.values()], hardware: hardware.filter((h) => h.qty > 0), aluminium: [], rails: [], lights: [], appliances: [], inserts: [], applianceList: [], warnings };
+  const aluminium = alu && aluPieces.length ? [{ profileId: alu.id, pieces: aluPieces.map(Math.round), boxes: aluBoxes }] : [];
+  const build: UnitBuild = { parts: [...parts.values()], hardware: hardware.filter((h) => h.qty > 0), aluminium, rails: [], lights: [], appliances: [], inserts: [], applianceList: [], warnings };
   if (wall) shiftBuild(build, u.mountHeight);
   return build;
 }

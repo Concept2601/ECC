@@ -1,6 +1,7 @@
 // Turns a parametric Unit into a cut list (parts), hardware list, aluminium cuts,
 // appliances, lights and 3D placement boxes. Coordinates: x = left→right,
 // y = floor→up, z = back (0) → front. All mm.
+import { panelMaterialId, panelToFloor } from './panels';
 import type {
   Accessory,
   AluminiumLine,
@@ -142,12 +143,14 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
   let doorSeq = 0;
 
   const handle = acc(u.handleId);
+  let handlePcsPush = 0;
   const addHandle = (frontWidth: number) => {
     if (!handle) return;
     if (handle.unit === 'm') addHw('handle', handle.id, frontWidth / 1000, 'Handle profile');
     else {
       addHw('handle', handle.id, 1, handle.style === 'push' ? 'Push-to-open per front' : 'Handles');
       if (handle.style !== 'push') handlePcs++;
+      else handlePcsPush++;
     }
   };
 
@@ -197,7 +200,9 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
     if (ps.left) addPart('Kick board (left)', 'plinth', 'board', cm, z1 - z0, baseH, t, z1 - z0, eCar, { x: r, y: 0, z: z0, w: t, h: baseH, d: z1 - z0 });
     if (ps.right) addPart('Kick board (right)', 'plinth', 'board', cm, z1 - z0, baseH, t, z1 - z0, eCar, { x: W - r - t, y: 0, z: z0, w: t, h: baseH, d: z1 - z0 });
     joints += 4;
-    addHw('leg', u.legId && acc(u.legId)?.name.toLowerCase().includes('plinth') ? u.legId : null, 4 + 2 * Math.floor(Math.max(0, W - 1) / 1000), 'Plinth legs');
+    const plinthLegs = 4 + 2 * Math.floor(Math.max(0, W - 1) / 1000);
+    addHw('leg', u.legId && acc(u.legId)?.name.toLowerCase().includes('plinth') ? u.legId : null, plinthLegs, 'Plinth legs');
+    if (ps.front || ps.left || ps.right) addHw('kick-clip', 'l-clip', Math.ceil(plinthLegs / 2) + (ps.left ? 1 : 0) + (ps.right ? 1 : 0), 'Clips holding the kick boards to the legs');
   } else if (u.base === 'legs' && baseH > 0) {
     const legs = 4 + 2 * Math.floor(Math.max(0, W - 1) / 1000);
     addHw('leg', u.legId, legs, `${legs} legs`);
@@ -205,7 +210,7 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
 
   /* ---------------------------------------------------------- top / overhang */
   const fp = u.finishPanels;
-  const fpT = (side: 'left' | 'right' | 'back') => (fp[side].enabled ? board(fp[side].materialId)?.thickness ?? 18 : 0);
+  const fpT = (side: 'left' | 'right' | 'back') => (fp[side].enabled ? board(panelMaterialId(u, fp[side]))?.thickness ?? 18 : 0);
   const oL = -fpT('left') - u.overhang.left;
   const oR = W + fpT('right') + u.overhang.right;
   const oB = -fpT('back') - u.overhang.back;
@@ -218,11 +223,11 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
   }
 
   /* ------------------------------------------------------- finish panels */
-  const panelY0 = (p: typeof fp.left) => (p.toFloor && !wall ? 0 : baseH);
+  const panelY0 = (p: typeof fp.left) => (panelToFloor(u, p) && !wall ? 0 : baseH);
   const finishPanel = (name: string, side: 'left' | 'right' | 'back') => {
     const p = fp[side];
     if (!p.enabled) return;
-    const m = board(p.materialId);
+    const m = board(panelMaterialId(u, p));
     if (!m) return;
     const pt = m.thickness;
     const y0 = panelY0(p);
@@ -334,6 +339,7 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
     }
     if (s.hangingRail && !isAppliance) {
       addHw('rail', u.railId, acc(u.railId)?.unit === 'm' ? bw / 1000 : 1, 'Hanging rail');
+      if (acc(u.railId)?.unit === 'm') addHw('rail-support', 'rl-support', bw > 1000 ? 3 : 2, 'Rail end supports (+ centre bracket over 1m)');
       rails.push({ box: { x: bx, y: sy + sh - 70, z: backT + cd / 2 - 12, w: bw, h: 25, d: 15, meta: { ref } } });
     }
     if (s.insertId) {
@@ -398,6 +404,7 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
     } else if (kind === 'sliding') {
       const roller = acc('ro-mini') ?? acc(u.rollerId);
       addHw('track', u.trackId, fw / 1000, 'Cabinet sliding track');
+      addHw('stopper', 't-stopper', 2, 'Door stoppers at the track ends');
       if (s.slide === 'bypass') {
         const pw = fw / 2 + 15;
         makePanel('Sliding door', s.doorMaterial, fx0, fy0, pw, fh, fz + ft + 4, { ref, slide: 'right', handle: true });
@@ -423,7 +430,8 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
         const ah = Math.min(sh - 4, a.height);
         const integrated = /integrated/i.test(a.variant);
         applR.push({ applianceId: a.id, ref, box: { x: bx + (bw - aw) / 2, y: sy + (sh - ah) / 2, z: Math.max(backT, Dc + ft - a.depth), w: aw, h: ah, d: Math.min(a.depth, Dc + ft - backT), meta: { ref } } });
-        if (integrated) {
+        // fridges stand in an open housing unless you ask for a door; other integrated appliances get one
+        if (s.applianceDoor ?? (integrated && a.category !== 'fridge')) {
           makePanel('Appliance door panel', 'wood', fx0, fy0, fw, fh, Dc, { ref, handle: true });
           addHandle(fw);
         }
@@ -511,10 +519,12 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
         ]);
       }
       addHw('roller', u.rollerId, 1, 'Roller set per door');
+      addHw('guide', 't-guide', 1, 'Bottom guide per door');
       if (handle && handle.unit !== 'm') addHandle(dw);
     }
     const track = acc(u.trackId);
     if (track) addHw('track', track.id, track.unit === 'm' ? W / 1000 : 1, 'Top & bottom track');
+    addHw('stopper', 't-stopper', 4, 'Door stoppers at the track ends');
   }
 
   /* -------------------------------------------------- top appliances */
@@ -618,8 +628,18 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
   if (driverNeeded) addHw('driver', 'lt-driver', 1, 'LED driver');
 
   /* ------------------------------------------------- mounting / fixings */
-  if (wall) addHw('hanger', 'fx-hanger', W > 900 ? 2 : 1, 'Wall hanging brackets');
-  if (u.installType === 'builtIn') addHw('fix', 'fx-bracket', H > 1500 ? 4 : 2, 'Built-in wall fixing');
+  if (wall) {
+    const pairs = W > 900 ? 2 : 1;
+    addHw('hanger', 'fx-hanger', pairs, 'Wall hanging brackets');
+    addHw('anchor', 'fx-anchor', pairs * 4, 'Wall anchors for the hanging brackets');
+  }
+  if (u.installType === 'builtIn') {
+    const brackets = H > 1500 ? 4 : 2;
+    addHw('fix', 'fx-bracket', brackets, 'Built-in wall fixing');
+    addHw('anchor', 'fx-anchor', brackets, 'Wall anchors for the fixing brackets');
+  }
+  // push-to-open fronts need a buffer on the other side of each front so they sit closed
+  if (handle?.style === 'push' && handlePcsPush > 0) addHw('buffer', 'fx-buffer', handlePcsPush * 2, 'Buffers for push-to-open fronts');
 
   /* -------------------------------------------------------------- extra */
   for (const e of u.extraParts) addPart(e.name || 'Extra part', 'extra', 'board', e.materialId, e.length, e.width, board(e.materialId)?.thickness ?? t, e.edgeLength * 1000, eCar, null, e.qty);
@@ -707,7 +727,7 @@ export function elevation(u: Unit, cat: Catalog): { t: number; baseH: number; to
 
 /** Overall footprint including finish panels and top overhangs. */
 export function unitExtents(u: Unit, cat: Catalog) {
-  const th = (side: 'left' | 'right' | 'back') => (u.finishPanels[side].enabled ? cat.boards.find((b) => b.id === u.finishPanels[side].materialId)?.thickness ?? 18 : 0);
+  const th = (side: 'left' | 'right' | 'back') => (u.finishPanels[side].enabled ? cat.boards.find((b) => b.id === panelMaterialId(u, u.finishPanels[side]))?.thickness ?? 18 : 0);
   const hasTop = !!(u.countertopId || u.topBoardId);
   const x0 = -th('left') - (hasTop ? u.overhang.left : 0);
   const x1 = u.width + th('right') + (hasTop ? u.overhang.right : 0);

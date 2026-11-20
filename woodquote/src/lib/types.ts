@@ -907,6 +907,31 @@ export interface Room {
   placements: RoomPlacement[];
   /** Outlines read from a plan (BICs, kitchen, island…) for reference. */
   fixtures?: RoomFixture[];
+  /** freestanding / partition walls and pillars inside the room (pantry, scullery, divider…) */
+  partitions?: Partition[];
+  /** floor finish: tiles (default 1200 × 1200, colour matched to the kitchen), wood or plain */
+  floor?: { kind: 'tiles' | 'wood' | 'plain'; tileSize: number; color: string | null; grout: string };
+  /** show the ceiling in renders (seen from inside the room) */
+  ceiling?: boolean;
+  ceilingColor?: string;
+}
+
+/** A wall standing on its own inside the room, or a pillar. */
+export interface Partition {
+  id: ID;
+  kind: 'wall' | 'pillar';
+  /** wall: start point on the plan; pillar: centre */
+  x: number;
+  z: number;
+  /** wall: length along `angle`; pillar: width */
+  length: number;
+  angle: number;
+  /** wall: thickness; pillar: depth */
+  thickness: number;
+  height: number;
+  /** a door gap in a partition wall (e.g. into the scullery) */
+  door?: { offset: number; width: number; height: number } | null;
+  label?: string;
 }
 
 /* ----------------------------------------------------- invoices / receipts */

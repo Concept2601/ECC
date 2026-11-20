@@ -1,3 +1,4 @@
+import { assemblyBounds, rowGroup, syncAssembly } from '../lib/assembly';
 import { Box, Columns2, DoorOpen, Map as MapIcon, Plus, RotateCw, SquareDashed, Trash2, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
@@ -6,7 +7,7 @@ import { Calculating, Card, confirmAction, Field, NumInput, PageHeader, Select, 
 import Viewer3D from '../components/Viewer3D';
 import { useQuoteCalc } from '../hooks';
 import type { ItemPrice } from '../lib/pricing';
-import { autoPlace, placeXZ, closeRoom, defaultRoom, footprints, inwardNormal, isClosed, newOpening, newWall, OPENING_LABELS, ROOM_SHAPES, roomExtents, roomShape, roomWarnings, snapToWall, vertices, wallDir, wallName, type RoomShape } from '../lib/room';
+import { autoPlace, newPartition, placeOnWall, partitionCorners, partitionPoint, wallMitres, placeXZ, closeRoom, defaultRoom, footprints, inwardNormal, isClosed, newOpening, newWall, OPENING_LABELS, ROOM_SHAPES, roomExtents, roomShape, roomWarnings, snapToWall, vertices, wallDir, wallName, type RoomShape } from '../lib/room';
 import type { Catalog, Room, RoomOpening, RoomPlacement } from '../lib/types';
 import { useStore } from '../store';
 
@@ -37,6 +38,7 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
     setLive(null);
   };
   const T = room.wallThickness;
+  const mitres = wallMitres(room);
   const ext = { ...roomExtents(room) };
   for (const pl of room.placements) {
     const it = items.find((i) => i.id === pl.itemId);
@@ -85,11 +87,33 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
       onClick={(e) => e.target === svg.current && onSelect(null)}
     >
       <polygon points={pts(v)} fill={room.floorColor} opacity={0.35} />
-      {room.walls.map((w, i) => (
-        <g key={w.id}>
-          <polygon points={pts(quad(i, -T, w.length + T, 0, T))} fill={w.visible ? '#57534e' : '#d6d3d1'} />
-        </g>
-      ))}
+      {room.walls.map((w, i) => {
+        // mitred corners (flat at free ends), the same as in 3D
+        const d = wallDir(w);
+        const n = inwardNormal(room, i);
+        const m = mitres[i];
+        const poly: P[] = [v[i], add(v[i], d, w.length), add(add(v[i], d, w.length + m.end), n, -T), add(add(v[i], d, m.start), n, -T)];
+        return (
+          <g key={w.id}>
+            <polygon points={pts(poly)} fill={w.visible ? '#57534e' : '#d6d3d1'} />
+          </g>
+        );
+      })}
+      {(room.partitions ?? []).map((pt) => {
+        const corners = partitionCorners(pt);
+        return (
+          <g key={pt.id}>
+            <polygon points={pts(corners)} fill={pt.kind === 'pillar' ? '#44403c' : '#78716c'} />
+            {pt.kind === 'wall' && pt.door && (() => {
+              const a = partitionPoint(pt, pt.door.offset, 0);
+              const b = partitionPoint(pt, pt.door.offset + pt.door.width, 0);
+              const a2 = partitionPoint(pt, pt.door.offset, pt.thickness);
+              const b2 = partitionPoint(pt, pt.door.offset + pt.door.width, pt.thickness);
+              return <polygon points={pts([a, b, b2, a2])} fill={room.floorColor} opacity={0.9} />;
+            })()}
+          </g>
+        );
+      })}
       {v.slice(0, room.walls.length).map((p, i) => (
         <circle key={i} cx={p[0]} cy={p[1]} r={fs / 3} fill="#ea580c" />
       ))}
@@ -197,6 +221,7 @@ export default function RoomDesigner() {
   const calc = useQuoteCalc(quote);
   const [search] = useSearchParams();
   const [tab, setTab] = useState<Tab>(search.get('start') ? 'items' : 'room');
+  const [nw, setNw] = useState<{ length: number; angle: number; side: 'left' | 'right' }>({ length: 2000, angle: 90, side: 'right' });
   const [mode, setMode] = useState<'3d' | 'plan' | 'both'>(typeof window !== 'undefined' && window.innerWidth >= 900 ? 'both' : '3d');
   const [selected, setSelected] = useState<string | null>(null);
   const items = useMemo(() => calc?.items ?? [], [calc]);
@@ -227,8 +252,28 @@ export default function RoomDesigner() {
     r.openings = r.openings.map((o) => (o.wall > i ? { ...o, wall: o.wall + 1 } : o));
   };
   const turn = (r: Room, i: number, by: number) => (r.walls[i].angle = (((r.walls[i].angle + by) % 360) + 360) % 360);
+  /** add a wall at the end of the run: its length and how far it turns from the last wall (left or right) */
+  const addWallAtEnd = (r: Room) => {
+    const last = r.walls[r.walls.length - 1];
+    const by = (nw.side === 'right' ? 1 : -1) * nw.angle;
+    r.walls.push(newWall(nw.length, (last?.angle ?? 0) + by, last?.height ?? 2700));
+  };
+  /** a kitchen row (base + wall cupboards under one worktop) standing on wall i, the full length of the wall */
+  const kitchenOnWall = (i: number) => {
+    const w = room.walls[i];
+    const g = rowGroup('kitchen', Math.max(300, Math.round(w.length - 2 * 10)));
+    g.name = `Kitchen row – ${wallName(room, i)}`;
+    syncAssembly(g, catalog);
+    const b = assemblyBounds(g, catalog);
+    updateQuote(quote.id, (q) => {
+      (q.assemblies ??= []).push(g);
+      if (q.room) q.room.placements.push(placeOnWall(q.room, g.id, i, b, 10));
+    });
+    setSelected(g.id);
+    setTab('items');
+  };
 
-  const viewer = <Viewer3D catalog={catalog} room={room} roomItems={items} selectedItemId={selected} onPick={(p) => p.itemId && (setSelected(p.itemId), setTab('items'))} className="h-full w-full" />;
+  const viewer = <Viewer3D autoStudio={search.get('studio') === '1'} catalog={catalog} room={room} roomItems={items} selectedItemId={selected} onPick={(p) => p.itemId && (setSelected(p.itemId), setTab('items'))} className="h-full w-full" />;
   const plan = (
     <div className="h-full w-full bg-[#f7f5f2]">
       <PlanView room={room} items={items} catalog={catalog} selected={selected} onSelect={(i) => (setSelected(i), i && setTab('items'))} onMove={(itemId, p) => up((r) => Object.assign(r.placements.find((x) => x.itemId === itemId)!, p))} />
@@ -307,10 +352,33 @@ export default function RoomDesigner() {
                     <Field label="Wall colour">
                       <input type="color" className="h-10 w-full rounded-xl border border-stone-300" value={room.wallColor} onChange={(e) => up((r) => (r.wallColor = e.target.value))} />
                     </Field>
-                    <Field label="Floor colour">
-                      <input type="color" className="h-10 w-full rounded-xl border border-stone-300" value={room.floorColor} onChange={(e) => up((r) => (r.floorColor = e.target.value))} />
+                    <Field label="Floor">
+                      <select className="input" value={room.floor?.kind ?? 'tiles'} onChange={(e) => up((r) => (r.floor = { ...(r.floor ?? { tileSize: 1200, color: null, grout: '#bdb7ae' }), kind: e.target.value as 'tiles' | 'wood' | 'plain' }))}>
+                        <option value="tiles">Tiles</option>
+                        <option value="wood">Wood</option>
+                        <option value="plain">Plain</option>
+                      </select>
                     </Field>
+                    {(room.floor?.kind ?? 'tiles') === 'tiles' && (
+                      <Field label="Tile size">
+                        <NumInput value={room.floor?.tileSize ?? 1200} min={100} max={3000} step={50} suffix="mm" onChange={(v) => up((r) => (r.floor = { ...(r.floor ?? { kind: 'tiles', color: null, grout: '#bdb7ae' }), tileSize: v } as NonNullable<Room['floor']>))} />
+                      </Field>
+                    )}
+                    <Field label="Floor colour">
+                      <div className="flex items-center gap-2">
+                        <input type="color" className="h-10 w-full rounded-xl border border-stone-300" value={room.floor?.color ?? room.floorColor} onChange={(e) => up((r) => (r.floor = { ...(r.floor ?? { kind: 'tiles', tileSize: 1200, grout: '#bdb7ae' }), color: e.target.value } as NonNullable<Room['floor']>))} />
+                        {room.floor?.color && (
+                          <button className="btn-ghost whitespace-nowrap px-2 py-1 text-xs" onClick={() => up((r) => (r.floor = { ...r.floor!, color: null }))}>
+                            Match kitchen
+                          </button>
+                        )}
+                      </div>
+                    </Field>
+                    <div className="flex items-end">
+                      <Toggle label="Ceiling in renders" checked={room.ceiling !== false} onChange={(v) => up((r) => (r.ceiling = v))} />
+                    </div>
                   </div>
+                  <p className="text-xs text-stone-500">Tiles default to 1200 × 1200 in a colour that goes with the kitchen fronts (“Match kitchen”). The ceiling shows in renders when looking up from inside the room.</p>
                   <p className="text-xs text-stone-500">
                     Walls are drawn one after another from the first corner. Direction is the way a wall runs on the plan: 0° → right, 90° ↓ towards the front, 180° ← left, 270° ↑ towards the back; any angle in between makes a slanted wall.
                   </p>
@@ -328,6 +396,9 @@ export default function RoomDesigner() {
                       <div className="mb-2 flex items-center gap-2">
                         <span className="text-sm font-bold">{wallName(room, i)}</span>
                         <span className="ml-auto" />
+                        <button className="btn-ghost px-2 py-1 text-xs text-brand-700" title="Put a kitchen row (base and wall cupboards under one worktop) along this wall" onClick={() => kitchenOnWall(i)}>
+                          <Plus size={14} /> Kitchen row
+                        </button>
                         <button className="btn-ghost px-2 py-1 text-xs" aria-label={`Add wall after wall ${i + 1}`} onClick={() => up((r) => insertWall(r, i))}>
                           <Plus size={14} /> After
                         </button>
@@ -360,7 +431,104 @@ export default function RoomDesigner() {
                       </div>
                     </div>
                   ))}
+                  <div className="rounded-xl border border-dashed border-brand-300 bg-brand-50/40 p-2">
+                    <span className="label">Add a wall at the end</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Field label="Length">
+                        <NumInput value={nw.length} min={100} suffix="mm" onChange={(v) => setNw({ ...nw, length: v })} />
+                      </Field>
+                      <Field label="Turn">
+                        <select className="input" value={nw.side} onChange={(e) => setNw({ ...nw, side: e.target.value as 'left' | 'right' })}>
+                          <option value="right">Right ↻</option>
+                          <option value="left">Left ↺</option>
+                        </select>
+                      </Field>
+                      <Field label="By">
+                        <NumInput value={nw.angle} min={0} max={180} step={5} suffix="°" onChange={(v) => setNw({ ...nw, angle: v })} />
+                      </Field>
+                    </div>
+                    <button className="btn-primary mt-2 w-full" onClick={() => up((r) => addWallAtEnd(r))}>
+                      <Plus size={16} /> Add wall ({nw.length}mm, {nw.side} {nw.angle}°)
+                    </button>
+                    <p className="mt-1 text-[11px] text-stone-500">Build any shape — 4, 5 or 8 walls, open or closed. Put a kitchen row on each wall with “Kitchen row”, then tap it to edit its cabinets; add windows and doors in the next tab.</p>
+                  </div>
                   <p className="text-xs text-stone-500">Switch a wall off to cut it away in the 3D view so the client can see in (it still appears as a low outline).</p>
+                </div>
+              </Card>
+              <Card
+                title={`Partition walls & pillars (${room.partitions?.length ?? 0})`}
+                actions={
+                  <div className="flex gap-1">
+                    <button className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => up((r) => (r.partitions ??= []).push(newPartition('wall', r)))}>
+                      <Plus size={14} /> Wall
+                    </button>
+                    <button className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => up((r) => (r.partitions ??= []).push(newPartition('pillar', r)))}>
+                      <Plus size={14} /> Pillar
+                    </button>
+                  </div>
+                }
+              >
+                <div className="space-y-3">
+                  {!(room.partitions ?? []).length && <p className="text-sm text-stone-500">Walls standing on their own inside the room — e.g. to close off a pantry or scullery, a half-height divider — and pillars. They show on the plan, in 3D and in renders.</p>}
+                  {(room.partitions ?? []).map((pt, i) => {
+                    const set = (fn: (x: NonNullable<Room['partitions']>[number]) => void) => up((r) => fn(r.partitions![i]));
+                    return (
+                      <div key={pt.id} className="rounded-xl border border-stone-200 p-2">
+                        <div className="mb-2 flex items-center gap-2">
+                          <input className="input py-1 text-sm font-bold" value={pt.label ?? ''} onChange={(e) => set((x) => (x.label = e.target.value))} />
+                          <button className="btn-ghost px-2 text-red-600" aria-label="Remove" onClick={() => up((r) => r.partitions!.splice(i, 1))}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <Field label={pt.kind === 'pillar' ? 'Centre X' : 'Start X'}>
+                            <NumInput value={pt.x} suffix="mm" onChange={(v) => set((x) => (x.x = v))} />
+                          </Field>
+                          <Field label={pt.kind === 'pillar' ? 'Centre Y' : 'Start Y'}>
+                            <NumInput value={pt.z} suffix="mm" onChange={(v) => set((x) => (x.z = v))} />
+                          </Field>
+                          <Field label={pt.kind === 'pillar' ? 'Width' : 'Length'}>
+                            <NumInput value={pt.length} min={50} suffix="mm" onChange={(v) => set((x) => (x.length = v))} />
+                          </Field>
+                          <Field label="Direction">
+                            <NumInput value={pt.angle} min={0} max={359.9} step={0.5} suffix="°" onChange={(v) => set((x) => (x.angle = ((v % 360) + 360) % 360))} />
+                          </Field>
+                          <Field label={pt.kind === 'pillar' ? 'Depth' : 'Thickness'}>
+                            <NumInput value={pt.thickness} min={20} suffix="mm" onChange={(v) => set((x) => (x.thickness = v))} />
+                          </Field>
+                          <Field label="Height">
+                            <NumInput value={pt.height} min={300} suffix="mm" onChange={(v) => set((x) => (x.height = v))} />
+                          </Field>
+                        </div>
+                        {pt.kind === 'wall' && (
+                          <div className="mt-2 space-y-2">
+                            <Toggle label="Door gap in this wall" checked={!!pt.door} onChange={(v) => set((x) => (x.door = v ? { offset: Math.max(0, (x.length - 820) / 2), width: 820, height: 2050 } : null))} />
+                            {pt.door && (
+                              <div className="grid grid-cols-3 gap-2">
+                                <Field label="From the start">
+                                  <NumInput value={pt.door.offset} min={0} suffix="mm" onChange={(v) => set((x) => (x.door!.offset = v))} />
+                                </Field>
+                                <Field label="Width">
+                                  <NumInput value={pt.door.width} min={300} suffix="mm" onChange={(v) => set((x) => (x.door!.width = v))} />
+                                </Field>
+                                <Field label="Height">
+                                  <NumInput value={pt.door.height} min={500} suffix="mm" onChange={(v) => set((x) => (x.door!.height = v))} />
+                                </Field>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {[-90, -45, 45, 90].map((by) => (
+                            <button key={by} className="btn-secondary px-2 py-1 text-xs" onClick={() => set((x) => (x.angle = (((x.angle + by) % 360) + 360) % 360))}>
+                              {by > 0 ? `↻ ${by}°` : `↺ ${-by}°`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-stone-500">X and Y are measured on the plan from the first room corner (Y towards the front).</p>
                 </div>
               </Card>
             </div>

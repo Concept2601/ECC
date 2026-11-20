@@ -2,6 +2,20 @@
 
 _En-Quote was called WoodQuote by 2601 up to version 2.3._
 
+## 3.1.3 — Proper wall joints, partitions and pillars, any-shape kitchens and whole-room renders (2026-11-20)
+
+### Added
+- Partition walls (with an optional door gap) and pillars inside a room — close off a pantry or scullery, add a divider — on the plan, in 3D and in renders
+- Add a wall at the end of the room by length and turn (left / right, any angle): build open or closed shapes with 4, 5, 8 or more walls
+- “Kitchen row” on any wall: base cupboards under one worktop with wall cupboards above, the length of the wall, standing on it; tap it to edit its cabinets
+- Kitchen row preset for cabinet rows
+- Render the whole room: one button on the quotation opens the render studio on the full room — every kitchen, BIC, TV unit and partition in place, with walls, windows and doors
+- Ceiling in room renders (seen from inside; never blocks the view from above)
+- Tiled floor by default: 1200 × 1200 tiles in a colour chosen to go with the kitchen fronts; tile size, colour, wood or plain floor in Room & walls
+
+### Fixed
+- Wall ends are flat and walls meet in clean mitred corners in 3D and on the plan, instead of round posts and crossed walls
+
 ## 3.1.2 — Corner types, inner drawers, backsplashes, ceiling panels and the PG Bison colour range (2026-11-20)
 
 ### Added

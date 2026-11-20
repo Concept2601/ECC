@@ -548,8 +548,9 @@ export const rowLength = (a: Assembly, cat: Catalog) => {
   return Math.round(b.x1 - b.x0);
 };
 
-export type RowPreset = 'bic' | 'wardrobe' | 'tv' | 'display' | 'empty';
+export type RowPreset = 'kitchen' | 'bic' | 'wardrobe' | 'tv' | 'display' | 'empty';
 export const ROW_PRESETS: { id: RowPreset; label: string; hint: string }[] = [
+  { id: 'kitchen', label: 'Kitchen row', hint: 'Base cupboards under a worktop with wall cupboards above, for any wall' },
   { id: 'bic', label: 'BIC wall', hint: 'Built-in cupboards side by side, floor to ceiling' },
   { id: 'wardrobe', label: 'Wardrobe wall', hint: 'Hinged wardrobes side by side' },
   { id: 'tv', label: 'TV wall unit', hint: 'TV stand between two tall displays, shelf above' },
@@ -578,7 +579,31 @@ export function rowGroup(preset: RowPreset, width = 2400, height = 2400): Assemb
     const w = Math.round(width / n);
     for (let i = 0; i < n; i++) add(type, i === n - 1 ? width - w * (n - 1) : w, h, { name: `${PRODUCT_LABEL[type]} ${i + 1}` });
   };
-  if (preset === 'bic') split('built_in', height);
+  if (preset === 'kitchen') {
+    // base cupboards (about 600 each, a drawer pack first) under one worktop, wall cupboards above each
+    g.top = { ...g.top, countertopId: 'c-granite', height: 900 };
+    const n = Math.max(1, Math.round(width / 600));
+    const w = Math.round(width / n);
+    for (let i = 0; i < n; i++) {
+      const bw = i === n - 1 ? width - w * (n - 1) : w;
+      const base = createUnit('kitchen_base');
+      base.width = bw;
+      base.name = `Base ${i + 1}`;
+      if (i === 0) base.bays = [bay(1, [sec({ front: 'drawer', drawerCount: 3 })])];
+      else base.bays = [bay(1, [sec({ front: 'door', opening: bw > 500 ? 'pair' : 'left', shelves: 1 })])];
+      base.countertopId = null;
+      const bp = unitPiece(base);
+      bp.underTop = true;
+      g.pieces.push(bp);
+      const wall = createUnit('kitchen_wall');
+      wall.width = bw;
+      wall.name = `Wall ${i + 1}`;
+      wall.bays = [bay(1, [sec({ front: 'door', opening: bw > 500 ? 'pair' : 'left', shelves: 1 })])];
+      const wp = unitPiece(wall);
+      wp.underTop = false;
+      g.pieces.push(wp);
+    }
+  } else if (preset === 'bic') split('built_in', height);
   else if (preset === 'wardrobe') split('wardrobe', height);
   else if (preset === 'display') split('bookshelf', Math.min(height, 2100));
   else if (preset === 'tv') {

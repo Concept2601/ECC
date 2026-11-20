@@ -1,4 +1,4 @@
-import { AlertTriangle, Boxes, Camera, Home, Copy, FileDown, Hammer, ImagePlus, LayoutPanelTop, Minus, MoreVertical, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
+import { AlertTriangle, Boxes, Camera, Home, Copy, FileDown, Hammer, ImagePlus, LayoutPanelTop, Minus, MoreVertical, Pencil, Plus, Receipt, Trash2, Sparkles } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { TRADES } from '../app/brand';
@@ -247,6 +247,15 @@ export default function QuoteEditor() {
                 <div className="min-w-0 flex-1">
                   <div className="font-bold text-emerald-900">{quote.room ? 'Room layout' : 'Show in a room layout'}</div>
                   <div className="text-xs text-emerald-800">{quote.room ? `${quote.room.walls.length} walls · ${quote.room.openings.length} opening(s) · included in the quotation PDF` : 'Walls, windows, doors and open-plan beams so the client sees the design in their space'}</div>
+                </div>
+              </Link>
+            )}
+            {calc.items.length > 0 && (
+              <Link to={`/quotes/${quote.id}/room?studio=1`} className="card flex items-center gap-3 border-violet-200 bg-violet-50 p-4 hover:border-violet-400">
+                <Sparkles size={22} className="text-violet-700" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-violet-900">Render the whole room</div>
+                  <div className="text-xs text-violet-800">Every kitchen, BIC, TV unit and partition in place, with walls, windows, doors, ceiling and a tiled floor — photo-quality images and videos</div>
                 </div>
               </Link>
             )}

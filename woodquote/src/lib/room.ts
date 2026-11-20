@@ -6,7 +6,7 @@ import { unitExtents } from './generate';
 import type { ItemPrice } from './pricing';
 import { activeLegs, legLength, runLayout } from './runs';
 import { pieceFootprint } from './assembly';
-import type { Catalog, Room, RoomOpening, RoomPlacement, RoomWall, WallSide } from './types';
+import type { Catalog, Partition, Room, RoomOpening, RoomPlacement, RoomWall, WallSide } from './types';
 import { uid } from './util';
 
 export const OPENING_LABELS: Record<RoomOpening['kind'], string> = { window: 'Window', door: 'Door', opening: 'Open-plan opening' };
@@ -264,4 +264,79 @@ export function roomWarnings(room: Room): string[] {
     if (o.height > wall.height) w.push(`${o.label} is taller than ${wallName(room, o.wall)}.`);
   }
   return w;
+}
+
+/**
+ * Where each wall's outer face starts and ends, measured along the wall from
+ * its own start / end (mm). Walls meet in a clean mitre: at an outside corner the
+ * outer face runs on to meet the next wall's, at an inside corner it stops short.
+ * Free ends (a room left open) are flat: 0.
+ */
+export function wallMitres(room: Room): { start: number; end: number }[] {
+  const n = room.walls.length;
+  const T = room.wallThickness;
+  const out = room.walls.map(() => ({ start: 0, end: 0 }));
+  if (n < 2) return out;
+  const closed = isClosed(room);
+  const nOut = (i: number): [number, number] => {
+    const [x, z] = inwardNormal(room, i);
+    return [-x, -z];
+  };
+  for (let i = 0; i < n; i++) {
+    const j = i - 1;
+    if (j < 0 && !closed) continue;
+    const prev = (j + n) % n;
+    const di = wallDir(room.walls[i]);
+    const dj = wallDir(room.walls[prev]);
+    const ni = nOut(i);
+    const nj = nOut(prev);
+    // s·di − t·dj = (nj − ni)·T
+    const rx = (nj[0] - ni[0]) * T;
+    const rz = (nj[1] - ni[1]) * T;
+    const det = di[0] * -dj[1] - di[1] * -dj[0];
+    if (Math.abs(det) < 1e-6) continue; // straight on: no mitre
+    const s = (rx * -dj[1] - rz * -dj[0]) / det;
+    const t = (di[0] * rz - di[1] * rx) / det;
+    const lim = 4 * T;
+    out[i].start = Math.max(-lim, Math.min(lim, s));
+    out[prev].end = Math.max(-lim, Math.min(lim, t));
+  }
+  return out;
+}
+
+/* ------------------------------------------------- partitions and pillars */
+
+export function newPartition(kind: Partition['kind'], room: Room): Partition {
+  const e = roomExtents(room);
+  const cx = (e.x0 + e.x1) / 2;
+  const cz = (e.z0 + e.z1) / 2;
+  const h = room.walls[0]?.height ?? 2700;
+  return kind === 'pillar'
+    ? { id: uid('pt'), kind, x: Math.round(cx), z: Math.round(cz), length: 300, angle: 0, thickness: 300, height: h, door: null, label: 'Pillar' }
+    : { id: uid('pt'), kind, x: Math.round(cx - 1200), z: Math.round(cz), length: 2400, angle: 0, thickness: 115, height: h, door: { offset: 800, width: 820, height: 2050 }, label: 'Partition wall' };
+}
+
+/** A point on a partition: u along it from its start, v across it (0 = one face, thickness = the other). Pillars are centred on (x, z). */
+export function partitionPoint(p: Partition, u: number, v: number): [number, number] {
+  const a = rad(p.angle);
+  const dx = Math.cos(a);
+  const dz = Math.sin(a);
+  const ox = p.kind === 'pillar' ? p.x - (dx * p.length) / 2 + (dz * p.thickness) / 2 : p.x;
+  const oz = p.kind === 'pillar' ? p.z - (dz * p.length) / 2 - (dx * p.thickness) / 2 : p.z;
+  return [ox + dx * u - dz * v, oz + dz * u + dx * v];
+}
+
+export const partitionCorners = (p: Partition): [number, number][] => [partitionPoint(p, 0, 0), partitionPoint(p, p.length, 0), partitionPoint(p, p.length, p.thickness), partitionPoint(p, 0, p.thickness)];
+
+/** Placement that stands an item with its back on a wall, starting `offset` mm along it (bounds in the item's own frame). */
+export function placeOnWall(room: Room, itemId: string, wall: WallSide, b: { x0: number; x1: number; z0: number }, offset = 0): RoomPlacement {
+  const w = room.walls[wall];
+  const v = vertices(room)[wall];
+  const [dx, dz] = wallDir(w);
+  const rot = (((w.angle + (orientation(room) > 0 ? 0 : 180)) % 360) + 360) % 360;
+  const np: RoomPlacement = { itemId, rot, x: 0, z: 0 };
+  // the item's back corner nearest the wall start goes to the wall start (+ offset)
+  const left = orientation(room) > 0 ? b.x0 : b.x1;
+  const [ox, oz] = placeXZ(left, b.z0, np);
+  return { ...np, x: Math.round(v[0] + dx * offset - ox), z: Math.round(v[1] + dz * offset - oz) };
 }

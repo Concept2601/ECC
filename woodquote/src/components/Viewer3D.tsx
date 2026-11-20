@@ -33,6 +33,8 @@ interface Props {
   onPick?: (p: Pick) => void;
   className?: string;
   compact?: boolean;
+  /** open the render studio as soon as the scene is ready */
+  autoStudio?: boolean;
   /** context shown around a unit, e.g. the kitchen worktop for a run cabinet */
   extraBoxes?: { box: Box3; color: string }[];
   room?: Room;
@@ -70,10 +72,12 @@ export default function Viewer3D(props: Props) {
   );
 }
 
-function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, assemblyBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes, room, roomItems, selectedItemId, title }: Props & { onLost?: () => void }) {
+function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, assemblyBuild, highlight, selectedUnitId, onPick, className, compact, extraBoxes, room, roomItems, selectedItemId, title, autoStudio }: Props & { onLost?: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const ctx = useRef<{ renderer: THREE.WebGLRenderer; stage: ReturnType<typeof createStage>; controls: OrbitControls; key: string; invalidate: () => void } | null>(null);
   /** rebuilds the model shown, for the render studio */
+  const autoStudioDone = useRef(false);
+  const openStudioRef = useRef<() => void>(() => {});
   const sceneRef = useRef<{ make: (lit?: boolean) => THREE.Object3D; bounds: { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }; dir?: [number, number, number]; room: boolean } | null>(null);
   const [capturing, setCapturing] = useState(false);
   // redraw when a finish texture image has finished loading
@@ -220,7 +224,7 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
     let bounds;
     let dir: [number, number, number] | undefined;
     if (room && roomItems) {
-      make = (clean, lit = lights) => buildRoomObject(room, roomItems, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedItemId: clean ? null : (selectedItemId ?? null) });
+      make = (clean, lit = lights) => buildRoomObject(room, roomItems, catalog, { ...opt, ceiling: clean, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedItemId: clean ? null : (selectedItemId ?? null) });
       bounds = roomBounds(room);
       dir = ROOM_VIEW_DIR;
     } else if (run && runBuild) {
@@ -246,6 +250,10 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
     } else return;
     const obj = make(false);
     sceneRef.current = { make: (lit?: boolean) => make(true, lit), bounds, dir, room: !!room };
+    if (autoStudio && !autoStudioDone.current) {
+      autoStudioDone.current = true;
+      window.setTimeout(() => openStudioRef.current(), 400);
+    }
     c.stage.setNight(lights);
     c.stage.setContent(obj, bounds);
     const key = `${view}|${room ? 'room' : assembly ? 'group' : run?.shape ?? ''}|${Math.round(bounds.x1 - bounds.x0)}|${Math.round(bounds.y1)}|${Math.round(bounds.z1 - bounds.z0)}`;
@@ -298,10 +306,12 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
   };
   const openStudio = () => {
     const sc = sceneRef.current;
+    if (!sc) return;
     if (!sc || !ctx.current) return;
     useStudio.setState({ scene: { title: name, quoteId: currentQuoteId(), make: sc.make, bounds: sc.bounds, dir: sc.dir, camera: cameraNow(), night: lights, room: sc.room } });
   };
 
+  openStudioRef.current = openStudio;
   const chip = (active: boolean) => `rounded-lg px-2 py-1 text-[11px] font-semibold ${active ? 'bg-brand-600 text-white' : 'bg-white/90 text-stone-700'}`;
   return (
     <div className={`relative min-w-0 overflow-hidden ${className ?? 'h-72 w-full'}`}>

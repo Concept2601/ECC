@@ -6,7 +6,7 @@ import { finishOf, partFinish } from '../lib/finishes';
 import { sinkSpec, sinkZones, tapX } from '../lib/sinks';
 import { finishTexture } from './finishTextures';
 import type { ItemPrice } from '../lib/pricing';
-import { inwardNormal, itemBounds, orientation, roomExtents, vertices, wallPieces } from '../lib/room';
+import { itemBounds, orientation, partitionPoint, roomExtents, vertices, wallMitres, wallPieces } from '../lib/room';
 import { activeLegs, legLength, legStart, legTransform, runLayout, type RunBuild } from '../lib/runs';
 import { pieceAppliance, type AssemblyBuild } from '../lib/assembly';
 import type { Appliance, Assembly, Box3 as PartBox, Finish, SinkSpec, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
@@ -517,6 +517,8 @@ export function applianceObject(a: Appliance, b: PartBox): THREE.Object3D {
 
 export interface SceneOptions {
   showFronts: boolean;
+  /** draw the room ceiling (renders) */
+  ceiling?: boolean;
   openDoors?: boolean;
   lightsOn?: boolean;
   highlight?: SectionRef | null;
@@ -1093,6 +1095,78 @@ export function roomBounds(room: Room): Bounds {
 
 export const ROOM_VIEW_DIR: [number, number, number] = [0.45, 1.05, 1];
 
+const tileTexCache = new Map<string, THREE.CanvasTexture>();
+/** One tile with a thin grout line and a soft marble-like variation; repeated once per tile size. */
+function tileTexture(color: string, grout: string): THREE.CanvasTexture {
+  const key = `${color}|${grout}`;
+  const hit = tileTexCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d')!;
+  g.fillStyle = color;
+  g.fillRect(0, 0, 512, 512);
+  // gentle veining so large tiles do not look flat
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.globalAlpha = 0.06;
+  for (let i = 0; i < 26; i++) {
+    g.strokeStyle = i % 2 ? '#ffffff' : '#000000';
+    g.lineWidth = 1 + rnd() * 3;
+    g.beginPath();
+    let x = rnd() * 512;
+    let y = rnd() * 512;
+    g.moveTo(x, y);
+    for (let k = 0; k < 6; k++) g.quadraticCurveTo((x += (rnd() - 0.5) * 160), (y += (rnd() - 0.5) * 160), (x += (rnd() - 0.5) * 120), (y += (rnd() - 0.5) * 120));
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+  g.strokeStyle = grout;
+  g.lineWidth = 4;
+  g.strokeRect(0, 0, 512, 512);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  tileTexCache.set(key, t);
+  return t;
+}
+
+/** A floor tile colour that goes with the kitchen: a light neutral drawn a little towards the fronts' colour. */
+function matchedTileColour(items: ItemPrice[], cat: Catalog): string {
+  const unit = items.find((i) => i.unit)?.unit ?? items.find((i) => i.run)?.run?.legs.flat().find((m) => m.base)?.base ?? items.find((i) => i.assembly)?.assembly?.pieces.find((p) => p.unit)?.unit;
+  const front = unit ? (finishOf(cat, unit.frontFinishId)?.color ?? cat.boards.find((b) => b.id === unit.frontMaterialId)?.color) : undefined;
+  const base = new THREE.Color('#d8d3ca');
+  if (!front) return `#${base.getHexString()}`;
+  const fc = new THREE.Color(front);
+  const hsl = { h: 0, s: 0, l: 0 };
+  fc.getHSL(hsl);
+  // dark kitchens get a lighter floor, light kitchens a slightly deeper warm grey
+  const target = new THREE.Color().setHSL(hsl.h, Math.min(0.12, hsl.s * 0.3), hsl.l < 0.45 ? 0.8 : 0.66);
+  return `#${base.lerp(target, 0.6).getHexString()}`;
+}
+
+/**
+ * A wall piece with angled ends, in the wall's own frame: x along the wall, z = −depth
+ * (0 = room face, −T = outside face). e0 / e1 shift the outside corners along the wall.
+ */
+function wallPrism(u0: number, u1: number, e0: number, e1: number, y0: number, y1: number, T: number, mat: THREE.Material): THREE.Mesh {
+  const shape = new THREE.Shape();
+  shape.moveTo(u0, 0);
+  shape.lineTo(u1, 0);
+  shape.lineTo(u1 + e1, T);
+  shape.lineTo(u0 + e0, T);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: y1 - y0, bevelEnabled: false });
+  // (x, v, h) → (x, h, −v)
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, y0, 0);
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
 export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, opt: SceneOptions & { selectedItemId?: string | null }): THREE.Group {
   const root = new THREE.Group();
   const T = room.wallThickness;
@@ -1102,20 +1176,41 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
   const shape = new THREE.Shape();
   verts.slice(0, room.walls.length).forEach(([x, z], i) => (i === 0 ? shape.moveTo(x, -z) : shape.lineTo(x, -z)));
   shape.closePath();
-  const floorTex = woodTexture(room.floorColor, false).clone();
-  floorTex.repeat.set(0.0008, 0.0008);
-  floorTex.needsUpdate = true;
-  const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), surfaceMaterial(room.floorColor, 'satin', floorTex));
+  const fl = room.floor ?? { kind: 'tiles', tileSize: 1200, color: null, grout: '#bdb7ae' };
+  let floorMat: THREE.Material;
+  if (fl.kind === 'tiles') {
+    const tileColor = fl.color ?? matchedTileColour(items, cat);
+    const tex = tileTexture(tileColor, fl.grout).clone();
+    tex.repeat.set(1 / Math.max(100, fl.tileSize), 1 / Math.max(100, fl.tileSize));
+    tex.needsUpdate = true;
+    floorMat = surfaceMaterial(tileColor, 'satin', tex);
+  } else if (fl.kind === 'wood') {
+    const floorTex = woodTexture(fl.color ?? room.floorColor, false).clone();
+    floorTex.repeat.set(0.0008, 0.0008);
+    floorTex.needsUpdate = true;
+    floorMat = surfaceMaterial(fl.color ?? room.floorColor, 'satin', floorTex);
+  } else floorMat = surfaceMaterial(fl.color ?? room.floorColor, 'matte');
+  const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0.5;
   floor.receiveShadow = true;
   root.add(floor);
+  // ceiling for renders: only its underside is drawn, so looking down from above you still see in
+  if (opt.ceiling && room.ceiling !== false) {
+    const H = Math.max(...room.walls.map((w) => w.height));
+    const ceil = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshStandardMaterial({ color: room.ceilingColor ?? '#f7f6f3', roughness: 0.95, side: THREE.BackSide }));
+    ceil.rotation.x = -Math.PI / 2;
+    ceil.position.y = H;
+    ceil.receiveShadow = true;
+    root.add(ceil);
+  }
   const wallMat = new THREE.MeshStandardMaterial({ color: room.wallColor, roughness: 0.95 });
   const beamMat = new THREE.MeshStandardMaterial({ color: '#a7a39c', roughness: 0.85 });
   const frameMat = new THREE.MeshStandardMaterial({ color: '#f5f5f4', roughness: 0.5 });
   const glassMat = new THREE.MeshPhysicalMaterial({ color: '#cfe8ef', transparent: true, opacity: 0.28, roughness: 0.05, envMapIntensity: 1.4 });
   const doorMat = surfaceMaterial('#8b6b4a', 'satin', woodTexture('#8b6b4a', true));
 
+  const mitres = wallMitres(room);
   room.walls.forEach((wall, wi) => {
     // wall frame: local x along the wall, local z into the room (−z = outside)
     const g = new THREE.Group();
@@ -1125,10 +1220,16 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
     root.add(g);
     // v = depth into the wall from the room side (0 = room face, T = outside face)
     const box = (u0: number, u1: number, y0: number, y1: number, v0 = 0, v1 = T): PartBox => ({ x: u0, y: y0, z: -v1, w: u1 - u0, h: y1 - y0, d: v1 - v0 });
-    const { pieces, openings, H } = wallPieces(room, wi);
+    const { pieces, openings, H, L } = wallPieces(room, wi);
+    const mit = mitres[wi];
     for (const p of pieces) {
       const y1 = wall.visible ? p.y1 : Math.min(p.y1, 120);
-      if (y1 > p.y0) g.add(boxMesh(box(p.u0, p.u1, p.y0, y1), p.kind === 'beam' ? beamMat : wallMat, false));
+      if (y1 <= p.y0) continue;
+      // pieces at either end of the wall get mitred (or flat) ends instead of plain boxes
+      const e0 = p.u0 <= 0.5 && p.kind === 'wall' ? mit.start : 0;
+      const e1 = p.u1 >= L - 0.5 && p.kind === 'wall' ? mit.end : 0;
+      if (!e0 && !e1) g.add(boxMesh(box(p.u0, p.u1, p.y0, y1), p.kind === 'beam' ? beamMat : wallMat, false));
+      else g.add(wallPrism(p.u0, p.u1, e0, e1, p.y0, y1, T, wallMat));
     }
     if (!wall.visible) return;
     for (const o of openings) {
@@ -1161,16 +1262,29 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
       }
     }
   });
-  // corner posts fill the joints between walls
-  room.walls.forEach((w, i) => {
-    const prev = room.walls[(i - 1 + room.walls.length) % room.walls.length];
-    const vis = w.visible && prev.visible;
-    const h = vis ? Math.min(w.height, prev.height) : 120;
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(T * 0.72, T * 0.72, h, 12), wallMat);
-    const [nx, nz] = inwardNormal(room, i);
-    post.position.set(verts[i][0] - (nx * T) / 2, h / 2, verts[i][1] - (nz * T) / 2);
-    root.add(post);
-  });
+  // (walls meet in mitres, so no corner posts are needed)
+  // partition walls (with an optional door gap) and pillars
+  for (const pt of room.partitions ?? []) {
+    const g = new THREE.Group();
+    const [ox, oz] = partitionPoint(pt, 0, 0);
+    g.position.set(ox, 0, oz);
+    g.rotation.y = (-pt.angle * Math.PI) / 180;
+    const seg = (u0: number, u1: number, y0: number, y1: number) => u1 > u0 && y1 > y0 && g.add(boxMesh({ x: u0, y: y0, z: 0, w: u1 - u0, h: y1 - y0, d: pt.thickness }, wallMat, false));
+    if (pt.kind === 'wall' && pt.door) {
+      const a = Math.max(0, Math.min(pt.length, pt.door.offset));
+      const b = Math.max(a, Math.min(pt.length, pt.door.offset + pt.door.width));
+      seg(0, a, 0, pt.height);
+      seg(a, b, Math.min(pt.height, pt.door.height), pt.height);
+      seg(b, pt.length, 0, pt.height);
+      for (const [u0, u1, y0, y1] of [
+        [a - 40, a, 0, pt.door.height + 40],
+        [b, b + 40, 0, pt.door.height + 40],
+        [a, b, pt.door.height, pt.door.height + 40],
+      ])
+        g.add(boxMesh({ x: u0, y: y0, z: -20, w: u1 - u0, h: y1 - y0, d: pt.thickness + 40 }, frameMat, false));
+    } else seg(0, pt.length, 0, pt.height);
+    root.add(g);
+  }
   // outlines read from a plan: thin coloured footprints on the floor
   for (const f of room.fixtures ?? []) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(f.w, 12, f.d), new THREE.MeshStandardMaterial({ color: '#8b5cf6', transparent: true, opacity: 0.35 }));

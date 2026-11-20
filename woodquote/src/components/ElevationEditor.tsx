@@ -274,7 +274,15 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
       {floor}
       {background && !isBack && <image href={background} x={0} y={Y(yo + H)} width={W} height={H} opacity={0.35} preserveAspectRatio="none" />}
       {hasTop && <rect {...rx(-fpT('left') - ov.left, W + fpT('right') + ov.right)} y={Y(yo + H)} height={ct} fill={topColor} stroke="#333" strokeWidth={2} onClick={pick('top')} className="cursor-pointer" />}
-      <rect {...rx(0, W)} y={Y(yo + e.topY)} height={e.topY - e.baseH} fill={isBack ? (fp.back.enabled ? 'url(#fp-back)' : board(unit.backMaterialId)?.color ?? carcass) : carcass} stroke="#333" strokeWidth={3} onClick={isBack ? pick('back') : undefined} className={isBack ? 'cursor-pointer' : ''} />
+      {unit.noSides && unit.noTop ? (
+        <>
+          {/* open frame: only the base board, sides and top left out (dashed outline) */}
+          <rect {...rx(0, W)} y={Y(yo + e.topY)} height={e.topY - e.baseH} fill="none" stroke="#a8a29e" strokeWidth={3} strokeDasharray="18 12" />
+          <rect {...rx(0, W)} y={Y(yo + e.baseH + (board(unit.carcassMaterialId)?.thickness ?? 18))} height={board(unit.carcassMaterialId)?.thickness ?? 18} fill={carcass} stroke="#333" strokeWidth={3} />
+        </>
+      ) : (
+        <rect {...rx(0, W)} y={Y(yo + e.topY)} height={e.topY - e.baseH} fill={isBack ? (fp.back.enabled ? 'url(#fp-back)' : board(unit.backMaterialId)?.color ?? carcass) : carcass} stroke="#333" strokeWidth={3} onClick={isBack ? pick('back') : undefined} className={isBack ? 'cursor-pointer' : ''} />
+      )}
       {sidePanels}
       {plinth && (
         <g onClick={pick('base')} className="cursor-pointer">
@@ -306,7 +314,13 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
                   <g key={(c.ref.path ?? []).join('.') + sec.id} onClick={(ev) => { ev.stopPropagation(); onSelect(c.ref); }} className="cursor-pointer">
                     <rect x={x0} y={y0} width={c.w} height={s.h} fill={fill} opacity={background ? 0.6 : 1} stroke={selected ? '#c2410c' : '#555'} strokeWidth={selected ? 10 : 2} />
                     {kind === 'open' && Array.from({ length: sec.shelves }).map((_, k) => <rect key={k} x={x0} y={Y(yo + s.y + (s.h * (k + 1)) / (sec.shelves + 1)) - e.t / 2} width={c.w} height={e.t} fill="#b9a68f" />)}
-                    {sec.hangingRail && (kind === 'open' || unit.sliding.enabled) && <line x1={x0 + 10} x2={x0 + c.w - 10} y1={y0 + 70} y2={y0 + 70} stroke="#777" strokeWidth={14} strokeLinecap="round" />}
+                    {sec.hangingRail &&
+                      (kind === 'open' || unit.sliding.enabled) &&
+                      Array.from({ length: Math.max(1, Math.min(4, sec.railCount ?? 1)) }, (_, k) => {
+                        const zone = s.h / Math.max(1, Math.min(4, sec.railCount ?? 1));
+                        const ry = y0 + k * zone + 70 - (sec.railOffsets?.[k] ?? 0);
+                        return <line key={k} x1={x0 + 10} x2={x0 + c.w - 10} y1={ry} y2={ry} stroke="#777" strokeWidth={14} strokeLinecap="round" />;
+                      })}
                     {kind === 'drawer' &&
                       Array.from({ length: sec.drawerCount }).map((_, k) => {
                         const dh = s.h / sec.drawerCount;
@@ -367,9 +381,9 @@ export default function ElevationEditor({ unit, catalog, build, view = 'front', 
                         ▣ {ins.name.split(' ').slice(0, 2).join(' ')}
                       </text>
                     )}
-                    {kind !== 'open' && kind !== 'appliance' && sec.shelves > 0 && (
+                    {kind !== 'open' && kind !== 'appliance' && (sec.shelves > 0 || sec.hangingRail || (sec.innerDrawers ?? 0) > 0) && (
                       <text x={x0 + c.w / 2} y={y0 + s.h - fs * (ins ? 1.6 : 0.6)} fontSize={fs * 0.75} textAnchor="middle" fill="#555">
-                        {sec.shelves} shel{sec.shelves > 1 ? 'ves' : 'f'}
+                        {[sec.shelves > 0 ? `${sec.shelves} shel${sec.shelves > 1 ? 'ves' : 'f'}` : '', sec.hangingRail ? `${sec.railCount ?? 1} rail${(sec.railCount ?? 1) > 1 ? 's' : ''}` : '', (sec.innerDrawers ?? 0) > 0 ? `${sec.innerDrawers} inner drawer${(sec.innerDrawers ?? 0) > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ')}
                       </text>
                     )}
                     <text x={x0 + c.w - 12} y={y0 + fs * 1.2} fontSize={fs * 0.8} textAnchor="end" fill="#7c2d12" fontWeight={600}>

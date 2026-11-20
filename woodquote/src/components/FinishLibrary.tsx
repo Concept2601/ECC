@@ -53,6 +53,8 @@ async function prepareImage(file: File): Promise<{ blob: Blob; thumb: string; co
 
 export default function FinishLibrary() {
   const finishes = useStore((s) => s.catalog.finishes ?? []);
+  const boards = useStore((s) => s.catalog.boards);
+  const [q, setQ] = useState('');
   const updateCatalog = useStore((s) => s.updateCatalog);
   const fmt = useMoney();
   const [open, setOpen] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export default function FinishLibrary() {
   const replaceFor = useRef<string | null>(null);
   const replace = useRef<HTMLInputElement>(null);
   const categories = [...new Set(finishes.map((f) => f.category || 'Other'))];
-  const list = finishes.filter((f) => cat === 'all' || (f.category || 'Other') === cat);
+  const list = finishes.filter((f) => (cat === 'all' || (f.category || 'Other') === cat) && (!q || `${f.name} ${f.supplier ?? ''} ${f.range ?? ''} ${f.category}`.toLowerCase().includes(q.toLowerCase())));
   const set = (id: string, patch: Partial<Finish>) => updateCatalog((c) => Object.assign((c.finishes ?? []).find((f) => f.id === id)!, patch));
 
   const importFiles = async (fl: FileList | null) => {
@@ -109,7 +111,7 @@ export default function FinishLibrary() {
   return (
     <div className="space-y-3">
       <div className="card space-y-2 p-3">
-        <p className="text-sm text-stone-600">Colours and photo textures for doors, carcasses, panels and worktops. Choose them per cabinet (Materials tab) or for the whole job (Material hub). A board keeps its own price; a finish can add a price per m² for finishing work.</p>
+        <p className="text-sm text-stone-600">Board colours and textures (decors) — for example PG Bison MelaWood, SupaGloss or your own supplier’s range — plus worktop looks. Import the supplier’s swatch photos (PNG / JPG) for the exact look, link each colour to the board types it comes on, and choose it per cabinet (Materials tab) or for the whole job (Material hub). Choosing a colour never changes the board type or its price.</p>
         <div className="flex flex-wrap gap-2">
           <button className="btn-primary" disabled={busy} onClick={() => files.current?.click()}>
             <ImagePlus size={16} /> {busy ? 'Importing…' : 'Import textures (PNG / JPG)'}
@@ -126,6 +128,7 @@ export default function FinishLibrary() {
         <input ref={replace} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => void replaceImage(e.target.files).finally(() => (e.target.value = ''))} />
       </div>
 
+      <input className="input" placeholder="Search colours, e.g. oak, Storm Grey, SupaGloss…" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
         {['all', ...categories].map((c) => (
           <button key={c} className={`whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${cat === c ? 'border-brand-600 bg-brand-600 text-white' : 'border-stone-300 bg-white text-stone-600'}`} onClick={() => setCat(c)}>
@@ -144,7 +147,8 @@ export default function FinishLibrary() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-semibold">{f.name}</span>
                   <span className="block truncate text-xs text-stone-500">
-                    {FINISH_TYPES.find((t) => t.value === f.finish)?.label} · {f.textureId ? `texture ${f.textureSize} mm` : 'colour'}
+                    {f.supplier ? `${f.supplier}${f.range ? ` ${f.range}` : ''} · ` : ''}
+                    {FINISH_TYPES.find((t) => t.value === f.finish)?.label} · {f.textureId ? `photo ${f.textureSize} mm` : f.kind === 'woodgrain' ? 'woodgrain (no photo yet)' : 'colour'}
                     {f.surcharge ? ` · +${fmt(f.surcharge)}/m²` : ''}
                   </span>
                 </span>
@@ -178,6 +182,33 @@ export default function FinishLibrary() {
                     <Field label="Group">
                       <TextInput value={f.category} onChange={(v) => set(f.id, { category: v })} />
                     </Field>
+                    <Field label="Type">
+                      <select className="input" value={f.kind ?? 'solid'} onChange={(e) => set(f.id, { kind: e.target.value as Finish['kind'] })}>
+                        <option value="solid">Solid colour</option>
+                        <option value="woodgrain">Woodgrain</option>
+                        <option value="stone">Stone / concrete</option>
+                        <option value="other">Other pattern</option>
+                      </select>
+                    </Field>
+                    <Field label="Supplier">
+                      <TextInput value={f.supplier ?? ''} placeholder="e.g. PG Bison" onChange={(v) => set(f.id, { supplier: v })} />
+                    </Field>
+                    <Field label="Range">
+                      <TextInput value={f.range ?? ''} placeholder="e.g. MelaWood, SupaGloss" onChange={(v) => set(f.id, { range: v })} />
+                    </Field>
+                    <div className="col-span-2">
+                      <span className="label">Comes on these boards (none ticked = any board)</span>
+                      <div className="mt-1 flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
+                        {boards.map((b) => {
+                          const on = !!f.boardIds?.includes(b.id);
+                          return (
+                            <button key={b.id} type="button" className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${on ? 'border-brand-600 bg-brand-600 text-white' : 'border-stone-300 bg-white text-stone-600'}`} onClick={() => set(f.id, { boardIds: on ? (f.boardIds ?? []).filter((x) => x !== b.id) : [...(f.boardIds ?? []), b.id] })}>
+                              {b.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                     <Field label="Surface">
                       <select className="input" value={f.finish} onChange={(e) => set(f.id, { finish: e.target.value as SurfaceFinish })}>
                         {FINISH_TYPES.map((t) => (

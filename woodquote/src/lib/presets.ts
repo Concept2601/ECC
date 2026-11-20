@@ -3,6 +3,7 @@ import { uid } from './util';
 
 export const PRODUCT_LABELS: Record<ProductType, string> = {
   tv_stand: 'TV Stand',
+  tv_base: 'TV Base (no sides or top)',
   kitchen_base: 'Kitchen Base Cabinet',
   kitchen_wall: 'Kitchen Wall Cabinet',
   kitchen_tall: 'Kitchen Tall / Pantry',
@@ -17,7 +18,7 @@ export const PRODUCT_LABELS: Record<ProductType, string> = {
   custom: 'Custom Unit',
 };
 
-export const PRODUCT_ORDER: ProductType[] = ['tv_stand', 'kitchen_base', 'kitchen_wall', 'kitchen_tall', 'island', 'built_in', 'wardrobe', 'sliding_wardrobe', 'bookshelf', 'vanity', 'corner_base', 'corner_wall', 'custom'];
+export const PRODUCT_ORDER: ProductType[] = ['tv_stand', 'tv_base', 'kitchen_base', 'kitchen_wall', 'kitchen_tall', 'island', 'built_in', 'wardrobe', 'sliding_wardrobe', 'bookshelf', 'vanity', 'corner_base', 'corner_wall', 'custom'];
 
 export const sec = (spec: Partial<Omit<Section, 'id'>> = {}): Section => ({
   id: uid('s'),
@@ -114,6 +115,25 @@ export function createUnit(type: ProductType): Unit {
           bay(1.2, [sec({ front: 'sliding', doorMaterial: 'glass', slide: 'bypass', shelves: 1 })]),
           bay(1, [sec({ front: 'door', opening: 'down' })]),
         ],
+      });
+    case 'tv_base':
+      // a low base board on a plinth, open at the ends and the top: tall cabinets stand either side,
+      // slats or a panel go on the wall behind the TV
+      return baseUnit(type, {
+        width: 1800,
+        height: 250,
+        depth: 450,
+        base: 'plinth',
+        baseHeight: 100,
+        noSides: true,
+        noTop: true,
+        noBack: true,
+        carcassMaterialId: 'b-mdf18-walnut',
+        frontMaterialId: 'b-mdf18-walnut',
+        edgingId: 'e-walnut',
+        frontEdgingId: 'e-walnut',
+        overhang: sides(0, 0, 0, 0),
+        bays: [bay(1, [sec({ front: 'open' })])],
       });
     case 'kitchen_base':
       return baseUnit(type, {

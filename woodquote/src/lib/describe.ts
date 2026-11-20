@@ -40,7 +40,7 @@ export function describeUnit(u: Unit, cat: Catalog): string[] {
   if (u.corner) {
     const k = u.corner;
     const lines = [
-      `Corner ${u.mount === 'wall' ? 'wall' : 'base'} cupboard, ${k.style === 'L' ? 'L-shaped with two doors' : 'diagonal with one door'}: ${u.width} mm × ${k.widthB} mm along the walls, ${u.depth} D × ${u.height} H mm${u.mount === 'wall' ? `, wall hung at ${u.mountHeight}mm` : ''}`,
+      `Corner ${u.mount === 'wall' ? 'wall' : 'base'} cupboard, ${({ L: 'L-shaped (two-piece panels)', square: 'square with one solid L-shaped top', diagonal: 'diagonal', blind: 'blind corner with a reach-in door' } as const)[k.style]}: ${u.width} mm × ${k.widthB} mm along the walls, ${u.depth} D × ${u.height} H mm${u.mount === 'wall' ? `, wall hung at ${u.mountHeight}mm` : ''}`,
       `Carcass: ${name(cat.boards, u.carcassMaterialId) ?? '-'} · Fronts: ${name(cat.boards, u.frontMaterialId) ?? '-'}`,
     ];
     const f = [k.shelves ? `${k.shelves} shel${k.shelves === 1 ? 'f' : 'ves'}` : '', k.carousel && u.mount !== 'wall' ? 'corner carousel' : ''].filter(Boolean);

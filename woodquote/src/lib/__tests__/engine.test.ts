@@ -24,7 +24,7 @@ describe('generator', () => {
   it('builds every preset without errors', () => {
     for (const t of PRODUCT_ORDER) {
       const b = buildUnit(createUnit(t), cat, settings.pricing);
-      expect(b.parts.length).toBeGreaterThan(3);
+      expect(b.parts.length).toBeGreaterThan(t === 'tv_base' ? 1 : 3);
       expect(b.parts.every((p) => p.length > 0 && p.width > 0 && p.qty > 0)).toBe(true);
     }
   });

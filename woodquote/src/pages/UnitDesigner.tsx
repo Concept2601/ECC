@@ -77,7 +77,7 @@ function CornerCard({ unit, inRun, onA, onB, up }: { unit: Unit; inRun: boolean;
               const D = unit.depth * sc;
               const r = c.hand === 'right';
               const X = (x: number) => (r ? x : A - x);
-              const pts = c.style === 'L' ? [[0, 0], [A, 0], [A, B], [A - D, B], [A - D, D], [0, D]] : [[0, 0], [A, 0], [A, B], [A - D, B], [0, D]];
+              const pts = c.style === 'L' || c.style === 'square' ? [[0, 0], [A, 0], [A, B], [A - D, B], [A - D, D], [0, D]] : c.style === 'blind' ? [[0, 0], [A, 0], [A, D], [0, D]] : [[0, 0], [A, 0], [A, B], [A - D, B], [0, D]];
               return (
                 <>
                   <polygon points={pts.map(([x, z]) => `${X(x)},${z}`).join(' ')} fill="#e9c99f" stroke="#57534e" strokeWidth={4} />
@@ -109,9 +109,11 @@ function CornerCard({ unit, inRun, onA, onB, up }: { unit: Unit; inRun: boolean;
       <Card title="Corner design">
         <div className="space-y-3">
           <Field label="Style">
-            <select className="input" value={c.style} onChange={(e) => up((u) => (u.corner!.style = e.target.value as 'L' | 'diagonal'))}>
-              <option value="L">L-shaped – two doors meeting in the corner</option>
-              <option value="diagonal">Diagonal – one angled door across the corner</option>
+            <select className="input" value={c.style} onChange={(e) => up((u) => (u.corner!.style = e.target.value as 'L' | 'square' | 'diagonal' | 'blind'))}>
+              <option value="square">Square – one solid L-shaped top & bottom, two doors meeting in the corner</option>
+              <option value="L">L-shaped – two-piece panels, two doors meeting in the corner</option>
+              <option value="diagonal">Diagonal – angled front across the corner</option>
+              <option value="blind">Blind corner – straight cabinet, blind panel, reach-in door, worktop joined round the corner</option>
             </select>
           </Field>
           {!inRun && (
@@ -136,10 +138,10 @@ function CornerCard({ unit, inRun, onA, onB, up }: { unit: Unit; inRun: boolean;
           </Field>
           {!c.open && (
             <div className="grid grid-cols-2 gap-2">
-              <Field label={c.style === 'L' ? 'Doors on the main wall' : 'Doors across the corner'}>
+              <Field label={c.style === 'L' || c.style === 'square' ? 'Doors on the main wall' : c.style === 'blind' ? 'Reach-in doors' : 'Doors across the corner'}>
                 <OptNumInput value={c.doorsA ?? null} min={1} max={6} placeholder="Auto" onChange={(v) => up((u) => (u.corner!.doorsA = v == null ? null : Math.max(1, Math.min(6, Math.round(v)))))} />
               </Field>
-              {c.style === 'L' && (
+              {(c.style === 'L' || c.style === 'square') && (
                 <Field label="Doors on the side wall">
                   <OptNumInput value={c.doorsB ?? null} min={1} max={6} placeholder="Auto" onChange={(v) => up((u) => (u.corner!.doorsB = v == null ? null : Math.max(1, Math.min(6, Math.round(v)))))} />
                 </Field>
@@ -150,7 +152,7 @@ function CornerCard({ unit, inRun, onA, onB, up }: { unit: Unit; inRun: boolean;
           <Field label="Shelves">
             <NumInput value={c.shelves} min={0} max={8} onChange={(v) => up((u) => (u.corner!.shelves = Math.max(0, Math.min(8, Math.round(v)))))} />
           </Field>
-          {!wall && <Toggle label="Corner carousel (lazy susan)" checked={c.carousel} onChange={(v) => up((u) => (u.corner!.carousel = v))} />}
+          {!wall && <Toggle label={c.style === 'blind' ? 'Magic corner pull-out' : 'Corner carousel (lazy susan)'} checked={c.carousel} onChange={(v) => up((u) => (u.corner!.carousel = v))} />}
           {!inRun && (
             <Field label="Mounting">
               <select className="input" value={unit.mount} onChange={(e) =>
@@ -510,7 +512,39 @@ export default function UnitDesigner() {
                           <Toggle label="Hanging rail" checked={curSec.hangingRail} onChange={(v) => upSec((x) => (x.hangingRail = v))} />
                         </div>
                       )}
+                      {curSec.front !== 'drawer' && curSec.front !== 'appliance' && curSec.hangingRail && (
+                        <Field label="Rails (share the height)">
+                          <Stepper value={curSec.railCount ?? 1} min={1} max={4} onChange={(v) => upSec((x) => (x.railCount = v))} />
+                        </Field>
+                      )}
+                      {(curSec.front === 'door' || curSec.front === 'sliding' || unit.sliding.enabled) && curSec.front !== 'drawer' && (
+                        <Field label="Inner drawers (no fronts)">
+                          <Stepper value={curSec.innerDrawers ?? 0} min={0} max={6} onChange={(v) => upSec((x) => (x.innerDrawers = v))} />
+                        </Field>
+                      )}
+                      {(curSec.innerDrawers ?? 0) > 0 && (
+                        <Field label="Inner drawers open with">
+                          <select className="input" value={curSec.innerPull ?? 'notch'} onChange={(e) => upSec((x) => (x.innerPull = e.target.value as 'push' | 'notch'))}>
+                            <option value="notch">Notch cut in the front edge (pull)</option>
+                            <option value="push">Push-to-open runners</option>
+                          </select>
+                        </Field>
+                      )}
                     </div>
+                    {curSec.hangingRail && (curSec.railCount ?? 1) > 1 && curSec.front !== 'drawer' && curSec.front !== 'appliance' && (
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {Array.from({ length: curSec.railCount ?? 1 }, (_, k) => (
+                          <Field key={k} label={`Rail ${k + 1}${k === 0 ? ' (top)' : ''} up / down`}>
+                            <NumInput value={curSec.railOffsets?.[k] ?? 0} min={-600} max={600} suffix="mm" onChange={(v) => upSec((x) => {
+                              const o = [...(x.railOffsets ?? [])];
+                              while (o.length <= k) o.push(0);
+                              o[k] = v;
+                              x.railOffsets = o;
+                            })} />
+                          </Field>
+                        ))}
+                      </div>
+                    )}
                     {curSec.front !== 'appliance' && (
                       <Field label="Pull-out / organiser">
                         <Select value={curSec.insertId} allowNone="None" onChange={(v) => upSec((x) => (x.insertId = v))} options={accOptions('insert')} />
@@ -633,6 +667,16 @@ export default function UnitDesigner() {
 
           {tab === 'top' && (
             <div className="grid gap-3 md:grid-cols-2">
+              {!inRun && (
+                <Card title="Carcass parts">
+                  <div className="space-y-1">
+                    <Toggle label="No sides (open ends, e.g. between tall cabinets)" checked={!!unit.noSides} onChange={(v) => up((u) => (u.noSides = v))} />
+                    <Toggle label="No carcass top (open top)" checked={!!unit.noTop} onChange={(v) => up((u) => (u.noTop = v))} />
+                    <Toggle label="No back panel (wall or slats behind)" checked={!!unit.noBack} onChange={(v) => up((u) => (u.noBack = v))} />
+                    <p className="text-xs text-stone-500">For a TV wall: a low base with no sides or top between two tall cabinets, with slats or a backsplash panel on the wall behind the TV.</p>
+                  </div>
+                </Card>
+              )}
               <Card title="Top">
                 {inRun ? (
                   <p className="text-sm text-stone-500">The worktop is continuous across the kitchen — set it in the kitchen settings.</p>
@@ -761,17 +805,17 @@ export default function UnitDesigner() {
 
           {tab === 'materials' && (
             <div className="grid gap-3 md:grid-cols-2">
-              <Card title="Finish – colour & texture">
+              <Card title="Board colour & texture">
                 <div className="space-y-4">
                   <div>
                     <span className="label">Fronts (doors, drawer fronts, panels)</span>
-                    <FinishPicker value={unit.frontFinishId} onChange={(id) => up((u) => (u.frontFinishId = id))} />
+                    <FinishPicker boardId={unit.frontMaterialId} value={unit.frontFinishId} onChange={(id) => up((u) => (u.frontFinishId = id))} />
                   </div>
                   <div>
                     <span className="label">Carcass (sides, shelves, backs)</span>
-                    <FinishPicker value={unit.carcassFinishId} onChange={(id) => up((u) => (u.carcassFinishId = id))} />
+                    <FinishPicker boardId={unit.carcassMaterialId} value={unit.carcassFinishId} onChange={(id) => up((u) => (u.carcassFinishId = id))} />
                   </div>
-                  <p className="text-xs text-stone-500">Add colours and your own PNG / JPG textures in Price lists › Finishes & textures. The boards below still set the price.</p>
+                  <p className="text-xs text-stone-500">Colours come from Price lists › Board colours & textures (PG Bison and your own swatch photos). The board type below still sets thickness and price.</p>
                 </div>
               </Card>
               <Card title="Boards">

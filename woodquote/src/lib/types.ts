@@ -30,6 +30,13 @@ export interface Finish {
   /** extra price per m² of finished area (0 = included in the board price) */
   surcharge: number;
   category: string;
+  /** board colours & textures database */
+  supplier?: string;
+  range?: string;
+  /** solid colour, woodgrain, stone / concrete or other pattern (woodgrains get a grain look until you add a photo) */
+  kind?: 'solid' | 'woodgrain' | 'stone' | 'other';
+  /** board types this colour is available on; empty = any board */
+  boardIds?: ID[];
 }
 
 export interface BoardMaterial {
@@ -330,6 +337,7 @@ export interface ServiceItem {
 
 export type ProductType =
   | 'tv_stand'
+  | 'tv_base'
   | 'kitchen_base'
   | 'kitchen_wall'
   | 'kitchen_tall'
@@ -346,8 +354,14 @@ export type ProductType =
 /** Corner cupboard: Width A (unit.width) along one wall, Width B along the other. */
 export interface CornerSpec {
   widthB: number;
-  /** L = two doors meeting in the corner; diagonal = one angled door across the corner */
-  style: 'L' | 'diagonal';
+  /**
+   * L = two doors meeting in the corner, panels in two pieces;
+   * square = the same shape with one solid L-shaped top, bottom and shelves;
+   * diagonal = one angled front across the corner;
+   * blind = a straight cabinet on the main wall with a blind panel at the corner and a
+   * reach-in door; its worktop carries on round the corner as a joined remainder (Width B).
+   */
+  style: 'L' | 'square' | 'diagonal' | 'blind';
   /** which side the return (Width B) goes: right = along the right-hand wall */
   hand: 'left' | 'right';
   shelves: number;
@@ -381,6 +395,14 @@ export interface Section {
   hangingRail: boolean;
   applianceId: ID | null; // front = appliance (oven, microwave, fridge ...)
   insertId: ID | null; // pull-out organiser (spice rack, bin, baskets, pantry)
+  /** hanging rails in this compartment (with hangingRail): the height is shared equally, one rail under each shelf */
+  railCount?: number;
+  /** move each rail up (+) or down (−) in mm, top rail first */
+  railOffsets?: number[];
+  /** drawers without fronts inside a door / sliding-door compartment (stacked from the bottom) */
+  innerDrawers?: number;
+  /** how the inner drawers open: push-to-open runners or a notch cut in the drawer's front edge */
+  innerPull?: 'push' | 'notch';
   /** appliance compartment: cover it with a matching door panel (fridges are open by default) */
   applianceDoor?: boolean;
   /** divide just this compartment: side by side (cols) or one above another (rows) */
@@ -487,6 +509,10 @@ export interface Unit {
   mount: 'floor' | 'wall';
   mountHeight: number; // bottom of a wall-hung unit above the floor
   base: 'none' | 'plinth' | 'legs'; // none = carcass sits straight on the floor
+  /** leave out carcass parts, e.g. a TV base between tall side cabinets: no sides, no top */
+  noSides?: boolean;
+  noTop?: boolean;
+  noBack?: boolean;
   baseHeight: number;
   plinthSides: Sides<boolean>; // which faces get a kick board
   plinthRecess: number; // how far the kick board is set back
@@ -564,6 +590,8 @@ export interface Run {
   /** Which wall's cabinets run into each corner: the back wall (default) or the side wall. */
   corners?: { right?: 'back' | 'side'; left?: 'back' | 'side' };
   counterHeight: number; // floor to top of worktop
+  splash?: SplashSpec | null;
+  topFill?: TopFillSpec | null;
   baseDepth: number;
   plinthHeight: number;
   wallBottom: number; // underside of wall units above floor
@@ -587,6 +615,10 @@ export interface SectionRef {
 export interface BoxMeta {
   ref?: SectionRef; // which compartment this belongs to (for click-to-edit)
   door?: string; // groups a door's panel, glass, frame & handle
+  /** inner drawer (no fascia) behind a door */
+  inner?: boolean;
+  /** inner drawer front with a pull notch cut in its top edge */
+  notch?: boolean;
   hinge?: 'left' | 'right' | 'top' | 'bottom'; // pivot side when doors are opened
   slide?: 'left' | 'right';
   drawer?: boolean;
@@ -766,6 +798,8 @@ export interface AssemblyPiece {
   gapBefore?: number;
   /** wall slats fixed straight onto the wall (instead of a cabinet or appliance) */
   slats?: SlatWall | null;
+  /** own size for this appliance (not for standard-size fridges, stoves, hobs, ovens, microwaves) */
+  size?: { width: number; height: number; depth: number } | null;
 }
 
 /** Slatted wall panelling glued (silicone) and anchored straight onto the wall. */
@@ -779,6 +813,26 @@ export interface SlatWall {
   materialId: ID;
   /** optional backing board behind the slats (e.g. black MDF), null = slats straight on the wall */
   backerId: ID | null;
+  /** slats, or one solid wall panel / backsplash (stone, tiles or a board), e.g. behind a TV */
+  style?: 'slats' | 'panel';
+  /** panel: worktop / stone / tile material (priced per m²) or a board */
+  panelSource?: 'counter' | 'board';
+  panelId?: ID | null;
+}
+
+/** Kitchen backsplash between the worktop and the wall units, along every worktop. */
+export interface SplashSpec {
+  source: 'counter' | 'board';
+  materialId: ID;
+  /** null = up to the underside of the wall units */
+  height: number | null;
+}
+
+/** Optional panels (or slats) above wall and tall units, up to the ceiling. */
+export interface TopFillSpec {
+  ceiling: number;
+  materialId: ID | null; // null = fronts board
+  style: 'flat' | 'slatted';
 }
 
 export interface Assembly {

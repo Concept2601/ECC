@@ -8,7 +8,7 @@ import { finishTexture } from './finishTextures';
 import type { ItemPrice } from '../lib/pricing';
 import { inwardNormal, itemBounds, orientation, roomExtents, vertices, wallPieces } from '../lib/room';
 import { activeLegs, legLength, legStart, legTransform, runLayout, type RunBuild } from '../lib/runs';
-import type { AssemblyBuild } from '../lib/assembly';
+import { pieceAppliance, type AssemblyBuild } from '../lib/assembly';
 import type { Appliance, Assembly, Box3 as PartBox, Finish, SinkSpec, BoardMaterial, Catalog, HandleStyle, Room, Run, SectionRef, SurfaceFinish, Unit, UnitBuild } from '../lib/types';
 
 /* ---------------------------------------------------- procedural textures */
@@ -94,6 +94,8 @@ const notchMat = new THREE.MeshStandardMaterial({ color: '#1a1a1a', roughness: 0
 
 /** Material for a finish from the library: its colour, or its photo texture at real size once loaded. */
 function finishMaterial(f: Finish): THREE.MeshPhysicalMaterial {
+  // no photo yet: woodgrain colours get a drawn grain so they still read as wood
+  if (!f.textureId && f.kind === 'woodgrain') return surfaceMaterial(f.color, f.finish, woodTexture(f.color, true));
   const map = f.textureId ? finishTexture(f.textureId) : null;
   const key = `fin|${f.id}|${f.color}|${f.finish}|${map?.uuid ?? ''}|${f.textureSize}|${f.grain}`;
   let m = matShared.get(key);
@@ -500,7 +502,13 @@ export function applianceObject(a: Appliance, b: PartBox): THREE.Object3D {
       break;
     }
     default:
-      add(b, body);
+      if (/tv/i.test(a.variant)) {
+        // slim panel: dark bezel, glossy black screen, small feet when it stands on furniture
+        const panelD = Math.min(b.d, 45);
+        add({ x: b.x, y: b.y + 40, z: b.z, w: b.w, h: b.h - 40, d: panelD }, darkMetal);
+        add({ x: b.x + 12, y: b.y + 52, z: b.z + panelD, w: b.w - 24, h: b.h - 64, d: 2 }, blackGlass);
+        for (const fx of [b.x + b.w * 0.18, b.x + b.w * 0.82 - 60]) add({ x: fx, y: b.y, z: b.z - 40, w: 60, h: 40, d: panelD + 80 }, darkMetal);
+      } else add(b, body);
   }
   return g;
 }
@@ -765,10 +773,13 @@ export function buildRunObject(run: Run, rb: RunBuild, cat: Catalog, opt: SceneO
   const counter = cat.countertops.find((c) => c.id === run.countertopId);
   for (const ep of rb.extraPlacements) {
     const g = new THREE.Group();
-    if (ep.kind === 'counter') g.add(boxMesh(ep.box, counterMaterial(cat, counter)));
+    if (ep.kind === 'counter') g.add(boxMesh(ep.box, counterMaterial(cat, ep.materialId ? (cat.countertops.find((c) => c.id === ep.materialId) ?? counter) : counter)));
     else if (ep.kind === 'panel') {
       const b = cat.boards.find((x) => x.id === ep.materialId);
-      g.add(boxMesh(ep.box, panelMaterial(cat, b)));
+      if (ep.slats) {
+        const { width: sw, gap } = ep.slats;
+        for (let x = 0; x + sw <= ep.box.w + 0.5; x += sw + Math.max(gap, 0.1)) g.add(boxMesh({ ...ep.box, x: ep.box.x + x, w: sw }, panelMaterial(cat, b)));
+      } else g.add(boxMesh(ep.box, panelMaterial(cat, b)));
     } else {
       const a = cat.appliances.find((x) => x.id === ep.applianceId);
       if (a) g.add(applianceObject(a, ep.box));
@@ -794,13 +805,18 @@ export function buildAssemblyObject(a: Assembly, ab: AssemblyBuild, cat: Catalog
     } else if (piece.slats && build) {
       const sg = new THREE.Group();
       for (const part of build.parts) {
+        if (part.kind === 'counter') {
+          const ct = cat.countertops.find((x) => x.id === part.materialId);
+          for (const bx of part.boxes) sg.add(boxMesh(bx, counterMaterial(cat, ct), false));
+          continue;
+        }
         const bd = cat.boards.find((x) => x.id === part.materialId);
         const mat = surfaceMaterial(bd?.color ?? '#b08d57', bd?.finish ?? 'matte', bd?.texture === 'wood' ? woodTexture(bd.color, true) : null);
         for (const bx of part.boxes) sg.add(boxMesh(bx, mat, false));
       }
       o = sg;
     } else {
-      const ap = cat.appliances.find((x) => x.id === piece.applianceId);
+      const ap = pieceAppliance(piece, cat);
       if (ap) o = applianceObject(ap, { x: 0, y: 0, z: 0, w: ap.width, h: ap.height, d: ap.depth });
     }
     if (!o) continue;
@@ -812,7 +828,7 @@ export function buildAssemblyObject(a: Assembly, ab: AssemblyBuild, cat: Catalog
     g.traverse((c) => (c.userData.unitId = piece.unit?.id ?? piece.id));
     if (opt.selectedUnitId && opt.selectedUnitId === (piece.unit?.id ?? piece.id) && !opt.highlight) {
       const u = piece.unit;
-      const ap = cat.appliances.find((x) => x.id === piece.applianceId);
+      const ap = pieceAppliance(piece, cat);
       const sl = piece.slats;
       const hb: PartBox = sl ? { x: 0, y: sl.bottom, z: 0, w: sl.width, h: sl.height, d: 30 } : u ? { x: 0, y: u.mount === 'wall' ? u.mountHeight : 0, z: 0, w: u.width, h: u.height, d: u.depth + 4 } : { x: 0, y: 0, z: 0, w: ap?.width ?? 600, h: ap?.height ?? 850, d: ap?.depth ?? 600 };
       const ln = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo(hb)), new THREE.LineBasicMaterial({ color: '#ea580c' }));

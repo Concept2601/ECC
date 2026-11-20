@@ -11,7 +11,7 @@ import { Calculating, Card, confirmAction, Field, NumInput, PageHeader, Select, 
 import Viewer3D from '../components/Viewer3D';
 import { usePageShortcuts } from '../app/shortcuts';
 import { useMoney, useQuoteCalc } from '../hooks';
-import { appliancePiece, assemblyBounds, FACINGS, slatCount, slatPiece, ISLAND_SIDES, islandGroup, nextSpot, pieceCentre, pieceFootprint, pieceName, pieceRect, setFacing, snapPiece, syncAssembly, turn, unitPiece } from '../lib/assembly';
+import { appliancePiece, assemblyBounds, FACINGS, slatCount, slatPiece, ISLAND_SIDES, islandGroup, nextSpot, pieceCentre, pieceFootprint, pieceName, pieceRect, setFacing, snapPiece, syncAssembly, turn, unitPiece, isStandardAppliance, pieceAppliance, wallPanelPiece } from '../lib/assembly';
 import { createUnit, PRODUCT_LABELS, QUICK_TYPES, retypeUnit } from '../lib/presets';
 import type { Assembly, AssemblyPiece, Catalog, ProductType, SlatWall } from '../lib/types';
 import { deepClone, uid } from '../lib/util';
@@ -35,13 +35,54 @@ function SlatFields({ s, catalog, up }: { s: SlatWall; catalog: Catalog; up: (fn
         <Field label="From the floor">
           <NumInput value={s.bottom} min={0} suffix="mm" onChange={(v) => up((x) => (x.bottom = v))} />
         </Field>
-        <Field label="Slat width">
-          <NumInput value={s.slatWidth} min={5} suffix="mm" onChange={(v) => up((x) => (x.slatWidth = v))} />
-        </Field>
-        <Field label="Gap">
-          <NumInput value={s.slatGap} min={0} suffix="mm" onChange={(v) => up((x) => (x.slatGap = v))} />
-        </Field>
+        {s.style !== 'panel' && (
+          <>
+            <Field label="Slat width">
+              <NumInput value={s.slatWidth} min={5} suffix="mm" onChange={(v) => up((x) => (x.slatWidth = v))} />
+            </Field>
+            <Field label="Gap">
+              <NumInput value={s.slatGap} min={0} suffix="mm" onChange={(v) => up((x) => (x.slatGap = v))} />
+            </Field>
+          </>
+        )}
       </div>
+      <Field label="Type">
+        <select className="input" value={s.style ?? 'slats'} onChange={(e) => up((x) => {
+          x.style = e.target.value as 'slats' | 'panel';
+          if (x.style === 'panel' && !x.panelId) {
+            x.panelSource = 'counter';
+            x.panelId = catalog.countertops.find((c) => /porcelain|slate|tile/i.test(c.name))?.id ?? catalog.countertops[0]?.id ?? null;
+          }
+        })}>
+          <option value="slats">Slats</option>
+          <option value="panel">One solid panel / backsplash (stone, tiles, board)</option>
+        </select>
+      </Field>
+      {s.style === 'panel' && (
+        <Field label="Panel material">
+          <select
+            className="input"
+            value={`${s.panelSource ?? 'counter'}:${s.panelId ?? ''}`}
+            onChange={(e) => up((x) => {
+              const [src, id] = e.target.value.split(':');
+              x.panelSource = src as 'counter' | 'board';
+              x.panelId = id;
+            })}
+          >
+            <optgroup label="Stone, quartz & tiles (priced per m²)">
+              {catalog.countertops.map((c) => (
+                <option key={c.id} value={`counter:${c.id}`}>{c.name}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Boards">
+              {catalog.boards.map((b) => (
+                <option key={b.id} value={`board:${b.id}`}>{b.name}</option>
+              ))}
+            </optgroup>
+          </select>
+        </Field>
+      )}
+      {s.style !== 'panel' && <>
       <Field label="Slat board">
         <Select value={s.materialId} onChange={(v) => v && up((x) => (x.materialId = v))} options={catalog.boards.map((b) => ({ value: b.id, label: b.name }))} />
       </Field>
@@ -51,6 +92,7 @@ function SlatFields({ s, catalog, up }: { s: SlatWall; catalog: Catalog; up: (fn
       <p className="text-xs text-stone-500">
         {n} slats, {Math.round(gap)} mm apart, fixed with silicone and wall anchors about every 500 mm{s.backerId ? '; the backing board is siliconed and anchored on a 400 mm grid' : ''}.
       </p>
+      </>}
     </div>
   );
 }
@@ -473,9 +515,34 @@ export default function AssemblyDesigner() {
                 {sel.slats && <SlatFields s={sel.slats} catalog={catalog} up={(fn) => upPiece(sel.id, (p) => p.slats && fn(p.slats))} />}
                 {!sel.unit && !sel.slats && (
                   <Field label="Appliance">
-                    <ApplianceSelect value={sel.applianceId} onChange={(v) => v && upPiece(sel.id, (p) => (p.applianceId = v))} filter={(x) => x.placement !== 'top'} />
+                    <ApplianceSelect value={sel.applianceId} onChange={(v) => v && upPiece(sel.id, (p) => ((p.applianceId = v), (p.size = null)))} filter={(x) => x.placement !== 'top'} />
                   </Field>
                 )}
+                {!sel.unit && !sel.slats && (() => {
+                  const base = catalog.appliances.find((a) => a.id === sel.applianceId);
+                  if (!base) return null;
+                  if (isStandardAppliance(base)) return <p className="text-xs text-stone-500">{base.name}: standard size {base.width} × {base.height} × {base.depth} mm (choose another model to change it).</p>;
+                  const cur = pieceAppliance(sel, catalog)!;
+                  const setDim = (k: 'width' | 'height' | 'depth', v: number) => upPiece(sel.id, (p) => (p.size = { width: cur.width, height: cur.height, depth: cur.depth, [k]: Math.max(10, v) }));
+                  return (
+                    <div className="grid grid-cols-3 gap-2">
+                      <Field label="Width">
+                        <NumInput value={cur.width} min={10} suffix="mm" onChange={(v) => setDim('width', v)} />
+                      </Field>
+                      <Field label="Height">
+                        <NumInput value={cur.height} min={10} suffix="mm" onChange={(v) => setDim('height', v)} />
+                      </Field>
+                      <Field label="Depth">
+                        <NumInput value={cur.depth} min={10} suffix="mm" onChange={(v) => setDim('depth', v)} />
+                      </Field>
+                      {sel.size && (
+                        <button className="btn-ghost col-span-3 justify-start px-0 text-xs" onClick={() => upPiece(sel.id, (p) => (p.size = null))}>
+                          Back to the catalogue size ({base.width} × {base.height} × {base.depth})
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="flex flex-wrap gap-2">
                   {sel.unit && (
                     <Link className="btn-primary" to={`/quotes/${quote.id}/units/${sel.unit.id}`}>
@@ -553,6 +620,21 @@ export default function AssemblyDesigner() {
                 }
               >
                 <Plus size={16} /> Wall slats (fixed onto the wall)
+              </button>
+              <button
+                className="btn-secondary w-full"
+                onClick={() =>
+                  addPiece((g) => {
+                    // a panel behind the TV: as wide as the cabinet below, from the cabinet top up 1200mm
+                    const host = sel?.unit ?? [...g.pieces].reverse().find((p) => p.unit && p.unit.mount === 'floor')?.unit;
+                    const s = nextSpot(g, catalog);
+                    const p = wallPanelPiece(host?.width ?? 1800, 1200, host ? host.height : 600, catalog);
+                    if (g.layout !== 'row') Object.assign(p, s);
+                    return p;
+                  })
+                }
+              >
+                <Plus size={16} /> Wall panel / backsplash (stone, tiles, board)
               </button>
               <div>
                 <span className="label">Rebuild as an island (replaces the pieces)</span>

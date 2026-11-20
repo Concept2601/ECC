@@ -2,6 +2,25 @@
 
 _En-Quote was called WoodQuote by 2601 up to version 2.3._
 
+## 3.1.2 — Corner types, inner drawers, backsplashes, ceiling panels and the PG Bison colour range (2026-11-20)
+
+### Added
+- Board colours & textures database: PG Bison MelaWood solid colours and woodgrains and SupaGloss built in, with supplier, range and type; link each colour to the board types it comes on and add the supplier's swatch photos (PNG / JPG) for the exact look
+- Four corner cupboard types: square (one solid L-shaped top and bottom), L (two-piece panels), diagonal, and blind corner (straight cabinet, blind panel, reach-in door, worktop joined round the corner); all available in kitchens too
+- Inner drawers without fronts behind doors, opened with push-to-open runners or a notch cut in the front edge
+- Several hanging rails in one compartment: they share the height equally, each under its own shelf, and each can be moved up or down
+- TV base cabinet with no sides or top (for between tall cabinets), plus switches to leave out the sides, top or back of any cabinet
+- Kitchen backsplash along every worktop in stone, Caesarstone, slate, tiles or a board, at the height you choose (auto up to the wall units)
+- Optional panels or slats above the wall and tall units up to the ceiling (e.g. cabinets 2200, ceiling 2600 → 400mm)
+- Wall panel / backsplash item for TV and media areas: any width and height in stone, tiles or board
+- TV sizes 32" to 100" (including 41", 42", 46"), shown as a slim screen in 3D
+- New worktop / splash materials: Caesarstone quartz, natural slate, subway, mosaic and porcelain slab tiles
+
+### Updated
+- Bins, racks, TVs and other non-standard appliances can be given their own width, height and depth per item; fridges, stoves, hobs, ovens and microwaves keep their standard sizes
+- Choosing a board colour never changes the board type: the colour picker only offers colours that come on the cabinet's board
+- Woodgrain colours show a grain in 3D even before you add the swatch photo
+
 ## 3.1.1 — Corner doors, better defaults, sums in measurement boxes and automatic fittings (2026-11-20)
 
 ### Added

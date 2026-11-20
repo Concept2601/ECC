@@ -106,3 +106,29 @@ describe('corner doors behave like other doors', () => {
     expect(doors(buildUnit(u, cat, s.pricing))).toBe(0);
   });
 });
+
+describe('corner types', () => {
+  const cat = defaultCatalog();
+  const s = defaultSettings();
+  it('square corner: one solid L-shaped bottom, top and worktop', () => {
+    const u = createUnit('corner_base');
+    u.corner!.style = 'square';
+    u.countertopId = cat.countertops[0].id;
+    const b = buildUnit(u, cat, s.pricing);
+    expect(b.parts.some((p) => p.name.startsWith('Bottom (one-piece L)'))).toBe(true);
+    expect(b.parts.filter((p) => p.role === 'counter')).toHaveLength(1);
+    expect(b.parts.some((p) => /side wall\)/.test(p.name) && p.role === 'carcass' && /Bottom|Top/.test(p.name))).toBe(false);
+  });
+  it('blind corner: straight carcass, blind panel, reach-in door, worktop joined round the corner', () => {
+    const u = createUnit('corner_base');
+    u.corner!.style = 'blind';
+    u.width = 1000;
+    u.corner!.widthB = 1200;
+    u.countertopId = cat.countertops[0].id;
+    const b = buildUnit(u, cat, s.pricing);
+    expect(b.parts.some((p) => p.name === 'Blind corner panel')).toBe(true);
+    expect(b.parts.filter((p) => p.name.startsWith('Reach-in door')).reduce((a, p) => a + p.qty, 0)).toBe(1);
+    expect(b.parts.filter((p) => p.role === 'counter').map((p) => p.name).sort()).toEqual(['Worktop (main wall)', 'Worktop (side wall)']);
+    expect(b.parts.some((p) => p.name === 'Back panel (side wall)')).toBe(false);
+  });
+});

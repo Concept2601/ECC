@@ -93,8 +93,8 @@ export default function MaterialHub({ quote, calc, catalog, up }: { quote: Quote
       <div className="grid gap-3 md:grid-cols-2">
         {(
           [
-            ['Front finish – colour & texture', 'Doors, drawer fronts, end panels and kick boards', 'frontFinishId'],
-            ['Carcass finish – colour & texture', 'Sides, shelves, backs and drawer boxes', 'carcassFinishId'],
+            ['Fronts – board colour & texture', 'Doors, drawer fronts, end panels and kick boards', 'frontFinishId'],
+            ['Carcass – board colour & texture', 'Sides, shelves, backs and drawer boxes', 'carcassFinishId'],
           ] as const
         ).map(([title, usage, field]) => {
           const vals = new Set(units.map((u) => u[field] ?? null));
@@ -103,6 +103,10 @@ export default function MaterialHub({ quote, calc, catalog, up }: { quote: Quote
             <Card key={field} title={title}>
               <p className="mb-2 text-xs text-stone-500">{usage} on every cabinet in this job. The board still sets the price.</p>
               <FinishPicker
+                boardId={(() => {
+                  const ids = new Set(units.map((u) => (field === 'frontFinishId' ? u.frontMaterialId : u.carcassMaterialId)));
+                  return ids.size === 1 ? [...ids][0] : null;
+                })()}
                 value={one ?? null}
                 mixed={vals.size > 1}
                 onChange={(id) =>

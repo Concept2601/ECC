@@ -164,7 +164,7 @@ export default function Library({ embedded = false }: { embedded?: boolean }) {
           onChange={setTab}
           tabs={[
             { value: 'boards', label: 'Boards' },
-            { value: 'finishes', label: 'Finishes & textures' },
+            { value: 'finishes', label: 'Board colours & textures' },
             { value: 'edging', label: 'Edging' },
             { value: 'glass', label: 'Glass' },
             { value: 'aluminium', label: 'Aluminium' },

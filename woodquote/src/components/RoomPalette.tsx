@@ -2,7 +2,7 @@
 // the real thing into the middle of the room (a priced item, or an opening in
 // the wall) ready to drag into place.
 import { useState } from 'react';
-import { applianceGroup, assemblyBounds, islandGroup, newAssembly, rowGroup, slatGroup, syncAssembly, type IslandSides, type RowPreset } from '../lib/assembly';
+import { applianceGroup, assemblyBounds, islandGroup, newAssembly, rowGroup, slatGroup, wallPanelGroup, syncAssembly, type IslandSides, type RowPreset } from '../lib/assembly';
 import { unitExtents } from '../lib/generate';
 import { createUnit } from '../lib/presets';
 import { footprints, newOpening, roomExtents, wallName } from '../lib/room';
@@ -131,6 +131,7 @@ export default function RoomPalette({ quote, room, catalog, items, up, onAdded }
         { label: 'Sliding wardrobe', act: () => addUnit('sliding_wardrobe') },
         { label: 'BIC (built-in cupboard)', act: () => addUnit('built_in') },
         { label: 'TV stand', act: () => addUnit('tv_stand') },
+        { label: 'TV base (no sides / top)', act: () => addUnit('tv_base') },
         { label: 'Display / bookshelf', act: () => addUnit('bookshelf') },
         { label: 'Vanity', act: () => addUnit('vanity') },
         { label: 'Custom unit', act: () => addUnit('custom') },
@@ -138,6 +139,7 @@ export default function RoomPalette({ quote, room, catalog, items, up, onAdded }
         { label: 'Wardrobe wall (row)', act: () => addRow('wardrobe') },
         { label: 'TV wall unit (row)', act: () => addRow('tv') },
         { label: 'Wall slats', hint: 'fixed onto the wall with silicone and anchors', act: () => addGroup(slatGroup(1800, 2400)) },
+        { label: 'Wall panel / backsplash', hint: 'stone, tiles or a board, e.g. behind a TV', act: () => addGroup(wallPanelGroup(catalog, 1800, 1200, 600)) },
         { label: 'Custom group (several cabinets)', act: () => addGroup(newAssembly('Custom unit (several cabinets)')) },
       ],
     },

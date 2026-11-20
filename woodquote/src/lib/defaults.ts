@@ -1,4 +1,4 @@
-import { defaultFinishes } from './finishes';
+import { defaultFinishes, pgBisonFinishes } from './finishes';
 import type { CeilingProduct, CeilingRates, PresetItem, ServiceItem, TileProduct, TileSupply, TilingRates, Accessory, Appliance, Catalog, Settings } from './types';
 
 const acc = (a: Omit<Accessory, 'packQty' | 'unit'> & Partial<Pick<Accessory, 'packQty' | 'unit'>>): Accessory => ({ unit: 'pc', packQty: 1, ...a });
@@ -55,10 +55,21 @@ export const defaultAppliances = (): Appliance[] => [
   { id: 'ap-bin-pedal', category: 'other', name: 'Pedal bin 50 L', variant: 'Bin', width: 350, height: 650, depth: 350, price: 45, color: '#a1a1aa', placement: 'freestanding' },
   { id: 'ap-bin-twin', category: 'other', name: 'Twin recycling bin', variant: 'Bin', width: 600, height: 700, depth: 400, price: 85, color: '#a1a1aa', placement: 'freestanding' },
   { id: 'ap-tv-55', category: 'other', name: 'TV 55"', variant: 'TV', width: 1230, height: 710, depth: 80, price: 600, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-32', category: 'other', name: 'TV 32"', variant: 'TV', width: 728, height: 419, depth: 60, price: 180, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-40', category: 'other', name: 'TV 40"', variant: 'TV', width: 906, height: 518, depth: 60, price: 260, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-41', category: 'other', name: 'TV 41"', variant: 'TV', width: 928, height: 531, depth: 60, price: 270, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-42', category: 'other', name: 'TV 42"', variant: 'TV', width: 950, height: 543, depth: 60, price: 290, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-43', category: 'other', name: 'TV 43"', variant: 'TV', width: 972, height: 556, depth: 60, price: 300, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-46', category: 'other', name: 'TV 46"', variant: 'TV', width: 1038, height: 593, depth: 60, price: 360, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-50', category: 'other', name: 'TV 50"', variant: 'TV', width: 1127, height: 643, depth: 60, price: 420, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-65', category: 'other', name: 'TV 65"', variant: 'TV', width: 1459, height: 829, depth: 70, price: 850, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-75', category: 'other', name: 'TV 75"', variant: 'TV', width: 1680, height: 954, depth: 70, price: 1200, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-85', category: 'other', name: 'TV 85"', variant: 'TV', width: 1902, height: 1079, depth: 70, price: 1900, color: '#0b0b0d', placement: 'freestanding' },
+  { id: 'ap-tv-100', category: 'other', name: 'TV 100"', variant: 'TV', width: 2234, height: 1265, depth: 70, price: 3500, color: '#0b0b0d', placement: 'freestanding' },
 ];
 
 /** Built-in library items added after 2.1, offered once to libraries saved by older versions. */
-export const DEFAULTS_ADDED_LATER = ['rl-support', 'l-clip', 't-stopper', 't-guide', 'fx-buffer', 'fx-anchor', 'fx-silicone', 'ap-washer-top', 'ap-dryer', 'ap-freezer-chest', 'ap-bin-pedal', 'ap-bin-twin', 'ap-tv-55'];
+export const DEFAULTS_ADDED_LATER = ['c-caesarstone', 'c-slate', 'c-tile-subway', 'c-tile-mosaic', 'c-tile-porcelain', 'ap-tv-32', 'ap-tv-40', 'ap-tv-41', 'ap-tv-42', 'ap-tv-43', 'ap-tv-46', 'ap-tv-50', 'ap-tv-65', 'ap-tv-75', 'ap-tv-85', 'ap-tv-100', 'r-push', 'sv-notch-drawer', ...pgBisonFinishes().map((f) => f.id), 'rl-support', 'l-clip', 't-stopper', 't-guide', 'fx-buffer', 'fx-anchor', 'fx-silicone', 'ap-washer-top', 'ap-dryer', 'ap-freezer-chest', 'ap-bin-pedal', 'ap-bin-twin', 'ap-tv-55'];
 
 
 export const defaultCatalog = (): Catalog => ({
@@ -100,6 +111,11 @@ export const defaultCatalog = (): Catalog => ({
     { id: 'c-granite', name: 'Granite (black galaxy) 30mm', thickness: 30, pricePerSqm: 120, color: '#26262a', finish: 'gloss' },
     { id: 'c-quartz', name: 'Quartz white 20mm', thickness: 20, pricePerSqm: 180, color: '#f4f4f2', finish: 'gloss' },
     { id: 'c-wood', name: 'Solid hardwood top 40mm', thickness: 40, pricePerSqm: 140, color: '#a8743f', finish: 'satin' },
+    { id: 'c-caesarstone', name: 'Caesarstone quartz 20mm', thickness: 20, pricePerSqm: 220, color: '#e9e6e0', finish: 'gloss' },
+    { id: 'c-slate', name: 'Natural slate 15mm', thickness: 15, pricePerSqm: 95, color: '#3b3e42', finish: 'textured' },
+    { id: 'c-tile-subway', name: 'Ceramic tiles – white subway (splash)', thickness: 10, pricePerSqm: 35, color: '#f2f1ec', finish: 'gloss' },
+    { id: 'c-tile-mosaic', name: 'Mosaic tiles (splash)', thickness: 8, pricePerSqm: 60, color: '#9aa7a5', finish: 'gloss' },
+    { id: 'c-tile-porcelain', name: 'Porcelain slab tiles 1200×600 (splash / wall)', thickness: 10, pricePerSqm: 48, color: '#d8d4cc', finish: 'satin' },
   ],
   appliances: defaultAppliances(),
   finishes: defaultFinishes(),
@@ -136,6 +152,7 @@ export const defaultCatalog = (): Catalog => ({
     acc({ id: 'hd-finger', category: 'handle', style: 'finger', name: 'Finger pull profile', size: 'per metre', unit: 'm', price: 5 }),
     acc({ id: 'hd-gola', category: 'handle', style: 'profile', name: 'Gola / J-profile handle', size: 'per metre', unit: 'm', price: 6 }),
     acc({ id: 'hd-appliance', category: 'handle', style: 'appliance', name: 'Appliance pull handle', size: '450mm', price: 9 }),
+    acc({ id: 'r-push', category: 'other', name: 'Push-to-open runner unit (pair)', size: 'for inner drawers', unit: 'pair', price: 6 }),
     acc({ id: 'hd-push', category: 'handle', style: 'push', name: 'Push-to-open latch', size: 'handleless', price: 3 }),
     acc({ id: 'hd-push-mag', category: 'handle', style: 'push', name: 'Magnetic push-to-open system', size: 'handleless', price: 4.5 }),
     // sliding
@@ -193,6 +210,7 @@ export const defaultCatalog = (): Catalog => ({
     acc({ id: 'fx-silicone', category: 'fixing', name: 'Silicone / construction adhesive 300ml', size: 'tube', price: 6 }),
     acc({ id: 'sv-cutout', category: 'service', name: 'Countertop cut-out (sink / hob)', size: 'per cut-out', price: 25 }),
     acc({ id: 'sv-notch', category: 'service', name: 'Handle notch machining', size: 'per door', price: 2 }),
+    acc({ id: 'sv-notch-drawer', category: 'service', name: 'Pull notch in inner drawer front', size: 'per drawer', price: 1.5 }),
     acc({ id: 'jn-dowel', category: 'fixing', name: 'Beech dowels 8x35 (panel joints)', size: 'pack of 100', packQty: 100, price: 4 }),
     acc({ id: 'jn-biscuit', category: 'fixing', name: 'Jointing biscuits No.20', size: 'pack of 100', packQty: 100, price: 6 }),
     acc({ id: 'jn-connector', category: 'fixing', name: 'Panel / worktop connector bolt', size: '150mm', price: 1.5 }),

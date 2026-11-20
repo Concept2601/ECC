@@ -13,29 +13,31 @@ export const LEG_LABELS = ['Back wall', 'Right wall', 'Left wall'];
 
 /* ----------------------------------------------------------- templates */
 
-export type BaseTemplate = 'doors' | 'door' | 'drawers' | 'sink' | 'hob' | 'dishwasher' | 'bin' | 'spice' | 'cornerL' | 'cornerDiag' | 'corner' | 'open';
+export type BaseTemplate = 'doors' | 'door' | 'drawers' | 'sink' | 'hob' | 'dishwasher' | 'bin' | 'spice' | 'cornerSquare' | 'cornerL' | 'cornerDiag' | 'cornerBlind' | 'corner' | 'open';
 export type WallTemplate = 'none' | 'doors' | 'door' | 'glass' | 'flap' | 'open' | 'hood';
 export type TallTemplate = 'pantry' | 'ovenTower' | 'fridge' | 'broom';
 export type GapTemplate = 'fridge' | 'stove' | 'dishwasher' | 'empty';
 
 export const BASE_TEMPLATES: Record<BaseTemplate, string> = {
-  doors: 'Double door', door: 'Single door', drawers: 'Drawer pack', sink: 'Sink unit', hob: 'Hob + oven', dishwasher: 'Dishwasher (integrated)', bin: 'Bin pull-out', spice: 'Spice pull-out', cornerL: 'Corner cupboard – L (both walls)', cornerDiag: 'Corner cupboard – diagonal (both walls)', corner: 'Blind corner (magic corner)', open: 'Open shelves',
+  doors: 'Double door', door: 'Single door', drawers: 'Drawer pack', sink: 'Sink unit', hob: 'Hob + oven', dishwasher: 'Dishwasher (integrated)', bin: 'Bin pull-out', spice: 'Spice pull-out', cornerSquare: 'Corner cupboard – square, one solid top (both walls)', cornerL: 'Corner cupboard – L, two-piece panels (both walls)', cornerDiag: 'Corner cupboard – diagonal (both walls)', cornerBlind: 'Blind corner – reach-in door, worktop joined round the corner', corner: 'Blind corner cabinet with magic corner pull-out', open: 'Open shelves',
 };
 export const WALL_TEMPLATES: Record<WallTemplate, string> = { none: 'Nothing above', doors: 'Double door', door: 'Single door', glass: 'Glass doors', flap: 'Lift-up flap', open: 'Open shelf', hood: 'Chimney hood' };
 export const TALL_TEMPLATES: Record<TallTemplate, string> = { pantry: 'Pantry pull-out', ovenTower: 'Oven + microwave tower', fridge: 'Integrated fridge housing', broom: 'Broom cupboard' };
 export const GAP_TEMPLATES: Record<GapTemplate, string> = { fridge: 'Free-standing fridge', stove: 'Free-standing stove', dishwasher: 'Free-standing dishwasher', empty: 'Empty space' };
 
-const DEFAULT_WIDTH: Record<BaseTemplate, number> = { doors: 800, door: 450, drawers: 600, sink: 900, hob: 600, dishwasher: 600, bin: 450, spice: 150, cornerL: 900, cornerDiag: 900, corner: 1000, open: 400 };
+const DEFAULT_WIDTH: Record<BaseTemplate, number> = { doors: 800, door: 450, drawers: 600, sink: 900, hob: 600, dishwasher: 600, bin: 450, spice: 150, cornerSquare: 900, cornerL: 900, cornerDiag: 900, cornerBlind: 1000, corner: 1000, open: 400 };
+
+const isCornerTpl = (tpl: BaseTemplate): tpl is 'cornerSquare' | 'cornerL' | 'cornerDiag' | 'cornerBlind' => tpl === 'cornerSquare' || tpl === 'cornerL' || tpl === 'cornerDiag' || tpl === 'cornerBlind';
 
 function makeBase(tpl: BaseTemplate, width: number, run: Run): Unit {
-  if (tpl === 'cornerL' || tpl === 'cornerDiag') {
-    const style = tpl === 'cornerL' ? 'L' : 'diagonal';
+  if (isCornerTpl(tpl)) {
+    const style = ({ cornerSquare: 'square', cornerL: 'L', cornerDiag: 'diagonal', cornerBlind: 'blind' } as const)[tpl];
     return baseUnit('corner_base', {
-      name: `Base – Corner ${style === 'L' ? 'L' : 'diagonal'}`,
+      name: `Base – Corner ${style}`,
       width,
       installType: run.installType,
       hingeId: 'h-corner',
-      corner: { widthB: width, style, hand: 'right', shelves: 1, carousel: false },
+      corner: { widthB: style === 'blind' ? run.baseDepth : width, style, hand: 'right', shelves: 1, carousel: false },
       bays: [bay(1, [sec({ front: 'door', opening: 'left', shelves: 1 })])],
     });
   }
@@ -123,7 +125,7 @@ function makeTall(tpl: TallTemplate, width: number, run: Run): Unit {
 }
 
 export function baseModule(tpl: BaseTemplate, run: Run, wallTpl: WallTemplate = 'doors', width = DEFAULT_WIDTH[tpl]): RunModule {
-  return { id: uid('m'), kind: 'base', width, base: makeBase(tpl, width, run), wall: makeWall(wallTpl, width, run), hoodId: wallTpl === 'hood' ? 'ap-hood-chimney' : null, gapApplianceId: null, gapLabel: '', cornerB: tpl === 'cornerL' || tpl === 'cornerDiag' ? width : null };
+  return { id: uid('m'), kind: 'base', width, base: makeBase(tpl, width, run), wall: makeWall(wallTpl, width, run), hoodId: wallTpl === 'hood' ? 'ap-hood-chimney' : null, gapApplianceId: null, gapLabel: '', cornerB: isCornerTpl(tpl) ? (tpl === 'cornerBlind' ? run.baseDepth : width) : null };
 }
 export function tallModule(tpl: TallTemplate, run: Run, width = 600): RunModule {
   return { id: uid('m'), kind: 'tall', width, base: makeTall(tpl, width, run), wall: null, hoodId: null, gapApplianceId: null, gapLabel: '' };
@@ -271,7 +273,7 @@ export function ensureLegs(run: Run) {
 }
 
 /** How far a corner reaches along the other wall: a corner cupboard's Width B, else the cabinet depth. */
-const cornerReach = (run: Run, m?: RunModule) => (m?.base?.corner ? Math.max(run.baseDepth, m.cornerB || m.base.corner.widthB) : run.baseDepth);
+const cornerReach = (run: Run, m?: RunModule) => (m?.base?.corner && m.base.corner.style !== 'blind' ? Math.max(run.baseDepth, m.cornerB || m.base.corner.widthB) : run.baseDepth);
 
 /** Which wall runs into each corner. */
 export const cornerOwner = (run: Run, side: 'left' | 'right'): 'back' | 'side' => {
@@ -409,7 +411,7 @@ export interface RunPiece {
 export interface RunBuild {
   pieces: RunPiece[];
   extra: UnitBuild; // worktop, free-standing appliances, hoods (leg-local boxes)
-  extraPlacements: { place: Placement; box: Box3; kind: 'counter' | 'appliance' | 'panel'; applianceId?: string; materialId?: string }[];
+  extraPlacements: { place: Placement; box: Box3; kind: 'counter' | 'appliance' | 'panel'; applianceId?: string; materialId?: string; slats?: { width: number; gap: number } }[];
   size: { w: number; d: number; h: number };
 }
 
@@ -424,6 +426,23 @@ export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunB
   const counterParts = new Map<string, Part>();
   const applCount = new Map<string, number>();
   const nLegs = activeLegs(run);
+  let topFillRuns = 0;
+
+  /* backsplash: on the wall above every worktop run, up to the wall units unless a height is set */
+  const splash = run.splash;
+  const splashMat = splash ? (splash.source === 'counter' ? cat.countertops.find((c) => c.id === splash.materialId) : cat.boards.find((b) => b.id === splash.materialId)) : undefined;
+  const splashParts = new Map<string, Part>();
+  const addSplash = (leg: number, s0: number, len: number) => {
+    if (!splash || !splashMat || len <= 0) return;
+    const h = Math.max(20, splash.height ?? run.wallBottom - run.counterHeight);
+    const th = splashMat.thickness;
+    const box: Box3 = { x: 0, y: run.counterHeight, z: 0, w: len, h, d: th };
+    extraPlacements.push({ place: { leg, s: s0, w: len }, box, kind: splash.source === 'counter' ? 'counter' : 'panel', materialId: splashMat.id });
+    const key = `splash|${Math.round(len)}|${Math.round(h)}`;
+    const p = splashParts.get(key);
+    if (p) p.qty++;
+    else splashParts.set(key, splash.source === 'counter' ? { key, name: `Backsplash – ${splashMat.name}`, role: 'counter', kind: 'counter', materialId: splashMat.id, length: Math.round(len), width: Math.round(h), thickness: th, qty: 1, edgeLength: 0, edgingId: null, boxes: [] } : { key, name: 'Backsplash panel', role: 'finish', kind: 'board', materialId: splashMat.id, length: Math.round(len), width: Math.round(h), thickness: th, qty: 1, edgeLength: len / 1000, edgingId: null, boxes: [] });
+  };
 
   for (let li = 0; li < nLegs; li++) {
     let s = 0;
@@ -439,6 +458,7 @@ export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunB
       if (p) p.qty++;
       else counterParts.set(key, { key, name: `Worktop (${LEG_LABELS[li].toLowerCase()})`, role: 'counter', kind: 'counter', materialId: counter.id, length: Math.round(len), width: depth, thickness: counter.thickness, qty: 1, edgeLength: 0, edgingId: null, boxes: [] });
       extraPlacements.push({ place, box, kind: 'counter' });
+      addSplash(li, segStart, len);
       segStart = null;
     };
     for (const m of run.legs[li]) {
@@ -475,10 +495,36 @@ export function buildRun(run: Run, cat: Catalog, pricing: PricingSettings): RunB
           extraPlacements.push({ place, box: { x: (m.width - a.width) / 2, y: Math.max(run.counterHeight + 550, y), z: 0, w: Math.min(a.width, m.width), h: a.height, d: a.depth }, kind: 'appliance', applianceId: a.id });
         }
       }
+      // panels above wall / tall units up to the ceiling
+      if (run.topFill && (m.wall || m.kind === 'tall')) {
+        const top = m.kind === 'tall' ? m.height || run.tallHeight : (m.wallBottom ?? run.wallBottom) + (m.wallHeight || run.wallHeight);
+        const gapH = run.topFill.ceiling - top;
+        if (gapH >= 20) {
+          const mat = run.topFill.materialId ?? runUnits(run)[0]?.frontMaterialId ?? cat.boards[0]?.id ?? null;
+          const bd = cat.boards.find((b) => b.id === mat);
+          const t = bd?.thickness ?? 18;
+          const depth = m.kind === 'tall' ? m.depth || run.baseDepth : m.wallDepth || run.wallDepth;
+          const box: Box3 = { x: 0, y: top, z: depth - t, w: m.width, h: gapH, d: t };
+          if (run.topFill.style === 'slatted') {
+            const sw = 40;
+            const sg = 15;
+            const n = Math.max(1, Math.floor((m.width + sg) / (sw + sg)));
+            extraPlacements.push({ place, box, kind: 'panel', materialId: mat ?? undefined, slats: { width: sw, gap: n > 1 ? (m.width - n * sw) / (n - 1) : 0 } });
+            extra.parts.push({ key: `topfill-${m.id}`, name: `Slats above the cabinets (to the ceiling) ${sw}mm`, role: 'finish', kind: 'board', materialId: mat, length: Math.round(gapH), width: sw, thickness: t, qty: n, edgeLength: 0, edgingId: null, boxes: [] });
+          } else {
+            extraPlacements.push({ place, box, kind: 'panel', materialId: mat ?? undefined });
+            extra.parts.push({ key: `topfill-${m.id}`, name: `Panel above the cabinets (to the ceiling) ${m.width}mm`, role: 'finish', kind: 'board', materialId: mat, length: m.width, width: Math.round(gapH), thickness: t, qty: 1, edgeLength: m.width / 1000, edgingId: null, boxes: [] });
+          }
+          topFillRuns += m.width;
+        }
+      }
       s += m.width;
     }
     closeSeg(s);
   }
+  if (topFillRuns > 0) extra.hardware.push({ key: 'topfill-fix', accessoryId: 'fx-bracket', qty: Math.ceil(topFillRuns / 600) + 1, reason: 'Fixing the panels above the cabinets' });
+  extra.parts.push(...splashParts.values());
+  if (splashParts.size) extra.hardware.push({ key: 'splash-adhesive', accessoryId: 'fx-silicone', qty: Math.max(1, Math.ceil([...splashParts.values()].reduce((a, p) => a + (p.length * p.width * p.qty) / 1e6, 0) / 1.5)), reason: 'Adhesive / silicone for the backsplash' });
   // worktop over the side arm of each corner cupboard (between the back-wall worktop and the side wall's)
   if (counter && nLegs > 1) {
     const depth = run.baseDepth + run.counterOverhang;

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { uid } from '../lib/util';
 import { boardColour } from '../lib/finishes';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Calculating, Card, confirmAction, Field, Modal, NumInput, PageHeader, Select, Tabs, TextInput } from '../components/ui';
+import { Calculating, Card, confirmAction, Field, Modal, NumInput, OptNumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import { usePageShortcuts } from '../app/shortcuts';
 import Viewer3D from '../components/Viewer3D';
 import ApplianceSelect from '../components/ApplianceSelect';
@@ -497,9 +497,11 @@ export default function RunDesigner() {
                           <NumInput value={sel.m.cornerB || sel.m.base.corner.widthB} min={1} suffix="mm" onChange={(v) => up((r) => (findMod(r, sel.m.id)!.m.cornerB = Math.max(1, v)))} />
                         </Field>
                         <Field label="Corner style">
-                          <select className="input" value={sel.m.base.corner.style} onChange={(e) => up((r) => { const m = findMod(r, sel.m.id)!.m; m.base!.corner!.style = e.target.value as 'L' | 'diagonal'; if (m.wall?.corner) m.wall.corner.style = m.base!.corner!.style; })}>
-                            <option value="L">L – two doors</option>
-                            <option value="diagonal">Diagonal – one door</option>
+                          <select className="input" value={sel.m.base.corner.style} onChange={(e) => up((r) => { const m = findMod(r, sel.m.id)!.m; m.base!.corner!.style = e.target.value as 'L' | 'square' | 'diagonal' | 'blind'; if (m.wall?.corner) m.wall.corner.style = m.base!.corner!.style; })}>
+                            <option value="square">Square – one solid top</option>
+                            <option value="L">L – two-piece panels</option>
+                            <option value="diagonal">Diagonal</option>
+                            <option value="blind">Blind corner – reach-in door</option>
                           </select>
                         </Field>
                         <p className="col-span-2 text-xs text-stone-600">Width above is Width A along this wall. The cupboard above becomes a matching corner wall cupboard.</p>
@@ -619,6 +621,52 @@ export default function RunDesigner() {
                   <Field label="Worktop">
                     <Select value={run.countertopId} allowNone="No worktop" onChange={(v) => up((r) => (r.countertopId = v))} options={catalog.countertops.map((c) => ({ value: c.id, label: `${c.name} – ${fmt(c.pricePerSqm)}/m²` }))} />
                   </Field>
+                  <div className="space-y-2 rounded-xl border border-stone-200 p-3">
+                    <Toggle label="Backsplash on the wall above the worktop" checked={!!run.splash} onChange={(v) => up((r) => (r.splash = v ? { source: 'counter', materialId: catalog.countertops.find((c) => /tile|slate|caesar/i.test(c.name))?.id ?? catalog.countertops[0]?.id ?? '', height: null } : null))} />
+                    {run.splash && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Field label="Material">
+                          <select className="input" value={`${run.splash.source}:${run.splash.materialId}`} onChange={(e) => up((r) => {
+                            const [src, id] = e.target.value.split(':');
+                            r.splash = { ...r.splash!, source: src as 'counter' | 'board', materialId: id };
+                          })}>
+                            <optgroup label="Stone, quartz, slate & tiles (per m²)">
+                              {catalog.countertops.map((c) => <option key={c.id} value={`counter:${c.id}`}>{c.name}</option>)}
+                            </optgroup>
+                            <optgroup label="Boards">
+                              {catalog.boards.map((b) => <option key={b.id} value={`board:${b.id}`}>{b.name}</option>)}
+                            </optgroup>
+                          </select>
+                        </Field>
+                        <Field label="Height">
+                          <OptNumInput value={run.splash.height} min={20} suffix="mm" placeholder={`Auto ${run.wallBottom - run.counterHeight}`} onChange={(v) => up((r) => (r.splash = { ...r.splash!, height: v }))} />
+                        </Field>
+                        <p className="col-span-2 text-[11px] text-stone-500">Runs along every worktop. Auto = up to the underside of the wall units.</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2 rounded-xl border border-stone-200 p-3">
+                    <Toggle label="Panels above the cabinets up to the ceiling" checked={!!run.topFill} onChange={(v) => up((r) => (r.topFill = v ? { ceiling: 2600, materialId: null, style: 'flat' } : null))} />
+                    {run.topFill && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Field label="Ceiling height">
+                          <NumInput value={run.topFill.ceiling} min={1500} suffix="mm" onChange={(v) => up((r) => (r.topFill = { ...r.topFill!, ceiling: v }))} />
+                        </Field>
+                        <Field label="Style">
+                          <select className="input" value={run.topFill.style} onChange={(e) => up((r) => (r.topFill = { ...r.topFill!, style: e.target.value as 'flat' | 'slatted' }))}>
+                            <option value="flat">Flat panel</option>
+                            <option value="slatted">Slats</option>
+                          </select>
+                        </Field>
+                        <Field label="Board" className="col-span-2">
+                          <Select value={run.topFill.materialId} allowNone="Same as the fronts" onChange={(v) => up((r) => (r.topFill = { ...r.topFill!, materialId: v }))} options={catalog.boards.map((b) => ({ value: b.id, label: b.name }))} />
+                        </Field>
+                        <p className="col-span-2 text-[11px] text-stone-500">
+                          Fills from the top of the wall and tall units ({Math.max(run.tallHeight, run.wallBottom + run.wallHeight)}mm) to the ceiling: {Math.max(0, run.topFill.ceiling - Math.max(run.tallHeight, run.wallBottom + run.wallHeight))}mm.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                   <Field label="Notes (shown on quotation)">
                     <TextInput multiline value={run.notes} onChange={(v) => up((r) => (r.notes = v))} />
                   </Field>

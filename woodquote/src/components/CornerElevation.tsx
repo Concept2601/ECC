@@ -21,14 +21,17 @@ export default function CornerElevation({ unit, catalog }: { unit: Unit; catalog
   const A = unit.width;
   const B = c.widthB;
   // the fronts: [label, width, doors, corner end]
-  const fronts: { label: string; w: number; n: number; corner: 'start' | 'end' | 'none' }[] =
-    c.style === 'L'
+  const blindW = Math.min(A - 200, D + 50);
+  const fronts: { label: string; w: number; n: number; corner: 'start' | 'end' | 'none'; blind?: number }[] =
+    c.style === 'blind'
+      ? [{ label: `Main wall · A ${A} (blind ${Math.round(blindW)} at the corner)`, w: A - 2 * GAP, n: cornerDoorCount(A - blindW - 2 * GAP, c.doorsA), corner: c.hand === 'right' ? 'end' : 'start', blind: blindW }]
+      : c.style === 'L' || c.style === 'square'
       ? [
           { label: `Main wall · A ${A}`, w: A - Dc - ft - 2 * GAP, n: cornerDoorCount(A - Dc - ft - 2 * GAP, c.doorsA), corner: c.hand === 'right' ? 'end' : 'start' },
           { label: `Side wall · B ${B}`, w: B - Dc - 2 * GAP, n: cornerDoorCount(B - Dc - 2 * GAP, c.doorsB), corner: c.hand === 'right' ? 'start' : 'end' },
         ]
       : [{ label: 'Diagonal front', w: Math.hypot(A - Dc, B - Dc) - 2 * GAP, n: cornerDoorCount(Math.hypot(A - Dc, B - Dc) - 2 * GAP, c.doorsA), corner: 'none' }];
-  if (c.style === 'L' && c.hand === 'left') fronts.reverse();
+  if ((c.style === 'L' || c.style === 'square') && c.hand === 'left') fronts.reverse();
   const gapBetween = 120;
   const totalW = fronts.reduce((a, f) => a + f.w, 0) + gapBetween * (fronts.length - 1);
   const doorH = (wall ? H : H - ct - baseH) - GAP;
@@ -37,15 +40,27 @@ export default function CornerElevation({ unit, catalog }: { unit: Unit; catalog
   return (
     <svg viewBox={`${-pad} ${-pad} ${totalW + 2 * pad} ${H + 2 * pad}`} className="h-full w-full bg-[#f7f5f2]">
       {fronts.map((f, i) => {
-        const x0 = x;
+        const fx = x;
         x += f.w + gapBetween;
-        const dw = (f.w - (f.n - 1) * GAP) / f.n;
+        // a blind panel takes the corner end; the doors share the rest
+        const blindAtStart = !!f.blind && f.corner === 'start';
+        const x0 = blindAtStart ? fx + f.blind! + GAP : fx;
+        const doorsW = f.blind ? f.w - f.blind - GAP : f.w;
+        const dw = (doorsW - (f.n - 1) * GAP) / f.n;
         return (
           <g key={i}>
-            {!wall && ct > 0 && <rect x={x0 - 10} y={0} width={f.w + 20} height={ct} fill="#3f3f46" />}
-            {!wall && baseH > 0 && <rect x={x0} y={H - baseH} width={f.w} height={baseH} fill="#a8a29e" />}
+            {!wall && ct > 0 && <rect x={fx - 10} y={0} width={f.w + 20} height={ct} fill="#3f3f46" />}
+            {!wall && baseH > 0 && <rect x={fx} y={H - baseH} width={f.w} height={baseH} fill="#a8a29e" />}
+            {f.blind && (
+              <g>
+                <rect x={blindAtStart ? fx : fx + f.w - f.blind} y={ct + GAP / 2} width={f.blind} height={doorH} fill={fill} stroke="#57534e" strokeWidth={4} />
+                <text x={(blindAtStart ? fx : fx + f.w - f.blind) + f.blind / 2} y={ct + doorH / 2} textAnchor="middle" fontSize={44} fill="#57534e">
+                  blind panel
+                </text>
+              </g>
+            )}
             {c.open ? (
-              <rect x={x0} y={ct} width={f.w} height={doorH} fill="#fbfaf8" stroke="#78716c" strokeWidth={4} />
+              <rect x={x0} y={ct} width={doorsW} height={doorH} fill="#fbfaf8" stroke="#78716c" strokeWidth={4} />
             ) : (
               Array.from({ length: f.n }, (_, k) => {
                 let side: 'left' | 'right' = k < f.n / 2 ? 'left' : 'right';
@@ -69,7 +84,7 @@ export default function CornerElevation({ unit, catalog }: { unit: Unit; catalog
                 );
               })
             )}
-            <text x={x0 + f.w / 2} y={-50} textAnchor="middle" fontSize={56} fontWeight={600} fill="#44403c">
+            <text x={fx + f.w / 2} y={-50} textAnchor="middle" fontSize={56} fontWeight={600} fill="#44403c">
               {f.label}
             </text>
           </g>

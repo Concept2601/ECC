@@ -132,12 +132,15 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
   const ch = carcassH;
 
   /* ---------------------------------------------------------- carcass */
+  const blind = c.style === 'blind';
+  const square = c.style === 'square';
   if (back) {
     addPart('Back panel (main wall)', 'back', 'board', back.id, ch, A, backT, 0, null, { x: 0, y: y0, z: 0, w: A, h: ch, d: backT });
-    addPart('Back panel (side wall)', 'back', 'board', back.id, ch, B - backT, backT, 0, null, { x: ax(backT, B - backT), y: y0, z: 0, w: B - backT, h: ch, d: backT, meta: { frame: arm } });
+    if (!blind) addPart('Back panel (side wall)', 'back', 'board', back.id, ch, B - backT, backT, 0, null, { x: ax(backT, B - backT), y: y0, z: 0, w: B - backT, h: ch, d: backT, meta: { frame: arm } });
   }
   addPart('End panel', 'carcass', 'board', cm, ch, cd, t, ch, eCar, { x: mx(0, t), y: y0, z: backT, w: t, h: ch, d: cd });
-  addPart('End panel', 'carcass', 'board', cm, ch, cd, t, ch, eCar, { x: ax(B - t, t), y: y0, z: backT, w: t, h: ch, d: cd, meta: { frame: arm } });
+  if (blind) addPart('End panel (corner end)', 'carcass', 'board', cm, ch, cd, t, ch, eCar, { x: mx(A - t, t), y: y0, z: backT, w: t, h: ch, d: cd });
+  else addPart('End panel', 'carcass', 'board', cm, ch, cd, t, ch, eCar, { x: ax(B - t, t), y: y0, z: backT, w: t, h: ch, d: cd, meta: { frame: arm } });
   joints += 4;
 
   // horizontal panels: bottom, top and shelves
@@ -150,8 +153,31 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
     ...shelfYs.map((y) => ({ name: 'Shelf', y, depth: cd - 20, role: 'shelf' as PartRole })),
   ];
 
-  if (c.style === 'L') {
+  if (blind) {
+    // a straight carcass on the main wall; the corner end is closed by a blind panel
+    for (const lv of levels) addPart(lv.name, lv.role, 'board', cm, A - 2 * t, lv.depth, t, A - 2 * t, eCar, { x: mx(t, A - 2 * t), y: lv.y, z: backT, w: A - 2 * t, h: t, d: lv.depth });
+    const doorH = wall ? H - GAP : ch;
+    const dy = wall ? 0 : y0;
+    // the blind part sits behind the other wall's cabinets: their depth plus room for their doors and handles
+    const blindW = Math.min(A - 200, D + 50);
+    addPart('Blind corner panel', 'finish', 'board', fm, doorH, blindW, ft, 2 * (doorH + blindW), eFront, { x: mx(A - blindW, blindW), y: dy, z: Dc, w: blindW, h: doorH, d: ft });
+    if (!c.open) {
+      const openW = A - blindW - 2 * GAP;
+      const n = cornerDoorCount(openW, c.doorsA);
+      doorRow('Reach-in door', GAP, openW, n, { y: dy, z: Dc, h: doorH, d: ft }, 'end', (x, w) => mx(x, w));
+    }
+    if (A - blindW < 300) warnings.push('The reach-in opening is very narrow — make Width A wider.');
+    if (B < D) warnings.push(`Width B (worktop round the corner) should be at least the depth (${D}mm).`);
+  } else if (c.style === 'L' || square) {
     for (const lv of levels) {
+      if (square) {
+        // one solid L-shaped panel cut from a single board
+        const dd = lv.depth;
+        const L = A - t - backT;
+        const W = B - t - backT;
+        addPart(`${lv.name} (one-piece L)`, lv.role, 'board', cm, L, W, t, L + W, eCar, { x: mx(t, L), y: lv.y, z: backT, w: L, h: t, d: W, meta: { shape: poly([[t, backT], [A - backT, backT], [A - backT, B - t], [A - backT - dd, B - t], [A - backT - dd, backT + dd], [t, backT + dd]]) } });
+        continue;
+      }
       // two pieces meeting over the corner, dowelled together
       const mainLen = A - t - backT;
       const retLen = B - t - (backT + lv.depth);
@@ -209,7 +235,9 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
   /* ------------------------------------------------------------ base */
   if (!wall && u.base === 'plinth' && baseH > 0) {
     const r = u.plinthRecess;
-    if (c.style === 'L') {
+    if (blind) {
+      addPart('Kick board', 'plinth', 'board', cm, A, baseH, t, A, eCar, { x: mx(0, A), y: 0, z: D - r - t, w: A, h: baseH, d: t });
+    } else if (c.style === 'L' || square) {
       const mainLen = A - (D - r) + t;
       addPart('Kick board (main wall)', 'plinth', 'board', cm, mainLen, baseH, t, mainLen, eCar, { x: mx(0, mainLen), y: 0, z: D - r - t, w: mainLen, h: baseH, d: t });
       const retLen = B - (D - r);
@@ -224,7 +252,9 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
     const oh = u.overhang.front;
     const kind: Part['kind'] = counter ? 'counter' : 'board';
     const role: PartRole = counter ? 'counter' : 'finish';
-    if (c.style === 'L') {
+    if (square) {
+      addPart('Worktop (one-piece L)', role, kind, topMat.id, A, B, ct, counter ? 0 : A + B, eFront ?? eCar, { x: 0, y: topY, z: 0, w: A, h: ct, d: B, meta: { shape: poly([[0, 0], [A, 0], [A, B], [A - D - oh, B], [A - D - oh, D + oh], [0, D + oh]]) } });
+    } else if (c.style === 'L' || blind) {
       addPart('Worktop (main wall)', role, kind, topMat.id, A, D + oh, ct, counter ? 0 : A, eFront ?? eCar, { x: 0, y: topY, z: 0, w: A, h: ct, d: D + oh });
       addPart('Worktop (side wall)', role, kind, topMat.id, B - D - oh, D + oh, ct, counter ? 0 : B, eFront ?? eCar, { x: ax(D + oh, B - D - oh), y: topY, z: 0, w: B - D - oh, h: ct, d: D + oh, meta: { frame: arm } });
       if (counter) addHw('wt-joint', 'jn-connector', 3, 'Worktop corner joint bolts');
@@ -243,8 +273,11 @@ export function buildCornerUnit(u: Unit, cat: Catalog, pricing: PricingSettings)
 
   /* ---------------------------------------------------------- fittings */
   if (c.carousel && !wall) {
-    if (Math.min(A, B) < 750) warnings.push('A corner carousel needs at least 750mm on both walls.');
-    addHw('insert', 'in-carousel', 1, 'Corner carousel / lazy susan');
+    if (blind) addHw('insert', 'in-magic', 1, 'Magic corner pull-out (reaches the blind part)');
+    else {
+      if (Math.min(A, B) < 750) warnings.push('A corner carousel needs at least 750mm on both walls.');
+      addHw('insert', 'in-carousel', 1, 'Corner carousel / lazy susan');
+    }
   }
   addHw('pins', u.shelfPinId, nShelves * (c.style === 'L' ? 8 : 6), 'Shelf support pins');
   if (wall) {

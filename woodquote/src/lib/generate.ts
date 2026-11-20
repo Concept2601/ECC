@@ -74,7 +74,7 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
 
   const carcass = board(u.carcassMaterialId) ?? cat.boards[0];
   const front = board(u.frontMaterialId) ?? carcass;
-  const back = board(u.backMaterialId);
+  const back = u.noBack ? null : board(u.backMaterialId);
   const counter = cat.countertops.find((c) => c.id === u.countertopId) ?? null;
   const topBoard = counter ? null : board(u.topBoardId);
   const glass = cat.glass.find((g) => g.id === u.glassId) ?? cat.glass[0] ?? null;
@@ -160,12 +160,18 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
   const fm = front?.id ?? null;
 
   /* ------------------------------------------------------------ carcass */
-  addPart('Side panel', 'carcass', 'board', cm, carcassH, cd, t, carcassH, eCar, { x: 0, y: baseH, z: backT, w: t, h: carcassH, d: cd });
-  addPart('Side panel', 'carcass', 'board', cm, carcassH, cd, t, carcassH, eCar, { x: W - t, y: baseH, z: backT, w: t, h: carcassH, d: cd });
+  if (!u.noSides) {
+    addPart('Side panel', 'carcass', 'board', cm, carcassH, cd, t, carcassH, eCar, { x: 0, y: baseH, z: backT, w: t, h: carcassH, d: cd });
+    addPart('Side panel', 'carcass', 'board', cm, carcassH, cd, t, carcassH, eCar, { x: W - t, y: baseH, z: backT, w: t, h: carcassH, d: cd });
+  }
   const innerW = W - 2 * t;
-  addPart('Bottom', 'carcass', 'board', cm, innerW, cd, t, innerW, eCar, { x: t, y: baseH, z: backT, w: innerW, h: t, d: cd });
-  joints += 2;
-  if (counter) {
+  // without sides the base board runs the full width and its ends are edged
+  if (u.noSides) addPart('Base board', 'carcass', 'board', cm, W, cd, t, 2 * W + 2 * cd, eCar, { x: 0, y: baseH, z: backT, w: W, h: t, d: cd });
+  else addPart('Bottom', 'carcass', 'board', cm, innerW, cd, t, innerW, eCar, { x: t, y: baseH, z: backT, w: innerW, h: t, d: cd });
+  joints += u.noSides ? 0 : 2;
+  if (u.noTop) {
+    // open top: nothing across the top
+  } else if (counter) {
     addPart('Top rail', 'carcass', 'board', cm, innerW, 100, t, 0, eCar, { x: t, y: topY - t, z: backT, w: innerW, h: t, d: 100 });
     addPart('Top rail', 'carcass', 'board', cm, innerW, 100, t, innerW, eCar, { x: t, y: topY - t, z: Dc - 100, w: innerW, h: t, d: 100 });
     joints += 4;
@@ -338,9 +344,23 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
       }
     }
     if (s.hangingRail && !isAppliance) {
-      addHw('rail', u.railId, acc(u.railId)?.unit === 'm' ? bw / 1000 : 1, 'Hanging rail');
-      if (acc(u.railId)?.unit === 'm') addHw('rail-support', 'rl-support', bw > 1000 ? 3 : 2, 'Rail end supports (+ centre bracket over 1m)');
-      rails.push({ box: { x: bx, y: sy + sh - 70, z: backT + cd / 2 - 12, w: bw, h: 25, d: 15, meta: { ref } } });
+      // one or more rails sharing the height equally; every rail but the top one hangs under its own shelf
+      const nR = Math.max(1, Math.min(4, Math.round(s.railCount ?? 1)));
+      const zone = sh / nR;
+      for (let k = 0; k < nR; k++) {
+        const zoneTop = sy + sh - k * zone;
+        if (k > 0) {
+          addPart('Shelf (above hanging rail)', 'shelf', 'board', cm, bw - 2, cd - 20, t, bw - 2, eCar, { x: bx + 1, y: zoneTop - t, z: backT, w: bw - 2, h: t, d: cd - 20, meta: { ref } });
+          geo.shelves.push({ y: zoneTop - t });
+          pins += 4;
+        }
+        const off = s.railOffsets?.[k] ?? 0;
+        const ry = clamp(zoneTop - (k > 0 ? t : 0) - 70 + off, sy + 100, sy + sh - 40);
+        addHw('rail', u.railId, acc(u.railId)?.unit === 'm' ? bw / 1000 : 1, nR > 1 ? 'Hanging rails' : 'Hanging rail');
+        if (acc(u.railId)?.unit === 'm') addHw('rail-support', 'rl-support', bw > 1000 ? 3 : 2, 'Rail end supports (+ centre bracket over 1m)');
+        rails.push({ box: { x: bx, y: ry, z: backT + cd / 2 - 12, w: bw, h: 25, d: 15, meta: { ref } } });
+      }
+      if (nR > 1 && zone < 700) warnings.push(`Bay ${i + 1}: ${nR} rails leave only ${Math.round(zone)}mm per rail — shirts need about 1000mm.`);
     }
     if (s.insertId) {
       const ins = acc(s.insertId);
@@ -348,6 +368,37 @@ export function buildUnit(u: Unit, cat: Catalog, pricing: PricingSettings, ctx: 
         addHw('insert', ins.id, 1, 'Pull-out / organiser');
         if (ins.minWidth && bw < ins.minWidth) warnings.push(`Bay ${i + 1}: ${ins.name} needs at least ${ins.minWidth}mm clear width.`);
         inserts.push({ accessoryId: ins.id, box: { x: bx + 15, y: sy + 15, z: backT + 15, w: bw - 30, h: sh - 30, d: cd - 50, meta: { ref } }, ref });
+      }
+    }
+
+    // drawers without fronts behind a door: boxes stacked from the bottom of the compartment
+    const innerN = s.front === 'door' || s.front === 'sliding' || (sliding && s.front !== 'drawer') ? Math.max(0, Math.round(s.innerDrawers ?? 0)) : 0;
+    if (innerN > 0 && !isAppliance) {
+      const pitch = 180;
+      const boxH = 140;
+      const fitN = Math.min(innerN, Math.max(0, Math.floor((sh - 20) / pitch)));
+      if (fitN < innerN) warnings.push(`Bay ${i + 1}: only ${fitN} inner drawer(s) fit in this compartment.`);
+      // stop short of the door (and the hinges) at the front
+      const front = Dc - (s.fit === 'inset' ? ft : 0) - 8;
+      const { acc: runner } = pickRunner(cat, u.runnerId, front - backT - 10);
+      const L = runner?.lengthMm ?? Math.floor((front - backT - 10) / 50) * 50;
+      const boxW = bw - DRAWER_CLEAR;
+      const bx0 = bx + DRAWER_CLEAR / 2;
+      const bz0 = front - L;
+      for (let k = 0; k < fitN; k++) {
+        const by0 = sy + 15 + k * pitch;
+        const meta: BoxMeta = { ref, drawer: true, inner: true };
+        // the notched pull is a dip cut in the front edge of the box, so the front stays the same height
+        addPart('Inner drawer side', 'drawerBox', 'board', cm, L, boxH, t, L, eCar, { x: bx0, y: by0, z: bz0, w: t, h: boxH, d: L, meta });
+        addPart('Inner drawer side', 'drawerBox', 'board', cm, L, boxH, t, L, eCar, { x: bx0 + boxW - t, y: by0, z: bz0, w: t, h: boxH, d: L, meta });
+        addPart('Inner drawer back', 'drawerBox', 'board', cm, boxW - 2 * t, boxH, t, 0, eCar, { x: bx0 + t, y: by0, z: bz0, w: boxW - 2 * t, h: boxH, d: t, meta });
+        addPart('Inner drawer front (no fascia)', 'drawerBox', 'board', cm, boxW - 2 * t, boxH, t, boxW - 2 * t, eCar, { x: bx0 + t, y: by0, z: front - t, w: boxW - 2 * t, h: boxH, d: t, meta: { ...meta, notch: s.innerPull !== 'push' } });
+        addPart('Inner drawer bottom', 'drawerBox', 'board', back?.id ?? cm, L, boxW, back?.thickness ?? t, 0, null, { x: bx0, y: by0 - 3, z: bz0, w: boxW, h: back?.thickness ?? t, d: L, meta });
+        joints += 4;
+        runnerPairs++;
+        if (runner) addHw('runner', runner.id, 1, `Inner drawer runners ${runner.size}`);
+        if (s.innerPull === 'push') addHw('inner-push', 'r-push', 1, 'Push-to-open units for inner drawers');
+        else addHw('inner-notch', 'sv-notch-drawer', 1, 'Pull notch cut in inner drawer fronts');
       }
     }
 

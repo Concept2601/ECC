@@ -25,14 +25,25 @@ export const FACINGS: { rot: number; label: string; short: string }[] = [
   { rot: 270, label: 'Faces right', short: '→ Right' },
 ];
 
+/** Appliances made in standard sizes: these keep their catalogue size. Everything else can be sized per item. */
+export const STANDARD_APPLIANCES = new Set(['fridge', 'cooker', 'hob', 'oven', 'microwave']);
+export const isStandardAppliance = (a: Appliance | undefined) => !!a && STANDARD_APPLIANCES.has(a.category);
+
+/** The appliance a piece holds, with the piece's own size when it has one. */
+export function pieceAppliance(p: AssemblyPiece, cat: Catalog): Appliance | undefined {
+  const a = cat.appliances.find((x) => x.id === p.applianceId);
+  if (!a || !p.size || isStandardAppliance(a)) return a;
+  return { ...a, width: p.size.width, height: p.size.height, depth: p.size.depth };
+}
+
 /** Local footprint of a piece (its own back-left origin). */
 export function pieceRect(p: AssemblyPiece, cat: Catalog): { x0: number; x1: number; z0: number; z1: number; h: number; y0: number } {
-  if (p.slats) return { x0: 0, x1: p.slats.width, z0: 0, z1: slatDepth(p.slats, cat), h: p.slats.bottom + p.slats.height, y0: p.slats.bottom };
+  if (p.slats) return { x0: 0, x1: p.slats.width, z0: 0, z1: p.slats.style === 'panel' ? (p.slats.panelSource === 'counter' ? (cat.countertops.find((c) => c.id === p.slats!.panelId)?.thickness ?? 20) : (cat.boards.find((b) => b.id === (p.slats!.panelId ?? p.slats!.materialId))?.thickness ?? 18)) : slatDepth(p.slats, cat), h: p.slats.bottom + p.slats.height, y0: p.slats.bottom };
   if (p.unit) {
     const e = unitExtents(p.unit, cat);
     return { x0: e.x0, x1: e.x1, z0: e.z0, z1: e.z1, h: e.y1, y0: e.y0 };
   }
-  const a = cat.appliances.find((x) => x.id === p.applianceId);
+  const a = pieceAppliance(p, cat);
   return { x0: 0, x1: a?.width ?? 600, z0: 0, z1: a?.depth ?? 600, h: a?.height ?? 850, y0: 0 };
 }
 
@@ -192,7 +203,7 @@ export function buildAssembly(a: Assembly, cat: Catalog, pricing: PricingSetting
   };
 }
 
-export const pieceName = (p: AssemblyPiece, cat: Catalog) => p.unit?.name ?? (p.slats ? 'Wall slats' : (cat.appliances.find((a) => a.id === p.applianceId)?.name ?? 'Appliance'));
+export const pieceName = (p: AssemblyPiece, cat: Catalog) => p.unit?.name ?? (p.slats ? (p.slats.style === 'panel' ? 'Wall panel / backsplash' : 'Wall slats') : (cat.appliances.find((a) => a.id === p.applianceId)?.name ?? 'Appliance'));
 
 /* ------------------------------------------------------------- wall slats */
 
@@ -206,6 +217,22 @@ export const slatCount = (s: SlatWall) => Math.max(1, Math.floor((s.width + s.sl
  */
 export function buildSlats(s: SlatWall, cat: Catalog): UnitBuild {
   const b = emptyBuild();
+  if (s.style === 'panel') {
+    // one solid panel: stone / tiles priced per m², or a board (joined when bigger than a sheet)
+    const ct = s.panelSource === 'counter' ? cat.countertops.find((c) => c.id === s.panelId) : undefined;
+    const bd = s.panelSource !== 'counter' ? cat.boards.find((c) => c.id === (s.panelId ?? s.materialId)) : undefined;
+    const th = ct?.thickness ?? bd?.thickness ?? 18;
+    const box = { x: 0, y: s.bottom, z: 0, w: s.width, h: s.height, d: th };
+    if (ct) b.parts.push({ key: 'wall-panel', name: `Wall panel / backsplash – ${ct.name}`, role: 'counter', kind: 'counter', materialId: ct.id, length: Math.round(s.width), width: Math.round(s.height), thickness: th, qty: 1, edgeLength: 0, edgingId: null, boxes: [box] });
+    else if (bd) {
+      b.parts.push({ key: 'wall-panel', name: 'Wall panel', role: 'finish', kind: 'board', materialId: bd.id, length: Math.round(s.height), width: Math.round(s.width), thickness: th, qty: 1, edgeLength: (2 * (s.width + s.height)) / 1000, edgingId: null, boxes: [box] });
+      if (Math.max(s.width, s.height) > Math.max(bd.sheetLength, bd.sheetWidth)) b.warnings.push(`The panel is bigger than a ${bd.name} sheet – it will be joined.`);
+    } else b.warnings.push('Choose a material for the wall panel.');
+    const area = (s.width * s.height) / 1e6;
+    b.hardware.push({ key: 'panel-silicone', accessoryId: 'fx-silicone', qty: Math.max(1, Math.ceil(area / 1.5)), reason: 'Adhesive / silicone to fix the panel' });
+    if (!ct) b.hardware.push({ key: 'panel-anchor', accessoryId: 'fx-anchor', qty: (Math.ceil(s.width / 500) + 1) * (Math.ceil(s.height / 500) + 1), reason: 'Wall anchors for the panel' });
+    return b;
+  }
   const board = cat.boards.find((x) => x.id === s.materialId);
   const backer = s.backerId ? cat.boards.find((x) => x.id === s.backerId) : undefined;
   const n = slatCount(s);
@@ -232,6 +259,13 @@ export function buildSlats(s: SlatWall, cat: Catalog): UnitBuild {
   return b;
 }
 
+/** A solid wall panel / backsplash (stone, tiles or board), e.g. behind a TV. */
+export function wallPanelPiece(width: number, height: number, bottom: number, cat?: Catalog): AssemblyPiece {
+  const p = slatPiece(width, height, bottom);
+  p.slats = { ...p.slats!, style: 'panel', panelSource: 'counter', panelId: cat?.countertops.find((c) => /porcelain|slate|tile/i.test(c.name))?.id ?? cat?.countertops[0]?.id ?? null };
+  return p;
+}
+
 export function slatPiece(width = 1800, height = 2400, bottom = 0, materialId = 'b-mdf18-walnut'): AssemblyPiece {
   return { id: uid('gp'), unit: null, applianceId: null, x: 0, z: 0, rot: 0, underTop: false, slats: { width, height, bottom, slatWidth: 40, slatGap: 15, materialId, backerId: null } };
 }
@@ -240,6 +274,13 @@ export function slatPiece(width = 1800, height = 2400, bottom = 0, materialId = 
 export function slatGroup(width = 1800, height = 2400, materialId?: string): Assembly {
   const g = newAssembly('Wall slats');
   g.pieces.push(slatPiece(width, height, 0, materialId));
+  return g;
+}
+
+/** A wall panel / backsplash as its own item (behind a TV or in a media area). */
+export function wallPanelGroup(cat: Catalog, width = 1800, height = 1200, bottom = 600): Assembly {
+  const g = newAssembly('Wall panel / backsplash');
+  g.pieces.push(wallPanelPiece(width, height, bottom, cat));
   return g;
 }
 
@@ -372,7 +413,8 @@ export function describeAssembly(a: Assembly, cat: Catalog): string[] {
   for (const p of slats) {
     const sl = p.slats!;
     const bd = cat.boards.find((x) => x.id === sl.materialId);
-    lines.push(`Wall slats ${sl.width} × ${sl.height} mm: ${slatCount(sl)} × ${sl.slatWidth} mm ${bd?.name ?? ''}${sl.backerId ? ' on a backing board' : ''}, siliconed and anchored to the wall`);
+    if (sl.style === 'panel') lines.push(`Wall panel / backsplash ${sl.width} × ${sl.height} mm: ${(sl.panelSource === 'counter' ? cat.countertops.find((c) => c.id === sl.panelId)?.name : cat.boards.find((b) => b.id === (sl.panelId ?? sl.materialId))?.name) ?? ''}, fixed to the wall`);
+    else lines.push(`Wall slats ${sl.width} × ${sl.height} mm: ${slatCount(sl)} × ${sl.slatWidth} mm ${bd?.name ?? ''}${sl.backerId ? ' on a backing board' : ''}, siliconed and anchored to the wall`);
   }
   if (a.notes) lines.push(a.notes);
   return lines;

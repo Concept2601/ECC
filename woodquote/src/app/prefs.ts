@@ -13,6 +13,8 @@ export interface Prefs {
   backupFiles: boolean;
   /** 3D render quality: how much of the graphics card and screen resolution to use. */
   renderQuality: RenderQuality;
+  /** light, dark or follow the device */
+  theme: 'light' | 'dark' | 'system';
   /** Custom key bindings by action id (missing = default keys). */
   shortcuts: Record<string, string[]>;
   /** workspace in use: joinery, ceilings or tiling */
@@ -57,6 +59,7 @@ export const usePrefs = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
       keepAutoSaves: 20,
       backupFiles: true,
       renderQuality: defaultQuality(),
+      theme: 'system',
       shortcuts: {},
       trade: 'joinery',
       showLauncher: true,
@@ -76,3 +79,16 @@ export const usePrefs = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
     },
   ),
 );
+
+/** Put the chosen light / dark look on the page (and follow the device when set to system). */
+export function applyTheme() {
+  if (typeof document === 'undefined') return;
+  const t = usePrefs.getState().theme ?? 'system';
+  const dark = t === 'dark' || (t === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', !!dark);
+}
+if (typeof window !== 'undefined') {
+  usePrefs.subscribe(applyTheme);
+  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
+  applyTheme();
+}

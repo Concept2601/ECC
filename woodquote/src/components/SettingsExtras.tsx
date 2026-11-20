@@ -175,6 +175,7 @@ function webglInfo(): string {
 
 export function PerformanceCard() {
   const quality = usePrefs((s) => s.renderQuality);
+  const theme = usePrefs((s) => s.theme ?? 'system');
   const set = usePrefs((s) => s.set);
   const [sys, setSys] = useState<Awaited<ReturnType<NonNullable<NonNullable<Window['woodquoteDesktop']>['systemInfo']>>> | null>(null);
   const [gpu] = useState(webglInfo);
@@ -192,6 +193,21 @@ export function PerformanceCard() {
   if (sys) rows.push(['System', sys.os], ['Graphics cards', sys.gpu?.join(', ') || 'unknown'], ['GPU drawing', `${sys.gpuStatus.gpu_compositing ?? '?'} compositing · ${sys.gpuStatus.rasterization ?? '?'} rasterisation · WebGL ${sys.gpuStatus.webgl ?? '?'}`]);
   return (
     <div className="grid gap-3 md:grid-cols-2">
+      <Card title="Appearance">
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            ['light', 'Light'],
+            ['dark', 'Dark'],
+            ['system', 'Same as device'],
+          ] as const).map(([k, label]) => (
+            <button key={k} className={`rounded-xl border p-3 text-sm font-semibold ${theme === k ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-stone-200 text-stone-700'}`} onClick={() => set({ theme: k })}>
+              <span className={`mx-auto mb-1.5 block h-8 w-12 rounded-md border ${k === 'dark' ? 'border-stone-700 bg-[#1f1d1b]' : k === 'light' ? 'border-stone-300 bg-[#f5f5f4]' : 'border-stone-400 bg-gradient-to-r from-[#f5f5f4] to-[#1f1d1b]'}`} />
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-stone-500">Dark mode changes the whole app; drawings and PDFs stay on white paper. Quick switch: the sun / moon button at the bottom of the side bar.</p>
+      </Card>
       <Card title="3D render quality">
         <div className="space-y-2">
           {(Object.keys(RENDER_QUALITY) as RenderQuality[]).map((k) => (

@@ -1,6 +1,6 @@
 // Left side bar: workspace switch (Joinery / Ceilings / Tiling) and navigation.
 // Always visible on tablets and computers; slides in from the left on phones.
-import { BookOpen, ChevronsUpDown, FilePlus2, FileText, Home, LayoutDashboard, Map as MapIcon, Receipt, Ruler, ScanLine, Settings as SettingsIcon, X } from 'lucide-react';
+import { BookOpen, ChevronsUpDown, Moon, Sun, FilePlus2, FileText, Home, LayoutDashboard, Map as MapIcon, Receipt, Ruler, ScanLine, Settings as SettingsIcon, X } from 'lucide-react';
 import { useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { create } from 'zustand';
@@ -52,7 +52,7 @@ export default function Sidebar() {
   return (
     <>
       {open && <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] md:hidden" onClick={() => useDrawer.setState({ open: false })} />}
-      <aside className={`safe-top fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#14161a] text-stone-200 transition-transform duration-200 md:translate-x-0 ${open ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+      <aside className={`theme-fixed safe-top fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#14161a] text-stone-200 transition-transform duration-200 md:translate-x-0 ${open ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div className="flex items-center gap-2.5 px-4 pb-4 pt-5">
           <LogoMark size={34} />
           <Wordmark dark className="text-xl" />
@@ -97,10 +97,25 @@ export default function Sidebar() {
           <p className="px-3 pb-1 pt-5 text-[10px] font-semibold uppercase tracking-widest text-stone-600">App</p>
           <Item to="/settings" end icon={SettingsIcon} label="Settings" />
         </nav>
-        <div className="safe-bottom border-t border-white/5 px-4 py-3 text-[11px] text-stone-600">
-          v{DEVELOPER.version} · {DEVELOPER.name}
+        <div className="safe-bottom flex items-center gap-2 border-t border-white/5 px-4 py-2.5 text-[11px] text-stone-600">
+          <span className="flex-1">
+            v{DEVELOPER.version} · {DEVELOPER.name}
+          </span>
+          <ThemeSwitch />
         </div>
       </aside>
     </>
+  );
+}
+
+/** Light / dark switch at the bottom of the side bar (Settings › Appearance can also follow the device). */
+function ThemeSwitch() {
+  const theme = usePrefs((s) => s.theme ?? 'system');
+  const set = usePrefs((s) => s.set);
+  const dark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  return (
+    <button className="rounded-lg p-1.5 text-stone-400 hover:bg-white/10 hover:text-stone-200" title={dark ? 'Switch to light mode' : 'Switch to dark mode'} aria-label={dark ? 'Light mode' : 'Dark mode'} onClick={() => set({ theme: dark ? 'light' : 'dark' })}>
+      {dark ? <Sun size={15} /> : <Moon size={15} />}
+    </button>
   );
 }

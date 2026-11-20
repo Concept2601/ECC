@@ -63,3 +63,14 @@ describe('square ends', () => {
     expect(m[0].start).not.toBe(0);
   });
 });
+
+import { windowPanes } from '../room';
+describe('window panes', () => {
+  it('600mm panes, leftovers of 500mm or more get their own pane, smaller ones are shared', () => {
+    expect(windowPanes(1200)).toEqual([600, 600]);
+    expect(windowPanes(1700)).toEqual([600, 600, 500]);
+    expect(windowPanes(1500)).toEqual([750, 750]);
+    expect(windowPanes(550)).toEqual([550]);
+    expect(windowPanes(900, 3)).toEqual([300, 300, 300]);
+  });
+});

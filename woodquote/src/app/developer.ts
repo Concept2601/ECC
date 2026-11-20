@@ -5,5 +5,5 @@ export const DEVELOPER = {
   name: 'sir.2601',
   country: 'Zimbabwe',
   tagline: 'Made with passion and love by a crazy mind.',
-  version: '3.2.0',
+  version: '3.2.1',
 };

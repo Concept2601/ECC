@@ -1,4 +1,5 @@
 import { StrictMode } from 'react';
+import { applyTheme } from './app/prefs';
 import { createRoot } from 'react-dom/client';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -8,6 +9,7 @@ import './index.css';
 import { flushSave, loadData } from './store';
 
 // open the saved data while the licence and loading screens appear
+applyTheme();
 void loadData();
 
 createRoot(document.getElementById('root')!).render(

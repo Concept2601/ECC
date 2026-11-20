@@ -168,7 +168,7 @@ export default function RenderStudio() {
 
   const field = 'block text-[11px] font-semibold uppercase tracking-wide text-stone-500';
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col bg-[#111317] text-stone-200 md:flex-row">
+    <div className="theme-fixed fixed inset-0 z-[80] flex flex-col bg-[#111317] text-stone-200 md:flex-row">
       <div className="relative min-h-[45vh] flex-1">
         <div ref={host} className="absolute inset-0" />
         <div className="absolute left-3 top-3 flex items-center gap-2">

@@ -875,6 +875,16 @@ export interface RoomOpening {
   beam: boolean; // RC beam over an open-plan opening
   beamDepth: number; // how far the beam drops below the ceiling
   label: string;
+  /** doors: wooden swing door (single / double leaf) or aluminium & glass sliding door */
+  doorStyle?: 'swing' | 'double' | 'sliding';
+  /** swing doors: which side the hinges are on, seen from inside the room */
+  hinge?: 'left' | 'right';
+  /** swing doors: open into the room or outwards */
+  swing?: 'in' | 'out';
+  /** sliding doors: number of panels (null = automatic) */
+  panels?: number | null;
+  /** windows: number of panes (null = automatic: 600mm panes, none narrower than 500mm) */
+  panes?: number | null;
 }
 
 export interface RoomPlacement {

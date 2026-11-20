@@ -254,52 +254,57 @@ function ViewerInner({ onLost, catalog, unit, build, run, runBuild, assembly, as
   }, []);
 
   useEffect(() => {
-    const c = ctx.current;
-    if (!c) return;
-    const opt = { showFronts: fronts, openDoors: open, lightsOn: lights, highlight: highlight ?? null };
-    // clean = for the render studio: no selection outlines or highlights
-    let make: (clean: boolean, lit?: boolean) => THREE.Object3D;
-    let bounds;
-    let dir: [number, number, number] | undefined;
-    if (room && roomItems) {
-      make = (clean, lit = lights) => buildRoomObject(room, roomItems, catalog, { ...opt, ceiling: clean, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedItemId: clean ? null : (selectedItemId ?? null) });
-      bounds = roomBounds(room);
-      dir = ROOM_VIEW_DIR;
-    } else if (run && runBuild) {
-      make = (clean, lit = lights) => buildRunObject(run, runBuild, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedUnitId: clean ? null : (selectedUnitId ?? null), room: view !== 'back' && view !== 'top' });
-      bounds = runBounds(runBuild);
-      dir = runViewDir(run);
-    } else if (assembly && assemblyBuild) {
-      make = (clean, lit = lights) => buildAssemblyObject(assembly, assemblyBuild, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedUnitId: clean ? null : (selectedUnitId ?? null) });
-      bounds = assemblyBounds3(assemblyBuild);
-      dir = view === '3d' ? [0.7, 0.75, 1] : undefined;
-    } else if (unit && build) {
-      make = (clean, lit = lights) => {
-        const o = buildUnitObject(unit, build, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight });
-        // the kitchen worktop around this cabinet, with the sink cut-out
-        for (const xb of extraBoxes ?? []) o.add(worktopForUnit(xb.box, xb.color, build, catalog));
-        if (unit.installType === 'builtIn' && view !== 'back' && view !== 'top') addUnitRoom(o as THREE.Group, unitExtents(unit, catalog));
-        return o;
-      };
-      bounds = unitBounds(unit, catalog);
-    } else return;
-    const obj = make(false);
-    sceneRef.current = { make: (lit?: boolean) => make(true, lit), bounds, dir, room: !!room };
-    if (autoStudio && !autoStudioDone.current) {
-      autoStudioDone.current = true;
-      window.setTimeout(() => openStudioRef.current(), 400);
-    }
-    c.stage.setNight(lights);
-    c.stage.setContent(obj, bounds);
-    const key = `${view}|${room ? 'room' : assembly ? 'group' : run?.shape ?? ''}|${Math.round(bounds.x1 - bounds.x0)}|${Math.round(bounds.y1)}|${Math.round(bounds.z1 - bounds.z0)}`;
-    if (key !== c.key) {
-      const el = host.current!;
-      const target = c.stage.frame((el.clientWidth || 1) / (el.clientHeight || 1), view, dir);
-      c.controls.target.copy(target);
-      c.key = key;
-    }
-    c.controls.update();
-    c.invalidate();
+    // rebuild the model just after the edit has been handled, and only once for a burst of edits,
+    // so typing and the rest of the page never wait for the 3D
+    const timer = window.setTimeout(() => {
+      const c = ctx.current;
+      if (!c) return;
+      const opt = { showFronts: fronts, openDoors: open, lightsOn: lights, highlight: highlight ?? null };
+      // clean = for the render studio: no selection outlines or highlights
+      let make: (clean: boolean, lit?: boolean) => THREE.Object3D;
+      let bounds;
+      let dir: [number, number, number] | undefined;
+      if (room && roomItems) {
+        make = (clean, lit = lights) => buildRoomObject(room, roomItems, catalog, { ...opt, ceiling: clean, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedItemId: clean ? null : (selectedItemId ?? null) });
+        bounds = roomBounds(room);
+        dir = ROOM_VIEW_DIR;
+      } else if (run && runBuild) {
+        make = (clean, lit = lights) => buildRunObject(run, runBuild, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedUnitId: clean ? null : (selectedUnitId ?? null), room: view !== 'back' && view !== 'top' });
+        bounds = runBounds(runBuild);
+        dir = runViewDir(run);
+      } else if (assembly && assemblyBuild) {
+        make = (clean, lit = lights) => buildAssemblyObject(assembly, assemblyBuild, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight, selectedUnitId: clean ? null : (selectedUnitId ?? null) });
+        bounds = assemblyBounds3(assemblyBuild);
+        dir = view === '3d' ? [0.7, 0.75, 1] : undefined;
+      } else if (unit && build) {
+        make = (clean, lit = lights) => {
+          const o = buildUnitObject(unit, build, catalog, { ...opt, lightsOn: lit, highlight: clean ? null : opt.highlight });
+          // the kitchen worktop around this cabinet, with the sink cut-out
+          for (const xb of extraBoxes ?? []) o.add(worktopForUnit(xb.box, xb.color, build, catalog));
+          if (unit.installType === 'builtIn' && view !== 'back' && view !== 'top') addUnitRoom(o as THREE.Group, unitExtents(unit, catalog));
+          return o;
+        };
+        bounds = unitBounds(unit, catalog);
+      } else return;
+      const obj = make(false);
+      sceneRef.current = { make: (lit?: boolean) => make(true, lit), bounds, dir, room: !!room };
+      if (autoStudio && !autoStudioDone.current) {
+        autoStudioDone.current = true;
+        window.setTimeout(() => openStudioRef.current(), 400);
+      }
+      c.stage.setNight(lights);
+      c.stage.setContent(obj, bounds);
+      const key = `${view}|${room ? 'room' : assembly ? 'group' : run?.shape ?? ''}|${Math.round(bounds.x1 - bounds.x0)}|${Math.round(bounds.y1)}|${Math.round(bounds.z1 - bounds.z0)}`;
+      if (key !== c.key) {
+        const el = host.current!;
+        const target = c.stage.frame((el.clientWidth || 1) / (el.clientHeight || 1), view, dir);
+        c.controls.target.copy(target);
+        c.key = key;
+      }
+      c.controls.update();
+      c.invalidate();
+    }, 80);
+    return () => window.clearTimeout(timer);
   }, [unit, build, run, runBuild, assembly, assemblyBuild, catalog, fronts, open, lights, highlight, selectedUnitId, view, extraBoxes, room, roomItems, selectedItemId, texVersion]);
 
   /** The camera as it is now, so the capture can be re-rendered from the same angle. */

@@ -45,7 +45,7 @@ export default function Splash({ preload, onDone }: { preload: () => Promise<unk
   }, [hydrated, preload, onDone]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#111317] text-white">
+    <div className="theme-fixed fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#111317] text-white">
       <div className="pointer-events-none absolute inset-0 opacity-60" style={{ background: 'radial-gradient(60% 50% at 50% 35%, rgba(196,138,75,.25), transparent 70%)' }} />
       <div className="relative flex flex-col items-center gap-5 px-8">
         <LogoMark size={76} className="animate-[pulse_2.4s_ease-in-out_infinite] drop-shadow-xl" />

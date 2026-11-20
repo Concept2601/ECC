@@ -3,11 +3,11 @@ import { Box, Columns2, DoorOpen, Map as MapIcon, Plus, RotateCw, SquareDashed, 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import RoomPalette from '../components/RoomPalette';
-import { Calculating, Card, confirmAction, Field, NumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
+import { Calculating, Card, confirmAction, Field, NumInput, OptNumInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import Viewer3D from '../components/Viewer3D';
 import { useQuoteCalc } from '../hooks';
 import type { ItemPrice } from '../lib/pricing';
-import { autoPlace, DEFAULT_SNAP, newPartition, placeOnWall, snapPlacement, partitionCorners, partitionPoint, wallMitres, placeXZ, closeRoom, defaultRoom, footprints, inwardNormal, isClosed, newOpening, newWall, OPENING_LABELS, ROOM_SHAPES, roomExtents, roomShape, roomWarnings, snapToWall, vertices, wallDir, wallName, type RoomShape } from '../lib/room';
+import { autoPlace, slidingPanels, windowPanes, DEFAULT_SNAP, newPartition, placeOnWall, snapPlacement, partitionCorners, partitionPoint, wallMitres, placeXZ, closeRoom, defaultRoom, footprints, inwardNormal, isClosed, newOpening, newWall, OPENING_LABELS, ROOM_SHAPES, roomExtents, roomShape, roomWarnings, snapToWall, vertices, wallDir, wallName, type RoomShape } from '../lib/room';
 import type { Catalog, Room, RoomOpening, RoomPlacement } from '../lib/types';
 import { useStore } from '../store';
 
@@ -132,15 +132,52 @@ function PlanView({ room, items, catalog, selected, onSelect, onMove }: { room: 
             <polygon points={pts(quad(o.wall, u0, u1, -1, T + 1))} fill="#fff" />
             {o.kind === 'window' && (() => {
               const [a, b] = [add(add(v[o.wall], d, u0), n, -T / 2), add(add(v[o.wall], d, u1), n, -T / 2)];
-              return <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke="#38bdf8" strokeWidth={T / 4} />;
+              let u = u0;
+              const ticks = windowPanes(u1 - u0, o.panes).slice(0, -1).map((pw) => (u += pw));
+              return (
+                <g>
+                  <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke="#38bdf8" strokeWidth={T / 4} />
+                  {ticks.map((tu, k) => {
+                    const p0 = add(v[o.wall], d, tu);
+                    const p1 = add(p0, n, -T);
+                    return <line key={k} x1={p0[0]} y1={p0[1]} x2={p1[0]} y2={p1[1]} stroke="#0369a1" strokeWidth={T / 6} />;
+                  })}
+                </g>
+              );
             })()}
             {o.kind === 'door' && (() => {
-              const r = u1 - u0;
-              const hinge = add(v[o.wall], d, u0);
-              const open = add(hinge, n, r);
-              const end = add(hinge, d, r);
-              const sweep = n[0] * d[1] - n[1] * d[0] > 0 ? 1 : 0;
-              return <path d={`M${hinge.join(' ')} L${open.join(' ')} A${r} ${r} 0 0 ${sweep} ${end.join(' ')}`} fill="none" stroke="#8b6b4a" strokeWidth={fs / 6} />;
+              const style = o.doorStyle ?? 'swing';
+              if (style === 'sliding') {
+                // sliding panels drawn as offset lines in the wall
+                const np = slidingPanels(u1 - u0, o.panels);
+                const pw = (u1 - u0) / np + 30;
+                return (
+                  <g>
+                    {Array.from({ length: np }, (_, k) => {
+                      const x0 = u0 + k * ((u1 - u0 - pw) / Math.max(1, np - 1));
+                      const off = k % 2 ? T * 0.3 : T * 0.7;
+                      const p0 = add(add(v[o.wall], d, x0), n, -off);
+                      const p1 = add(add(v[o.wall], d, x0 + pw), n, -off);
+                      return <line key={k} x1={p0[0]} y1={p0[1]} x2={p1[0]} y2={p1[1]} stroke="#64748b" strokeWidth={fs / 5} />;
+                    })}
+                  </g>
+                );
+              }
+              const into = (o.swing ?? 'in') === 'in';
+              const dirN: P = into ? n : [-n[0], -n[1]];
+              const base = into ? 0 : T;
+              const leaves = style === 'double' ? [{ at: u0, r: (u1 - u0) / 2, toward: 1 }, { at: u1, r: (u1 - u0) / 2, toward: -1 }] : [(o.hinge ?? 'left') === 'left' ? { at: u0, r: u1 - u0, toward: 1 } : { at: u1, r: u1 - u0, toward: -1 }];
+              return (
+                <g>
+                  {leaves.map((lf, k) => {
+                    const hinge = add(add(v[o.wall], d, lf.at), n, -base);
+                    const open = add(hinge, dirN, lf.r);
+                    const end = add(hinge, d, lf.toward * lf.r);
+                    const cross = (open[0] - hinge[0]) * (end[1] - hinge[1]) - (open[1] - hinge[1]) * (end[0] - hinge[0]);
+                    return <path key={k} d={`M${hinge.join(' ')} L${open.join(' ')} A${lf.r} ${lf.r} 0 0 ${cross > 0 ? 1 : 0} ${end.join(' ')}`} fill="none" stroke="#8b6b4a" strokeWidth={fs / 6} />;
+                  })}
+                </g>
+              );
             })()}
             {o.kind === 'opening' && o.beam && <polygon points={pts(quad(o.wall, u0, u1, 0, -300))} fill="none" stroke="#78716c" strokeDasharray={`${fs} ${fs / 2}`} strokeWidth={fs / 8} />}
             {(o.kind === 'window' || o.kind === 'door') && (() => {
@@ -622,6 +659,41 @@ export default function RoomDesigner() {
                     {o.kind === 'window' && (
                       <Field label="Sill height">
                         <NumInput value={o.sill} min={0} suffix="mm" onChange={(v) => up((r) => (r.openings[i].sill = v))} />
+                      </Field>
+                    )}
+                    {o.kind === 'window' && (
+                      <Field label={`Panes (auto ${windowPanes(o.width).length})`}>
+                        <OptNumInput value={o.panes ?? null} min={1} max={12} placeholder="Auto" onChange={(v) => up((r) => (r.openings[i].panes = v == null ? null : Math.max(1, Math.round(v))))} />
+                      </Field>
+                    )}
+                    {o.kind === 'door' && (
+                      <Field label="Door">
+                        <select className="input" value={o.doorStyle ?? 'swing'} onChange={(e) => up((r) => (r.openings[i].doorStyle = e.target.value as RoomOpening['doorStyle']))}>
+                          <option value="swing">Wooden swing door</option>
+                          <option value="double">Double wooden doors</option>
+                          <option value="sliding">Sliding aluminium & glass</option>
+                        </select>
+                      </Field>
+                    )}
+                    {o.kind === 'door' && (o.doorStyle ?? 'swing') === 'swing' && (
+                      <Field label="Hinges (seen from inside)">
+                        <select className="input" value={o.hinge ?? 'left'} onChange={(e) => up((r) => (r.openings[i].hinge = e.target.value as 'left' | 'right'))}>
+                          <option value="left">Left</option>
+                          <option value="right">Right</option>
+                        </select>
+                      </Field>
+                    )}
+                    {o.kind === 'door' && (o.doorStyle ?? 'swing') !== 'sliding' && (
+                      <Field label="Opens">
+                        <select className="input" value={o.swing ?? 'in'} onChange={(e) => up((r) => (r.openings[i].swing = e.target.value as 'in' | 'out'))}>
+                          <option value="in">Into the room</option>
+                          <option value="out">Out of the room</option>
+                        </select>
+                      </Field>
+                    )}
+                    {o.kind === 'door' && o.doorStyle === 'sliding' && (
+                      <Field label={`Panels (auto ${slidingPanels(o.width)})`}>
+                        <OptNumInput value={o.panels ?? null} min={2} max={6} placeholder="Auto" onChange={(v) => up((r) => (r.openings[i].panels = v == null ? null : Math.max(2, Math.round(v))))} />
                       </Field>
                     )}
                     {o.kind === 'opening' && (

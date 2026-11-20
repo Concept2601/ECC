@@ -2,6 +2,17 @@
 
 _En-Quote was called WoodQuote by 2601 up to version 2.3._
 
+## 3.2.1 — Smooth measurement editing, room doors and windows, dark mode (2026-11-20)
+
+### Added
+- Light and dark mode for the whole app: Settings › Appearance (Light, Dark or Same as device) and a sun / moon switch at the bottom of the side bar
+- Room doors: wooden swing door (hinges left or right, opening into or out of the room), double wooden doors, or sliding aluminium & glass doors with 2–6 panels — on the plan and in 3D
+- Windows with mullions: panes of 600mm, a leftover of 500mm or more becomes its own pane, otherwise the panes are shared equally; or choose the number of panes
+
+### Fixed
+- Measurement boxes no longer freeze while the 3D view updates: a typed size applies on Enter, when you leave the box or after a short pause, and the 3D rebuild waits until the edit is done
+- The + − × ÷ keys only appear on phones and tablets (they could cover boxes on touch-screen laptops)
+
 ## 3.2.0 — Realistic 3D sinks, pull-outs and rails (2026-11-20)
 
 ### Added

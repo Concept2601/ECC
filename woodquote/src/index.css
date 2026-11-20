@@ -2,7 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light; }
+:root {
+  color-scheme: light;
+  --stone-50: 250 250 249; --stone-100: 245 245 244; --stone-200: 231 229 228; --stone-300: 214 211 209; --stone-400: 168 162 158;
+  --stone-500: 120 113 108; --stone-600: 87 83 78; --stone-700: 68 64 60; --stone-800: 41 37 36; --stone-900: 28 25 23; --stone-950: 12 10 9;
+  --surface: 255 255 255;
+}
+/* dark mode: the neutral scale turns round, white surfaces become dark */
+html.dark {
+  color-scheme: dark;
+  --stone-50: 24 22 20; --stone-100: 17 16 15; --stone-200: 58 54 51; --stone-300: 80 75 71; --stone-400: 125 118 113;
+  --stone-500: 160 153 148; --stone-600: 192 186 181; --stone-700: 214 211 209; --stone-800: 231 229 228; --stone-900: 245 245 244; --stone-950: 250 250 249;
+  --surface: 31 29 27;
+}
+/* parts that are dark by design (side bar, render studio, start screen) keep the light-mode scale */
+html.dark .theme-fixed {
+  --stone-50: 250 250 249; --stone-100: 245 245 244; --stone-200: 231 229 228; --stone-300: 214 211 209; --stone-400: 168 162 158;
+  --stone-500: 120 113 108; --stone-600: 87 83 78; --stone-700: 68 64 60; --stone-800: 41 37 36; --stone-900: 28 25 23; --stone-950: 12 10 9;
+}
+html.dark .bg-white, html.dark .card, html.dark .input, html.dark .btn-secondary { background-color: rgb(var(--surface)); }
+html.dark .bg-white\/90, html.dark .bg-white\/95, html.dark .bg-white\/80 { background-color: rgb(var(--surface) / 0.9); }
+html.dark .theme-fixed .bg-white { background-color: #ffffff; }
+html.dark .bg-brand-50 { background-color: rgb(169 111 51 / 0.16); }
+html.dark .bg-brand-50\/40 { background-color: rgb(169 111 51 / 0.1); }
+html.dark .text-brand-700, html.dark .text-brand-800 { color: #e6cba8; }
+html.dark .border-brand-200, html.dark .border-brand-300 { border-color: rgb(169 111 51 / 0.45); }
+html.dark .bg-amber-50 { background-color: rgb(245 158 11 / 0.14); }
+html.dark .text-amber-900, html.dark .text-amber-800, html.dark .text-amber-700 { color: #fcd34d; }
+html.dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.12); }
+html.dark .text-emerald-900, html.dark .text-emerald-800, html.dark .text-emerald-700 { color: #6ee7b7; }
+html.dark .bg-sky-50, html.dark .bg-sky-100 { background-color: rgb(14 165 233 / 0.14); }
+html.dark .text-sky-800, html.dark .text-sky-700 { color: #7dd3fc; }
+html.dark .bg-violet-50, html.dark .bg-violet-100 { background-color: rgb(139 92 246 / 0.16); }
+html.dark .text-violet-900, html.dark .text-violet-800, html.dark .text-violet-700 { color: #c4b5fd; }
+html.dark .bg-red-50 { background-color: rgb(239 68 68 / 0.14); }
+html.dark .text-red-700, html.dark .text-red-600 { color: #fca5a5; }
+html.dark .border-red-200 { border-color: rgb(239 68 68 / 0.4); }
 html, body, #root { height: 100%; }
 body { @apply bg-stone-100 text-stone-900 antialiased; -webkit-tap-highlight-color: transparent; }
 

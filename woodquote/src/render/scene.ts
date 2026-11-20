@@ -5,7 +5,7 @@ import { cellRects, sameRef } from '../lib/sections';
 import { finishOf, partFinish } from '../lib/finishes';
 import { finishTexture } from './finishTextures';
 import type { ItemPrice } from '../lib/pricing';
-import { itemBounds, orientation, partitionPoint, roomExtents, vertices, wallMitres, wallPieces } from '../lib/room';
+import { itemBounds, orientation, partitionPoint, roomExtents, slidingPanels, vertices, wallMitres, wallPieces, windowPanes } from '../lib/room';
 import { activeLegs, legLength, legStart, legTransform, runLayout, type RunBuild } from '../lib/runs';
 import { pieceAppliance, type AssemblyBuild } from '../lib/assembly';
 import { insertObject, railObject, sinkHoles, sinkObject, slabWithHoles } from './fixtures3d';
@@ -1165,6 +1165,7 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
   const frameMat = new THREE.MeshStandardMaterial({ color: '#f5f5f4', roughness: 0.5 });
   const glassMat = new THREE.MeshPhysicalMaterial({ color: '#cfe8ef', transparent: true, opacity: 0.28, roughness: 0.05, envMapIntensity: 1.4 });
   const doorMat = surfaceMaterial('#8b6b4a', 'satin', woodTexture('#8b6b4a', true));
+  const aluMat = new THREE.MeshStandardMaterial({ color: '#b9bec4', metalness: 0.8, roughness: 0.3 });
 
   const mitres = wallMitres(room);
   room.walls.forEach((wall, wi) => {
@@ -1192,15 +1193,18 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
       const a = o.offset;
       const b = o.offset + o.width;
       if (o.kind === 'window') {
+        // outer frame plus a mullion between panes (600mm panes, none under 500mm)
         g.add(boxMesh(box(a, b, o.sill, o.height, T / 2 - 4, T / 2 + 4), glassMat, false));
-        for (const [u0, u1, y0, y1] of [
-          [a, a + 50, o.sill, o.height],
-          [b - 50, b, o.sill, o.height],
-          [a, b, o.sill, o.sill + 50],
-          [a, b, o.height - 50, o.height],
-          [(a + b) / 2 - 25, (a + b) / 2 + 25, o.sill, o.height],
-        ])
-          g.add(boxMesh(box(u0, u1, y0, y1, T / 2 - 30, T / 2 + 30), frameMat, false));
+        const fr = (u0: number, u1: number, y0: number, y1: number) => g.add(boxMesh(box(u0, u1, y0, y1, T / 2 - 30, T / 2 + 30), frameMat, false));
+        fr(a, a + 50, o.sill, o.height);
+        fr(b - 50, b, o.sill, o.height);
+        fr(a, b, o.sill, o.sill + 50);
+        fr(a, b, o.height - 50, o.height);
+        let u = a;
+        for (const pw of windowPanes(b - a, o.panes).slice(0, -1)) {
+          u += pw;
+          fr(u - 20, u + 20, o.sill, o.height);
+        }
       } else if (o.kind === 'door') {
         for (const [u0, u1, y0, y1] of [
           [a - 40, a, 0, o.height + 40],
@@ -1208,11 +1212,38 @@ export function buildRoomObject(room: Room, items: ItemPrice[], cat: Catalog, op
           [a, b, o.height, o.height + 40],
         ])
           g.add(boxMesh(box(u0, u1, y0, y1, -20, T + 20), frameMat, false));
-        const leaf = new THREE.Group();
-        leaf.add(boxMesh({ x: 0, y: 0, z: 0, w: o.width - 10, h: o.height - 10, d: 40 }, doorMat));
-        leaf.position.set(a + 5, 0, 0);
-        leaf.rotation.y = -0.6; // ajar, swinging into the room
-        g.add(leaf);
+        const style = o.doorStyle ?? 'swing';
+        if (style === 'sliding') {
+          // aluminium-framed glass panels on two tracks, slightly overlapping
+          const n = slidingPanels(b - a, o.panels);
+          const pw = (b - a) / n + 30;
+          for (let k = 0; k < n; k++) {
+            const x0 = a + k * ((b - a - pw) / Math.max(1, n - 1));
+            const v0 = k % 2 ? T / 2 - 45 : T / 2 + 5;
+            const al = (u0: number, u1: number, y0: number, y1: number) => g.add(boxMesh(box(u0, u1, y0, y1, v0, v0 + 40), aluMat, false));
+            al(x0, x0 + 40, 0, o.height);
+            al(x0 + pw - 40, x0 + pw, 0, o.height);
+            al(x0, x0 + pw, 0, 60);
+            al(x0, x0 + pw, o.height - 50, o.height);
+            g.add(boxMesh(box(x0 + 40, x0 + pw - 40, 60, o.height - 50, v0 + 16, v0 + 24), glassMat, false));
+          }
+        } else {
+          // wooden leaf (or two), hinged on the chosen side, ajar into or out of the room
+          const into = (o.swing ?? 'in') === 'in';
+          const leaves: { pivot: number; w: number; side: 'left' | 'right' }[] =
+            style === 'double' ? [{ pivot: a, w: (b - a) / 2, side: 'left' }, { pivot: b, w: (b - a) / 2, side: 'right' }] : [{ pivot: (o.hinge ?? 'left') === 'left' ? a : b, w: b - a, side: o.hinge ?? 'left' }];
+          for (const lf of leaves) {
+            const leaf = new THREE.Group();
+            const lw = lf.w - 10;
+            leaf.add(boxMesh({ x: lf.side === 'left' ? 5 : -lw - 5, y: 0, z: 0, w: lw, h: o.height - 10, d: 40 }, doorMat));
+            // handle on the far edge
+            leaf.add(boxMesh({ x: lf.side === 'left' ? lw - 60 : -lw + 40, y: 1000, z: 40, w: 20, h: 20, d: 60 }, aluMat, false));
+            leaf.position.set(lf.pivot, 0, into ? 0 : -T);
+            const ang = 0.6 * (lf.side === 'left' ? -1 : 1) * (into ? 1 : -1);
+            leaf.rotation.y = ang;
+            g.add(leaf);
+          }
+        }
       } else if (o.kind === 'opening' && o.beam) {
         g.add(boxMesh(box(a, b, H - o.beamDepth, H, -40, T + 40), beamMat));
       }

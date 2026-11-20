@@ -11,6 +11,20 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.2.1',
+    date: '2026-11-20',
+    title: "Smooth measurement editing, room doors and windows, dark mode",
+    added: [
+      "Light and dark mode for the whole app: Settings › Appearance (Light, Dark or Same as device) and a sun / moon switch at the bottom of the side bar",
+      "Room doors: wooden swing door (hinges left or right, opening into or out of the room), double wooden doors, or sliding aluminium & glass doors with 2–6 panels — on the plan and in 3D",
+      "Windows with mullions: panes of 600mm, a leftover of 500mm or more becomes its own pane, otherwise the panes are shared equally; or choose the number of panes",
+    ],
+    fixed: [
+      "Measurement boxes no longer freeze while the 3D view updates: a typed size applies on Enter, when you leave the box or after a short pause, and the 3D rebuild waits until the edit is done",
+      "The + − × ÷ keys only appear on phones and tablets (they could cover boxes on touch-screen laptops)",
+    ],
+  },
+  {
     version: '3.2.0',
     date: '2026-11-20',
     title: "Realistic 3D sinks, pull-outs and rails",

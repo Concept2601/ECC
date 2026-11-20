@@ -143,7 +143,8 @@ function useNumText(value: number | null, commit: (n: number | null) => void, op
       const t = e.target.value.replace(/[^0-9.,+\-*/x×÷−() ]/gi, '');
       setText(t);
       window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => apply(t, false), opts.delay ?? 700);
+      // apply once typing has paused (Enter or leaving the box applies straight away)
+      timer.current = window.setTimeout(() => apply(t, false), opts.delay ?? 1200);
     },
     onBlur: () => {
       focused.current = false;
@@ -180,7 +181,8 @@ function useNumText(value: number | null, commit: (n: number | null) => void, op
   return { props, hasFocus, append };
 }
 
-const touch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+// phones and tablets only: touch-screen laptops have a keyboard with + − × ÷
+const touch = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 /** + − × ÷ keys under a focused number box on touch screens. */
 function SumKeys({ show, append }: { show: boolean; append: (ch: string) => void }) {

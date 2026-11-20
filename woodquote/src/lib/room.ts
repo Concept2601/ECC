@@ -404,3 +404,24 @@ export function snapPlacement(room: Room, items: ItemPrice[], cat: Catalog, it: 
   if (Number.isFinite(bestOther.dist)) out = { ...out, x: Math.round(out.x + bestOther.dx), z: Math.round(out.z + bestOther.dz) };
   return out;
 }
+
+/* ------------------------------------------------------ doors and windows */
+
+/**
+ * Pane widths for a window: standard 600mm panes; a leftover of 500mm or more is
+ * its own pane, a smaller one is shared out so all panes are equal.
+ */
+export function windowPanes(width: number, chosen?: number | null): number[] {
+  if (chosen && chosen > 0) return Array.from({ length: Math.round(chosen) }, () => width / Math.round(chosen));
+  const STD = 600;
+  const MIN = 500;
+  const n = Math.floor(width / STD);
+  const rest = width - n * STD;
+  if (n === 0) return [width];
+  if (rest < 1) return Array.from({ length: n }, () => STD);
+  if (rest >= MIN) return [...Array.from({ length: n }, () => STD), rest];
+  return Array.from({ length: n }, () => width / n);
+}
+
+/** Sliding door panels: about one panel per 900mm, at least two. */
+export const slidingPanels = (width: number, chosen?: number | null) => Math.max(2, chosen && chosen > 0 ? Math.round(chosen) : Math.round(width / 900));
